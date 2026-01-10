@@ -55,4 +55,12 @@ exports.toggleUser = async (req, res) => {
   } catch (error) {
     res.status(400).json({ mensaje: error.message });
   }
+  exports.deleteUser = async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.params.id);
+    res.json({ mensaje: 'Usuario eliminado' });
+  } catch (error) {
+    res.status(400).json({ mensaje: error.message });
+  }
+};
 };

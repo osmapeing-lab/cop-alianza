@@ -37,4 +37,12 @@ exports.toggleFarm = async (req, res) => {
   } catch (error) {
     res.status(400).json({ mensaje: error.message });
   }
+  exports.deleteFarm = async (req, res) => {
+  try {
+    await Farm.findByIdAndDelete(req.params.id);
+    res.json({ mensaje: 'Granja eliminada' });
+  } catch (error) {
+    res.status(400).json({ mensaje: error.message });
+  }
+};
 };
