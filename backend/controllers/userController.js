@@ -49,18 +49,20 @@ exports.getAllUsers = async (req, res) => {
 exports.toggleUser = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ mensaje: 'Usuario no encontrado' });
     user.activo = !user.activo;
     await user.save();
     res.json(user);
   } catch (error) {
     res.status(400).json({ mensaje: error.message });
   }
-  exports.deleteUser = async (req, res) => {
+};
+
+exports.deleteUser = async (req, res) => {
   try {
     await User.findByIdAndDelete(req.params.id);
     res.json({ mensaje: 'Usuario eliminado' });
   } catch (error) {
     res.status(400).json({ mensaje: error.message });
   }
-};
 };
