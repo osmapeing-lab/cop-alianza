@@ -3,8 +3,8 @@ import axios from 'axios'
 import io from 'socket.io-client'
 import './App.css'
 
-const API_URL = 'http://localhost:5000/api'
-const socket = io('http://localhost:5000')
+const API_URL = 'https://cop-alianza-backend.onrender.com/api'
+const socket = io('https://cop-alianza-backend.onrender.com')
 
 function App() {
   const [user, setUser] = useState(null)
