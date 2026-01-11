@@ -51,14 +51,15 @@ function App() {
   const [historialHum, setHistorialHum] = useState([75, 72, 68, 65, 70, 74, 78])
   const [historialAgua, setHistorialAgua] = useState([780, 920, 850, 1100, 890, 950, 847])
   const [historialPeso, setHistorialPeso] = useState([
-    { fecha: '01/01', peso: 45.2, cantidad: 12 },
-    { fecha: '02/01', peso: 52.8, cantidad: 8 },
-    { fecha: '03/01', peso: 78.5, cantidad: 15 },
-    { fecha: '04/01', peso: 65.3, cantidad: 10 },
-    { fecha: '05/01', peso: 88.2, cantidad: 18 },
-    { fecha: '06/01', peso: 72.1, cantidad: 14 },
-    { fecha: 'Hoy', peso: 85.3, cantidad: 11 }
-  ])
+  { fecha: '15/11/25', peso: 42.3, cantidad: 8 },
+  { fecha: '22/11/25', peso: 48.7, cantidad: 10 },
+  { fecha: '05/12/25', peso: 55.2, cantidad: 12 },
+  { fecha: '18/12/25', peso: 63.8, cantidad: 9 },
+  { fecha: '02/01/26', peso: 71.4, cantidad: 14 },
+  { fecha: '08/01/26', peso: 78.9, cantidad: 11 },
+  { fecha: '11/01/26', peso: 85.3, cantidad: 13 }
+])
+  
   
   // Modales
   const [showModalUser, setShowModalUser] = useState(false)
@@ -276,13 +277,15 @@ function App() {
     a.click()
   }
 
-  const calcularSensacionTermica = (temp, humedad) => {
-    if (temp >= 27) {
-      const st = -8.784 + 1.611 * temp + 2.338 * humedad - 0.146 * temp * humedad
-      return Math.round(st * 10) / 10
-    }
-    return temp
+ const calcularSensacionTermica = (temp, humedad) => {
+  if (temp >= 27 && humedad >= 40) {
+    const T = temp;
+    const H = humedad;
+    const st = -8.784695 + 1.61139411 * T + 2.338549 * H - 0.14611605 * T * H - 0.012308094 * T * T - 0.016424828 * H * H + 0.002211732 * T * T * H + 0.00072546 * T * H * H - 0.000003582 * T * T * H * H;
+    return Math.round(st * 10) / 10;
   }
+  return temp;
+}
 
   const sensacionTermica = calcularSensacionTermica(sensores.temperatura, sensores.humedad)
 
@@ -293,7 +296,7 @@ function App() {
         <div className="login-container">
           <div className="login-box">
             <div className="login-logo">🐷</div>
-            <h1>COP Alianza</h1>
+            <h1>Cooperativa Alianzas</h1>
             <p className="login-subtitle">Sistema de Control y Monitoreo Inteligente</p>
             <form onSubmit={handleLogin}>
               <div className={`error-message ${showError ? 'show' : ''}`}>
