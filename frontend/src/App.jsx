@@ -146,36 +146,47 @@ function App() {
     }
   }
 
+
   const handleLogin = async (e) => {
-    e.preventDefault()
-    try {
-      const res = await axios.post(`${API_URL}/users/login`, { usuario, password })
-      const userData = { usuario: res.data.usuario, rol: res.data.rol, token: res.data.token, session_id: res.data.session_id }
-      setUser(userData)
-      localStorage.setItem('user', JSON.stringify(userData))
-      setPage('dashboard')
-      setError('')
-      setShowError(false)
-    } catch (err) {
-      setError('Usuario o contraseña incorrectos')
-      setShowError(true)
-      setTimeout(() => setShowError(false), 3000)
+  e.preventDefault()
+  try {
+    const res = await axios.post(`${API_URL}/users/login`, { usuario, password })
+    console.log('Login response:', res.data)
+    const userData = { 
+      usuario: res.data.usuario, 
+      rol: res.data.rol, 
+      token: res.data.token, 
+      session_id: res.data.session_id 
     }
+    setUser(userData)
+    localStorage.setItem('user', JSON.stringify(userData))
+    setPage('dashboard')
+    setError('')
+    setShowError(false)
+  } catch (err) {
+    setError('Usuario o contraseña incorrectos')
+    setShowError(true)
+    setTimeout(() => setShowError(false), 3000)
   }
+}
+
+
 
   const handleLogout = async () => {
-    try {
-      const savedUser = JSON.parse(localStorage.getItem('user'))
-      if (savedUser?.session_id) {
-        await axios.put(`${API_URL}/sessions/${savedUser.session_id}/logout`)
-      }
-    } catch (err) {
-      console.log('Error closing session')
+  try {
+    const savedUser = JSON.parse(localStorage.getItem('user'))
+    console.log('Cerrando sesión:', savedUser?.session_id)
+    if (savedUser?.session_id) {
+      await axios.put(`${API_URL}/sessions/${savedUser.session_id}/logout`)
+      console.log('Sesión cerrada en backend')
     }
-    setUser(null)
-    localStorage.removeItem('user')
-    setPage('login')
+  } catch (err) {
+    console.log('Error closing session:', err)
   }
+  setUser(null)
+  localStorage.removeItem('user')
+  setPage('login')
+}
 
   const toggleBomba = async (id) => {
     setBombas(prev => prev.map(b => b._id === id ? { ...b, estado: !b.estado } : b))
