@@ -335,7 +335,7 @@ function App() {
         <header className="header">
           <div className="header-left">
             <span className="logo">🐷</span>
-            <h1>COP Alianza</h1>
+            <h1>Panel de Administracion</h1>
             <span className="badge-admin">SuperAdmin</span>
           </div>
           <div className="header-right">
@@ -541,7 +541,7 @@ function App() {
       <header className="header">
         <div className="header-left">
           <span className="logo">🐷</span>
-          <h1>Granja Porcina - Lorica</h1>
+          <h1>Sistema de control y monitoreo Inteligente para Granjas Porcinas: Automatización y Sostenibilidad con Tecnología 4.0</h1>
           <span className="badge-location">📍 9°16'N 75°49'W</span>
         </div>
         <div className="header-right">
