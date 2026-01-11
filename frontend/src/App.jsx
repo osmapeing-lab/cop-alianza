@@ -241,7 +241,7 @@ function App() {
         <div className="login-container">
           <div className="login-box">
             <div className="login-logo">🐷</div>
-            <h1>COP Alianza</h1>
+           <h1>Sistema de Control y Monitoreo Inteligente para Granjas Porcinas</h1>
             <p className="login-subtitle">Sistema de Gestión Agropecuaria</p>
             <form onSubmit={handleLogin}>
               <div className={`error-message ${showError ? 'show' : ''}`}>
