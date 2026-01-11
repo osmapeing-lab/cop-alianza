@@ -771,4 +771,43 @@ td.empty {
   .actions {
     flex-direction: column;
   }
+
+  /* Ubicación badge */
+.badge-location {
+  background: rgba(255,255,255,0.2);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+}
+
+/* Chart bar colores */
+.chart-bar.hot {
+  background: linear-gradient(180deg, #f44336, #ff7043) !important;
+}
+
+.chart-bar.humidity {
+  background: linear-gradient(180deg, #00bcd4, #4dd0e1);
+}
+
+/* Tabla de pesos */
+.peso-table {
+  overflow-x: auto;
+}
+
+.peso-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.peso-table th, .peso-table td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+.peso-table th {
+  background: #f5f5f5;
+  font-weight: 600;
+}
 }

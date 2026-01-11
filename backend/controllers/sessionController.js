@@ -18,3 +18,16 @@ exports.getHistorial = async (req, res) => {
     res.status(500).json({ mensaje: error.message });
   }
 };
+
+exports.cerrarSesion = async (req, res) => {
+  try {
+    const session = await Session.findByIdAndUpdate(
+      req.params.id,
+      { fecha_salida: Date.now() },
+      { new: true }
+    );
+    res.json(session);
+  } catch (error) {
+    res.status(400).json({ mensaje: error.message });
+  }
+};
