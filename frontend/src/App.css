@@ -955,9 +955,26 @@ tr:hover td {
 }
 
 /* ==================== RESPONSIVE ==================== */
+/* 1. ESTILOS BASE (Para PC) - Esto arregla el centrado */
+.main-content {
+  width: 100%;
+  max-width: 1280px; 
+  margin: 0 auto; 
+  padding: 32px;
+  box-sizing: border-box;
+}
+
+.climate-grid, .charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr); /* 2 columnas en PC */
+  gap: 24px;
+}
+
+/* 2. RESPONSIVE (Tu código mejorado) */
 @media (max-width: 768px) {
   .header {
     flex-direction: column;
+    text-align: center;
     gap: 16px;
     padding: 16px;
   }
@@ -965,28 +982,22 @@ tr:hover td {
   .header-actions {
     width: 100%;
     justify-content: center;
-    flex-wrap: wrap;
+    gap: 10px;
   }
 
   .main-content {
-    padding: 16px;
+    padding: 16px; /* Menos espacio en los bordes para móviles */
+  }
+
+  /* Cambia todas las cuadrículas a una sola columna */
+  .climate-grid, 
+  .charts-grid, 
+  .installations-grid { 
+    grid-template-columns: 1fr; 
   }
 
   .section-header {
-    flex-direction: column;
-    gap: 12px;
-    align-items: flex-start;
-  }
-
-  .climate-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .charts-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .btn-secondary span {
-    display: none;
+    align-items: center; /* Mejor centrado en móvil */
+    text-align: center;
   }
 }
