@@ -1,3 +1,22 @@
+/* RESET CRÍTICO - Sobrescribir estilos de index.css */
+body {
+  margin: 0 !important;
+  padding: 0 !important;
+  display: block !important; /* Quitar el flex de index.css */
+  place-items: unset !important; /* Quitar el center de index.css */
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+  background: #f8f9fa !important;
+  color: #212529 !important;
+  line-height: 1.5;
+}
+
+#root {
+  width: 100%;
+  min-height: 100vh;
+}
+
 :root {
   --primary: #2d6a4f;
   --primary-dark: #1b4332;
@@ -19,22 +38,9 @@
   --radius-sm: 8px;
 }
 
-/* Solo aplicar reset a elementos dentro de .app */
-.app * {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  padding: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: var(--bg-main);
-  color: var(--text-primary);
-  line-height: 1.5;
-}
-
 .app {
   min-height: 100vh;
+  width: 100%;
 }
 
 /* ==================== LOGIN ==================== */
@@ -81,8 +87,7 @@ body {
 .login-header h1 {
   font-size: 1.75rem;
   font-weight: 700;
-  margin-bottom: 8px;
-  margin-top: 0;
+  margin: 0 0 8px 0;
 }
 
 .login-header p {
@@ -313,8 +318,7 @@ body {
 .stat-info p {
   font-size: 0.85rem;
   color: var(--text-secondary);
-  margin-top: 4px;
-  margin-bottom: 0;
+  margin: 4px 0 0 0;
 }
 
 /* ==================== SECTIONS ==================== */
@@ -388,18 +392,22 @@ body {
   overflow-x: auto;
 }
 
-.app table {
+.section table,
+.table-container table {
   width: 100%;
   border-collapse: collapse;
 }
 
-.app th, 
-.app td {
+.section th, 
+.section td,
+.table-container th,
+.table-container td {
   padding: 14px 20px;
   text-align: left;
 }
 
-.app th {
+.section th,
+.table-container th {
   background: var(--bg-main);
   font-size: 0.75rem;
   font-weight: 600;
@@ -408,12 +416,14 @@ body {
   color: var(--text-secondary);
 }
 
-.app td {
+.section td,
+.table-container td {
   border-bottom: 1px solid var(--border);
   font-size: 0.9rem;
 }
 
-.app tr:hover td {
+.section tr:hover td,
+.table-container tr:hover td {
   background: var(--bg-main);
 }
 
