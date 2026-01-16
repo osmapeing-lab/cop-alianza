@@ -81,12 +81,5 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Servidor COP Alianza corriendo en puerto ${PORT}`);
 });
-```
 
-**Paso 8:** Actualiza `.env` agregando las variables de WhatsApp:
-```
-PORT=5000
-MONGODB_URI=tu_string_mongodb
-JWT_SECRET=cop_alianza_secreto_2026
-WHATSAPP_NUMBER=573001234567
-WHATSAPP_APIKEY=tu_apikey_callmebot
+
