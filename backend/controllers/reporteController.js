@@ -1,33 +1,24 @@
 const ExcelJS = require('exceljs');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const path = require('path');
+const os = require('os');
 const fs = require('fs');
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 exports.generarReporteExcel = async (datos) => {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'COP Alianza';
   workbook.created = new Date();
 
-  const sheet = workbook.addWorksheet('Reporte Granja', {
-    properties: { tabColor: { argb: '2d6a4f' } }
-  });
+  const sheet = workbook.addWorksheet('Reporte Granja');
 
-  // Configurar anchos de columna
   sheet.columns = [
     { width: 30 },
     { width: 25 },
     { width: 20 }
   ];
 
-  // Título principal
   sheet.mergeCells('A1:C1');
   const titleCell = sheet.getCell('A1');
   titleCell.value = 'REPORTE GRANJA PORCINA COO-ALIANZAS';
@@ -36,208 +27,98 @@ exports.generarReporteExcel = async (datos) => {
   titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
   sheet.getRow(1).height = 35;
 
-  // Subtítulo con fecha
   sheet.mergeCells('A2:C2');
-  const subtitleCell = sheet.getCell('A2');
-  subtitleCell.value = `Fecha de generación: ${new Date().toLocaleString()}`;
-  subtitleCell.font = { italic: true, size: 10, color: { argb: '666666' } };
-  subtitleCell.alignment = { horizontal: 'center' };
-  sheet.getRow(2).height = 25;
+  const fechaCell = sheet.getCell('A2');
+  fechaCell.value = `Fecha: ${new Date().toLocaleString()}`;
+  fechaCell.font = { italic: true, size: 10 };
+  fechaCell.alignment = { horizontal: 'center' };
 
-  // Espacio
-  sheet.getRow(3).height = 10;
-
-  // Sección: Condiciones Climáticas
-  sheet.mergeCells('A4:C4');
-  const climaHeader = sheet.getCell('A4');
-  climaHeader.value = 'CONDICIONES CLIMATICAS';
-  climaHeader.font = { bold: true, size: 12, color: { argb: 'FFFFFF' } };
-  climaHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '40916c' } };
-  climaHeader.alignment = { horizontal: 'center' };
-  sheet.getRow(4).height = 28;
-
-  // Headers de tabla
-  const headerRow = sheet.getRow(5);
-  headerRow.values = ['Parámetro', 'Valor', 'Estado'];
+  const headerRow = sheet.getRow(4);
+  headerRow.values = ['Parametro', 'Valor', 'Estado'];
   headerRow.font = { bold: true };
   headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'e8f5e9' } };
-  headerRow.alignment = { horizontal: 'center' };
-  headerRow.height = 22;
 
-  // Datos climáticos
-  const climaData = [
-    ['Temperatura Ambiente', `${datos.temp_ambiente || '--'} °C`, datos.temp_ambiente ? 'Conectado' : 'Sin datos'],
-    ['Temperatura Porqueriza', `${datos.temp_porqueriza || '--'} °C`, datos.temp_porqueriza ? (datos.temp_porqueriza > 34 ? 'ALERTA' : 'Normal') : 'Sin datos'],
-    ['Humedad Ambiente', `${datos.humedad_ambiente || '--'} %`, datos.humedad_ambiente ? 'Conectado' : 'Sin datos'],
-    ['Humedad Porqueriza', `${datos.humedad_porqueriza || '--'} %`, datos.humedad_porqueriza ? 'Normal' : 'Sin datos'],
-    ['Sensación Térmica', `${datos.sensacion_termica || '--'} °C`, datos.sensacion_termica ? 'Calculado' : 'Sin datos']
-  ];
-
-  let rowIndex = 6;
-  climaData.forEach((row, index) => {
-    const dataRow = sheet.getRow(rowIndex);
-    dataRow.values = row;
-    dataRow.alignment = { horizontal: 'center' };
-    
-    // Alternar colores de fila
-    if (index % 2 === 0) {
-      dataRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'f8f9fa' } };
-    }
-    
-    // Color de estado
-    const estadoCell = dataRow.getCell(3);
-    if (row[2] === 'ALERTA') {
-      estadoCell.font = { bold: true, color: { argb: 'dc2626' } };
-    } else if (row[2] === 'Normal' || row[2] === 'Conectado') {
-      estadoCell.font = { color: { argb: '16a34a' } };
-    } else {
-      estadoCell.font = { color: { argb: '6b7280' } };
-    }
-    
-    rowIndex++;
-  });
-
-  // Espacio
-  rowIndex++;
-
-  // Sección: Consumo de Agua
-  sheet.mergeCells(`A${rowIndex}:C${rowIndex}`);
-  const aguaHeader = sheet.getCell(`A${rowIndex}`);
-  aguaHeader.value = 'CONSUMO DE AGUA';
-  aguaHeader.font = { bold: true, size: 12, color: { argb: 'FFFFFF' } };
-  aguaHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '0ea5e9' } };
-  aguaHeader.alignment = { horizontal: 'center' };
-  sheet.getRow(rowIndex).height = 28;
-  rowIndex++;
-
-  const aguaData = [
+  const filas = [
+    ['Temperatura Ambiente', `${datos.temp_ambiente || '--'} °C`, datos.temp_ambiente ? 'OK' : 'Sin datos'],
+    ['Temperatura Porqueriza', `${datos.temp_porqueriza || '--'} °C`, datos.temp_porqueriza ? 'OK' : 'Sin datos'],
+    ['Humedad Ambiente', `${datos.humedad_ambiente || '--'} %`, datos.humedad_ambiente ? 'OK' : 'Sin datos'],
+    ['Humedad Porqueriza', `${datos.humedad_porqueriza || '--'} %`, datos.humedad_porqueriza ? 'OK' : 'Sin datos'],
+    ['Sensacion Termica', `${datos.sensacion_termica || '--'} °C`, ''],
     ['Consumo Diario', `${datos.consumo_diario || 0} L`, ''],
     ['Consumo Mensual', `${datos.consumo_mensual || 0} L`, ''],
-    ['Nivel Tanque Principal', `${datos.nivel_tanque1 || 0} %`, datos.nivel_tanque1 < 20 ? 'BAJO' : 'Normal'],
-    ['Nivel Tanque Reserva', `${datos.nivel_tanque2 || 0} %`, datos.nivel_tanque2 < 20 ? 'BAJO' : 'Normal']
+    ['Tanque Principal', `${datos.nivel_tanque1 || '--'} %`, datos.nivel_tanque1 < 20 ? 'BAJO' : 'OK'],
+    ['Tanque Reserva', `${datos.nivel_tanque2 || '--'} %`, datos.nivel_tanque2 < 20 ? 'BAJO' : 'OK']
   ];
 
-  aguaData.forEach((row, index) => {
-    const dataRow = sheet.getRow(rowIndex);
-    dataRow.values = row;
-    dataRow.alignment = { horizontal: 'center' };
-    
-    if (index % 2 === 0) {
-      dataRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'f0f9ff' } };
-    }
-    
-    const estadoCell = dataRow.getCell(3);
-    if (row[2] === 'BAJO') {
-      estadoCell.font = { bold: true, color: { argb: 'f59e0b' } };
-    }
-    
+  let rowIndex = 5;
+  filas.forEach((fila) => {
+    const row = sheet.getRow(rowIndex);
+    row.values = fila;
+    row.alignment = { horizontal: 'center' };
     rowIndex++;
   });
 
-  // Espacio
   rowIndex++;
-
-  // Sección: Estado de Bombas
-  sheet.mergeCells(`A${rowIndex}:C${rowIndex}`);
-  const bombasHeader = sheet.getCell(`A${rowIndex}`);
-  bombasHeader.value = 'ESTADO DE BOMBAS';
-  bombasHeader.font = { bold: true, size: 12, color: { argb: 'FFFFFF' } };
-  bombasHeader.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '8b5cf6' } };
-  bombasHeader.alignment = { horizontal: 'center' };
-  sheet.getRow(rowIndex).height = 28;
+  sheet.getCell(`A${rowIndex}`).value = 'ESTADO DE BOMBAS';
+  sheet.getCell(`A${rowIndex}`).font = { bold: true };
   rowIndex++;
 
   if (datos.bombas && datos.bombas.length > 0) {
-    datos.bombas.forEach((bomba, index) => {
-      const dataRow = sheet.getRow(rowIndex);
-      dataRow.values = [
-        bomba.nombre,
-        bomba.estado ? 'ENCENDIDA' : 'APAGADA',
-        bomba.conectada ? 'Conectada' : 'Sin conexión'
-      ];
-      dataRow.alignment = { horizontal: 'center' };
-      
-      if (index % 2 === 0) {
-        dataRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'faf5ff' } };
-      }
-      
-      const estadoCell = dataRow.getCell(2);
-      estadoCell.font = { bold: true, color: { argb: bomba.estado ? '16a34a' : '6b7280' } };
-      
-      const conexionCell = dataRow.getCell(3);
-      conexionCell.font = { color: { argb: bomba.conectada ? '16a34a' : 'dc2626' } };
-      
+    datos.bombas.forEach((bomba) => {
+      const row = sheet.getRow(rowIndex);
+      row.values = [bomba.nombre, bomba.estado ? 'ENCENDIDA' : 'APAGADA', bomba.conectada ? 'Conectada' : 'Sin conexion'];
       rowIndex++;
     });
   }
-
-  // Bordes a todas las celdas con datos
-  for (let i = 4; i < rowIndex; i++) {
-    const row = sheet.getRow(i);
-    row.eachCell({ includeEmpty: false }, (cell) => {
-      cell.border = {
-        top: { style: 'thin', color: { argb: 'dee2e6' } },
-        left: { style: 'thin', color: { argb: 'dee2e6' } },
-        bottom: { style: 'thin', color: { argb: 'dee2e6' } },
-        right: { style: 'thin', color: { argb: 'dee2e6' } }
-      };
-    });
-  }
-
-  // Pie de página
-  rowIndex += 2;
-  sheet.mergeCells(`A${rowIndex}:C${rowIndex}`);
-  const footerCell = sheet.getCell(`A${rowIndex}`);
-  footerCell.value = 'Cooperativa Alianzas - Lorica, Córdoba | Sistema de Monitoreo Inteligente';
-  footerCell.font = { italic: true, size: 9, color: { argb: '6b7280' } };
-  footerCell.alignment = { horizontal: 'center' };
 
   return workbook;
 };
 
 exports.enviarReporteEmail = async (req, res) => {
   try {
-    const { destinatario, datos } = req.body;
+    const { datos } = req.body;
 
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      return res.status(500).json({ mensaje: 'Email no configurado en el servidor' });
+    if (!process.env.RESEND_API_KEY) {
+      return res.status(500).json({ mensaje: 'API de email no configurada' });
     }
 
-    // Generar Excel
-    const workbook = await exports.generarReporteExcel(datos);
+    const workbook = await exports.generarReporteExcel(datos || {});
     
-    // Guardar temporalmente
+    const tempDir = os.tmpdir();
     const fileName = `reporte_${Date.now()}.xlsx`;
-    const filePath = path.join('/tmp', fileName);
+    const filePath = path.join(tempDir, fileName);
+    
     await workbook.xlsx.writeFile(filePath);
 
-    // Enviar email con adjunto
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: destinatario || process.env.EMAIL_USER,
-      subject: `Reporte Diario - Granja COO-Alianzas - ${new Date().toLocaleDateString()}`,
+    const fileBuffer = fs.readFileSync(filePath);
+    const base64File = fileBuffer.toString('base64');
+
+    await resend.emails.send({
+      from: 'COP Alianza <onboarding@resend.dev>',
+      to: ['osmapeing@gmail.com'],
+      subject: `Reporte Diario - COP Alianza - ${new Date().toLocaleDateString()}`,
       html: `
         <div style="font-family: Arial, sans-serif; padding: 20px;">
           <h2 style="color: #2d6a4f;">Reporte Diario - COP Alianza</h2>
-          <p>Adjunto encontrará el reporte generado del sistema de monitoreo.</p>
+          <p>Adjunto el reporte generado del sistema de monitoreo.</p>
           <p><strong>Fecha:</strong> ${new Date().toLocaleString()}</p>
-          <hr style="border: 1px solid #dee2e6; margin: 20px 0;">
-          <p style="color: #6b7280; font-size: 12px;">
-            Este es un mensaje automático del Sistema de Monitoreo Inteligente.<br>
-            Cooperativa Alianzas - Lorica, Córdoba
-          </p>
+          <hr>
+          <p style="color: #6b7280; font-size: 12px;">Cooperativa Alianzas - Lorica, Córdoba</p>
         </div>
       `,
       attachments: [
         {
           filename: `Reporte_COP_Alianza_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`,
-          path: filePath
+          content: base64File
         }
       ]
     });
 
-    // Eliminar archivo temporal
-    fs.unlinkSync(filePath);
+    try {
+      fs.unlinkSync(filePath);
+    } catch (e) {
+      console.log('No se pudo eliminar archivo temporal');
+    }
 
     res.json({ mensaje: 'Reporte enviado correctamente' });
   } catch (error) {
@@ -249,11 +130,10 @@ exports.enviarReporteEmail = async (req, res) => {
 exports.descargarReporte = async (req, res) => {
   try {
     const { datos } = req.body;
-
-    const workbook = await exports.generarReporteExcel(datos);
+    const workbook = await exports.generarReporteExcel(datos || {});
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=Reporte_COP_Alianza_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`);
+    res.setHeader('Content-Disposition', 'attachment; filename=Reporte_COP_Alianza.xlsx');
 
     await workbook.xlsx.write(res);
     res.end();
