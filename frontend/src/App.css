@@ -1011,4 +1011,116 @@ body {
   .btn-secondary span {
     display: none;
   }
+
+  /* ==================== CONEXIONES STATUS ==================== */
+.conexiones-status {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.conexion-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+.conexion-item.conectado {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.conexion-item.desconectado {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* ==================== ESTADOS DESCONECTADO ==================== */
+.climate-card.desconectado {
+  border-color: #d1d5db;
+  background: linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%);
+  opacity: 0.8;
+}
+
+.climate-card.desconectado .climate-item .value {
+  color: var(--text-secondary);
+}
+
+.monitor-card.desconectado {
+  opacity: 0.6;
+  background: #f3f4f6;
+}
+
+.monitor-card.desconectado .monitor-icon {
+  background: linear-gradient(135deg, #9ca3af 0%, #6b7280 100%);
+}
+
+.monitor-card.desconectado .monitor-value {
+  color: var(--text-secondary);
+}
+
+.monitor-card.warning {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border: 2px solid var(--warning);
+}
+
+.status-badge.desconectado {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.status-badge.normal {
+  background: #d1fae5;
+  color: #059669;
+}
+
+/* ==================== BOTONES MEJORADOS ==================== */
+.btn-primary:disabled,
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.btn-cancel {
+  background: var(--bg-main);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-cancel:hover {
+  background: #e5e7eb;
+}
+
+/* ==================== ANIMACIONES ==================== */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.conexion-item.desconectado svg {
+  animation: pulse 2s infinite;
+}
+
+/* ==================== RESPONSIVE ADICIONAL ==================== */
+@media (max-width: 768px) {
+  .conexiones-status {
+    justify-content: center;
+  }
+  
+  .conexion-item {
+    font-size: 0.75rem;
+    padding: 6px 10px;
+  }
+}
 }
