@@ -7,7 +7,7 @@ import {
   Users, Home, Activity, Download, Plus, Trash2, 
   UserCheck, UserX, LogOut, Bell, TrendingUp,
   Wifi, WifiOff, Sun, CloudRain, Building2, Mail,
-  RefreshCw, AlertCircle
+  RefreshCw, AlertCircle, Weight
 } from 'lucide-react'
 import './App.css'
 
@@ -27,14 +27,12 @@ function App() {
   const [showError, setShowError] = useState(false)
   const [loading, setLoading] = useState(false)
   
-  // Estado de conexiones
   const [conexiones, setConexiones] = useState({
     api_clima: false,
     sensor_porqueriza: false,
-    idtolu: false
+    bascula: false
   })
 
-  // Datos de sensores
   const [sensores, setSensores] = useState({
     temp_ambiente: null,
     humedad_ambiente: null,
@@ -45,6 +43,14 @@ function App() {
     flujo: null,
     peso: null
   })
+
+  const [ultimoPeso, setUltimoPeso] = useState({
+    peso: null,
+    fecha: null,
+    sensor_id: null
+  })
+
+  const [historialPeso, setHistorialPeso] = useState([])
   
   const [bombas, setBombas] = useState([
     { _id: '1', nombre: 'Bomba Principal', estado: false, conectada: false },
@@ -60,52 +66,47 @@ function App() {
   const [consumoDiario, setConsumoDiario] = useState(0)
   const [consumoMensual, setConsumoMensual] = useState(0)
   
-  const [historialTemp, setHistorialTemp] = useState([])
-  const [historialAgua, setHistorialAgua] = useState([])
-  const [historialPeso, setHistorialPeso] = useState([])
-  
   const [showModalUser, setShowModalUser] = useState(false)
   const [showModalFarm, setShowModalFarm] = useState(false)
   const [newUser, setNewUser] = useState({ usuario: '', correo: '', password: '', rol: 'cliente' })
   const [newFarm, setNewFarm] = useState({ nombre: '', ubicacion: '', propietario: '', telefono: '', email: '' })
   const [enviandoReporte, setEnviandoReporte] = useState(false)
 
-  // Obtener clima real de Lorica
   const fetchWeather = async () => {
     try {
       const res = await axios.get(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,relative_humidity_2m&timezone=America/Bogota`)
-      const temp = res.data.current.temperature_2m
-      const hum = res.data.current.relative_humidity_2m
       setSensores(prev => ({ 
         ...prev, 
-        temp_ambiente: temp, 
-        humedad_ambiente: hum
+        temp_ambiente: res.data.current.temperature_2m, 
+        humedad_ambiente: res.data.current.relative_humidity_2m
       }))
       setConexiones(prev => ({ ...prev, api_clima: true }))
     } catch (err) {
-      console.log('Error fetching weather')
       setConexiones(prev => ({ ...prev, api_clima: false }))
     }
   }
 
-  // Obtener datos de idtolu
-  const fetchIdtolu = async () => {
+  const fetchUltimoPeso = async () => {
     try {
-      const res = await axios.get(`${API_URL}/idtolu/lectura`)
-      if (res.data && res.data.conectado) {
-        setSensores(prev => ({
-          ...prev,
-          temp_porqueriza: res.data.temperatura,
-          humedad_porqueriza: res.data.humedad,
-          nivel_tanque1: res.data.nivel_tanque1,
-          nivel_tanque2: res.data.nivel_tanque2
-        }))
-        setConexiones(prev => ({ ...prev, idtolu: true, sensor_porqueriza: true }))
-      } else {
-        setConexiones(prev => ({ ...prev, idtolu: false, sensor_porqueriza: false }))
+      const res = await axios.get(`${API_URL}/esp/peso`)
+      if (res.data && res.data.peso !== null) {
+        setUltimoPeso(res.data)
+        setSensores(prev => ({ ...prev, peso: res.data.peso }))
+        setConexiones(prev => ({ ...prev, bascula: true }))
       }
     } catch (err) {
-      setConexiones(prev => ({ ...prev, idtolu: false, sensor_porqueriza: false }))
+      console.log('Error fetching peso')
+    }
+  }
+
+  const fetchHistorialPeso = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/esp/peso/historial`)
+      if (res.data && res.data.length > 0) {
+        setHistorialPeso(res.data.slice(0, 10))
+      }
+    } catch (err) {
+      console.log('Error fetching historial peso')
     }
   }
 
@@ -116,8 +117,25 @@ function App() {
       setPage('dashboard')
     }
 
-    socket.on('lectura_actualizada', (data) => {
-      setSensores(prev => ({ ...prev, ...data }))
+    // WebSocket listeners
+    socket.on('nuevo_peso', (data) => {
+      console.log('Nuevo peso recibido:', data)
+      setUltimoPeso(data)
+      setSensores(prev => ({ ...prev, peso: data.peso }))
+      setConexiones(prev => ({ ...prev, bascula: true }))
+      // Agregar al historial
+      setHistorialPeso(prev => [data, ...prev].slice(0, 10))
+    })
+
+    socket.on('datos_riego', (data) => {
+      setSensores(prev => ({
+        ...prev,
+        temp_porqueriza: data.temperatura,
+        humedad_porqueriza: data.humedad,
+        nivel_tanque1: data.nivel_tanque1,
+        nivel_tanque2: data.nivel_tanque2
+      }))
+      setConexiones(prev => ({ ...prev, sensor_porqueriza: true }))
     })
 
     socket.on('bomba_actualizada', (data) => {
@@ -128,27 +146,11 @@ function App() {
       setAlertas(prev => [data, ...prev])
     })
 
-    socket.on('idtolu_datos', (data) => {
-      setSensores(prev => ({
-        ...prev,
-        temp_porqueriza: data.temperatura,
-        humedad_porqueriza: data.humedad,
-        nivel_tanque1: data.nivel_tanque1,
-        nivel_tanque2: data.nivel_tanque2
-      }))
-      setConexiones(prev => ({ ...prev, idtolu: true, sensor_porqueriza: true }))
-    })
-
-    socket.on('esp_peso', (data) => {
-      setSensores(prev => ({ ...prev, peso: data.peso }))
-    })
-
     return () => {
-      socket.off('lectura_actualizada')
+      socket.off('nuevo_peso')
+      socket.off('datos_riego')
       socket.off('bomba_actualizada')
       socket.off('nueva_alerta')
-      socket.off('idtolu_datos')
-      socket.off('esp_peso')
     }
   }, [])
 
@@ -157,12 +159,13 @@ function App() {
       fetchData()
       if (user.rol === 'cliente') {
         fetchWeather()
-        fetchIdtolu()
-        const intervalWeather = setInterval(fetchWeather, 300000)
-        const intervalIdtolu = setInterval(fetchIdtolu, 60000)
+        fetchUltimoPeso()
+        fetchHistorialPeso()
+        const interval1 = setInterval(fetchWeather, 300000)
+        const interval2 = setInterval(fetchUltimoPeso, 30000)
         return () => {
-          clearInterval(intervalWeather)
-          clearInterval(intervalIdtolu)
+          clearInterval(interval1)
+          clearInterval(interval2)
         }
       }
     }
@@ -180,18 +183,14 @@ function App() {
         setUsers(usersRes.data)
         setSessions(sessionsRes.data)
       } else {
-        const [bombasRes, alertasRes, diarioRes, mensualRes] = await Promise.all([
+        const [bombasRes, alertasRes] = await Promise.all([
           axios.get(`${API_URL}/motorbombs`),
-          axios.get(`${API_URL}/alerts`),
-          axios.get(`${API_URL}/water/diario`),
-          axios.get(`${API_URL}/water/mensual`)
+          axios.get(`${API_URL}/alerts`)
         ])
         if (bombasRes.data.length > 0) {
           setBombas(bombasRes.data.map(b => ({ ...b, conectada: b.conectada ?? false })))
         }
         if (alertasRes.data.length > 0) setAlertas(alertasRes.data)
-        setConsumoDiario(diarioRes.data.litros_total || 0)
-        setConsumoMensual(mensualRes.data.litros_total || 0)
       }
     } catch (err) {
       console.log('Error fetching data')
@@ -306,17 +305,6 @@ function App() {
     }
   }
 
-  const downloadExcel = () => {
-    const data = users.map(u => `${u.usuario},${u.correo},${u.rol},${u.activo ? 'Activo' : 'Inactivo'}`).join('\n')
-    const csv = `Usuario,Correo,Rol,Estado\n${data}`
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'reporte_usuarios.csv'
-    a.click()
-  }
-
   const enviarReporteEmail = async () => {
     setEnviandoReporte(true)
     try {
@@ -331,6 +319,7 @@ function App() {
           consumo_mensual: consumoMensual,
           nivel_tanque1: sensores.nivel_tanque1,
           nivel_tanque2: sensores.nivel_tanque2,
+          peso: sensores.peso,
           bombas: bombas
         }
       })
@@ -354,11 +343,18 @@ function App() {
 
   const sensacionTermica = calcularSensacionTermica(sensores.temp_porqueriza, sensores.humedad_porqueriza)
 
-  const getStatusClase = (valor, umbralWarning, umbralDanger) => {
-    if (valor === null || valor === undefined) return 'desconectado'
-    if (valor > umbralDanger) return 'danger'
-    if (valor > umbralWarning) return 'warning'
-    return 'normal'
+  const formatFecha = (fecha) => {
+    if (!fecha) return '--'
+    return new Date(fecha).toLocaleString()
+  }
+
+  const tiempoDesdeUltimoPeso = () => {
+    if (!ultimoPeso.fecha) return 'Sin datos'
+    const diff = (new Date() - new Date(ultimoPeso.fecha)) / 1000
+    if (diff < 60) return 'Hace ' + Math.round(diff) + ' seg'
+    if (diff < 3600) return 'Hace ' + Math.round(diff / 60) + ' min'
+    if (diff < 86400) return 'Hace ' + Math.round(diff / 3600) + ' horas'
+    return 'Hace ' + Math.round(diff / 86400) + ' días'
   }
 
   // LOGIN
@@ -448,36 +444,28 @@ function App() {
         <main className="main-content">
           <div className="stats-grid">
             <div className="stat-card">
-              <div className="stat-icon farms">
-                <Home size={24} />
-              </div>
+              <div className="stat-icon farms"><Home size={24} /></div>
               <div className="stat-info">
                 <h3>{farms.length}</h3>
                 <p>Granjas</p>
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon users">
-                <Users size={24} />
-              </div>
+              <div className="stat-icon users"><Users size={24} /></div>
               <div className="stat-info">
                 <h3>{users.length}</h3>
                 <p>Usuarios</p>
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon active">
-                <UserCheck size={24} />
-              </div>
+              <div className="stat-icon active"><UserCheck size={24} /></div>
               <div className="stat-info">
                 <h3>{users.filter(u => u.activo).length}</h3>
                 <p>Activos</p>
               </div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon sessions">
-                <Activity size={24} />
-              </div>
+              <div className="stat-icon sessions"><Activity size={24} /></div>
               <div className="stat-info">
                 <h3>{sessions.filter(s => !s.fecha_salida).length}</h3>
                 <p>En línea</p>
@@ -489,8 +477,7 @@ function App() {
             <div className="section-header">
               <h2><Home size={20} /> Gestión de Granjas</h2>
               <button onClick={() => setShowModalFarm(true)} className="btn-add">
-                <Plus size={18} />
-                Nueva Granja
+                <Plus size={18} /> Nueva Granja
               </button>
             </div>
             <div className="table-container">
@@ -508,29 +495,19 @@ function App() {
                 <tbody>
                   {farms.length === 0 ? (
                     <tr><td colSpan="6" className="empty-row">No hay granjas registradas</td></tr>
-                  ) : (
-                    farms.map(farm => (
-                      <tr key={farm._id}>
-                        <td className="cell-main">{farm.nombre}</td>
-                        <td>{farm.ubicacion}</td>
-                        <td>{farm.propietario}</td>
-                        <td>{farm.telefono}</td>
-                        <td>
-                          <span className={`badge ${farm.activo ? 'badge-success' : 'badge-danger'}`}>
-                            {farm.activo ? 'Activo' : 'Inactivo'}
-                          </span>
-                        </td>
-                        <td className="cell-actions">
-                          <button onClick={() => toggleFarmActive(farm._id)} className="btn-icon">
-                            {farm.activo ? <UserX size={16} /> : <UserCheck size={16} />}
-                          </button>
-                          <button onClick={() => deleteFarm(farm._id)} className="btn-icon danger">
-                            <Trash2 size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  ) : farms.map(farm => (
+                    <tr key={farm._id}>
+                      <td className="cell-main">{farm.nombre}</td>
+                      <td>{farm.ubicacion}</td>
+                      <td>{farm.propietario}</td>
+                      <td>{farm.telefono}</td>
+                      <td><span className={`badge ${farm.activo ? 'badge-success' : 'badge-danger'}`}>{farm.activo ? 'Activo' : 'Inactivo'}</span></td>
+                      <td className="cell-actions">
+                        <button onClick={() => toggleFarmActive(farm._id)} className="btn-icon">{farm.activo ? <UserX size={16} /> : <UserCheck size={16} />}</button>
+                        <button onClick={() => deleteFarm(farm._id)} className="btn-icon danger"><Trash2 size={16} /></button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -539,16 +516,9 @@ function App() {
           <section className="section">
             <div className="section-header">
               <h2><Users size={20} /> Gestión de Usuarios</h2>
-              <div className="section-actions">
-                <button onClick={downloadExcel} className="btn-secondary">
-                  <Download size={18} />
-                  Exportar
-                </button>
-                <button onClick={() => setShowModalUser(true)} className="btn-add">
-                  <Plus size={18} />
-                  Nuevo Usuario
-                </button>
-              </div>
+              <button onClick={() => setShowModalUser(true)} className="btn-add">
+                <Plus size={18} /> Nuevo Usuario
+              </button>
             </div>
             <div className="table-container">
               <table>
@@ -567,24 +537,12 @@ function App() {
                     <tr key={u._id}>
                       <td className="cell-main">{u.usuario}</td>
                       <td>{u.correo}</td>
-                      <td>
-                        <span className={`badge ${u.rol === 'superadmin' ? 'badge-admin' : 'badge-client'}`}>
-                          {u.rol}
-                        </span>
-                      </td>
+                      <td><span className={`badge ${u.rol === 'superadmin' ? 'badge-admin' : 'badge-client'}`}>{u.rol}</span></td>
                       <td>{u.ultimo_acceso ? new Date(u.ultimo_acceso).toLocaleString() : 'Nunca'}</td>
-                      <td>
-                        <span className={`badge ${u.activo ? 'badge-success' : 'badge-danger'}`}>
-                          {u.activo ? 'Activo' : 'Inactivo'}
-                        </span>
-                      </td>
+                      <td><span className={`badge ${u.activo ? 'badge-success' : 'badge-danger'}`}>{u.activo ? 'Activo' : 'Inactivo'}</span></td>
                       <td className="cell-actions">
-                        <button onClick={() => toggleUserActive(u._id)} className="btn-icon">
-                          {u.activo ? <UserX size={16} /> : <UserCheck size={16} />}
-                        </button>
-                        <button onClick={() => deleteUser(u._id)} className="btn-icon danger">
-                          <Trash2 size={16} />
-                        </button>
+                        <button onClick={() => toggleUserActive(u._id)} className="btn-icon">{u.activo ? <UserX size={16} /> : <UserCheck size={16} />}</button>
+                        <button onClick={() => deleteUser(u._id)} className="btn-icon danger"><Trash2 size={16} /></button>
                       </td>
                     </tr>
                   ))}
@@ -608,22 +566,14 @@ function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sessions.length === 0 ? (
-                    <tr><td colSpan="4" className="empty-row">No hay sesiones registradas</td></tr>
-                  ) : (
-                    sessions.slice(0, 15).map(s => (
-                      <tr key={s._id}>
-                        <td className="cell-main">{s.usuario}</td>
-                        <td>{new Date(s.fecha_entrada).toLocaleString()}</td>
-                        <td>{s.fecha_salida ? new Date(s.fecha_salida).toLocaleString() : '-'}</td>
-                        <td>
-                          <span className={`badge ${s.fecha_salida ? 'badge-neutral' : 'badge-success'}`}>
-                            {s.fecha_salida ? 'Cerrada' : 'Activa'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                  {sessions.slice(0, 15).map(s => (
+                    <tr key={s._id}>
+                      <td className="cell-main">{s.usuario}</td>
+                      <td>{new Date(s.fecha_entrada).toLocaleString()}</td>
+                      <td>{s.fecha_salida ? new Date(s.fecha_salida).toLocaleString() : '-'}</td>
+                      <td><span className={`badge ${s.fecha_salida ? 'badge-neutral' : 'badge-success'}`}>{s.fecha_salida ? 'Cerrada' : 'Activa'}</span></td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -737,9 +687,9 @@ function App() {
             {conexiones.sensor_porqueriza ? <Wifi size={16} /> : <WifiOff size={16} />}
             <span>Sensor Porqueriza</span>
           </div>
-          <div className={`conexion-item ${conexiones.idtolu ? 'conectado' : 'desconectado'}`}>
-            {conexiones.idtolu ? <Wifi size={16} /> : <WifiOff size={16} />}
-            <span>idtolu</span>
+          <div className={`conexion-item ${conexiones.bascula ? 'conectado' : 'desconectado'}`}>
+            {conexiones.bascula ? <Wifi size={16} /> : <WifiOff size={16} />}
+            <span>Bascula</span>
           </div>
         </div>
 
@@ -748,21 +698,17 @@ function App() {
           <div className="section-header">
             <h2><Sun size={20} /> Condiciones Climáticas</h2>
             <span className="location-badge">
-              <Building2 size={14} />
-              9°16'N 75°49'W
+              <Building2 size={14} /> 9°16'N 75°49'W
             </span>
           </div>
           
           <div className="climate-grid">
-            <div className={`climate-card ambiente ${conexiones.api_clima ? '' : 'desconectado'}`}>
+            <div className={`climate-card ambiente ${!conexiones.api_clima ? 'desconectado' : ''}`}>
               <div className="climate-header">
                 <CloudRain size={20} />
                 <span>Ambiente Exterior</span>
                 {!conexiones.api_clima && (
-                  <span className="status-badge desconectado">
-                    <WifiOff size={14} />
-                    Sin conexión
-                  </span>
+                  <span className="status-badge desconectado"><WifiOff size={14} /> Sin conexión</span>
                 )}
               </div>
               <div className="climate-data">
@@ -785,30 +731,12 @@ function App() {
               </div>
             </div>
 
-            <div className={`climate-card porqueriza ${getStatusClase(sensores.temp_porqueriza, 30, 34)} ${!conexiones.sensor_porqueriza ? 'desconectado' : ''}`}>
+            <div className={`climate-card porqueriza ${!conexiones.sensor_porqueriza ? 'desconectado' : ''}`}>
               <div className="climate-header">
                 <Building2 size={20} />
                 <span>Porqueriza</span>
-                {!conexiones.sensor_porqueriza ? (
-                  <span className="status-badge desconectado">
-                    <WifiOff size={14} />
-                    Sin conexión
-                  </span>
-                ) : sensores.temp_porqueriza > 34 ? (
-                  <span className="status-badge danger">
-                    <AlertTriangle size={14} />
-                    Crítica
-                  </span>
-                ) : sensores.temp_porqueriza > 30 ? (
-                  <span className="status-badge warning">
-                    <AlertCircle size={14} />
-                    Alta
-                  </span>
-                ) : (
-                  <span className="status-badge normal">
-                    <CheckCircle size={14} />
-                    Normal
-                  </span>
+                {!conexiones.sensor_porqueriza && (
+                  <span className="status-badge desconectado"><WifiOff size={14} /> Sin conexión</span>
                 )}
               </div>
               <div className="climate-data">
@@ -841,6 +769,58 @@ function App() {
           </div>
         </section>
 
+        {/* Báscula - NUEVO */}
+        <section className="section">
+          <div className="section-header">
+            <h2><Scale size={20} /> Báscula de Pesaje</h2>
+            <span className={`status-badge ${conexiones.bascula ? 'conectado' : 'desconectado'}`}>
+              {conexiones.bascula ? <><Wifi size={14} /> Conectada</> : <><WifiOff size={14} /> Sin conexión</>}
+            </span>
+          </div>
+          
+          <div className="bascula-container">
+            <div className="bascula-peso-actual">
+              <div className="peso-display">
+                <Scale size={48} />
+                <div className="peso-valor">
+                  <span className="numero">{sensores.peso ?? '--'}</span>
+                  <span className="unidad">kg</span>
+                </div>
+              </div>
+              <div className="peso-info">
+                <p className="peso-tiempo">{tiempoDesdeUltimoPeso()}</p>
+                {ultimoPeso.fecha && (
+                  <p className="peso-fecha">{formatFecha(ultimoPeso.fecha)}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="bascula-historial">
+              <h3>Últimos Registros</h3>
+              {historialPeso.length === 0 ? (
+                <p className="sin-datos">Sin registros de peso</p>
+              ) : (
+                <table className="tabla-historial">
+                  <thead>
+                    <tr>
+                      <th>Peso</th>
+                      <th>Fecha</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historialPeso.map((p, i) => (
+                      <tr key={i}>
+                        <td className="peso-cell">{p.peso || p.valor} kg</td>
+                        <td>{formatFecha(p.fecha)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </section>
+
         {/* Monitoreo */}
         <section className="section">
           <div className="section-header">
@@ -848,10 +828,8 @@ function App() {
           </div>
           
           <div className="monitor-grid">
-            <div className={`monitor-card ${sensores.nivel_tanque1 !== null && sensores.nivel_tanque1 < 20 ? 'warning' : ''} ${sensores.nivel_tanque1 === null ? 'desconectado' : ''}`}>
-              <div className="monitor-icon">
-                <Waves size={24} />
-              </div>
+            <div className={`monitor-card ${sensores.nivel_tanque1 === null ? 'desconectado' : sensores.nivel_tanque1 < 20 ? 'warning' : ''}`}>
+              <div className="monitor-icon"><Waves size={24} /></div>
               <div className="monitor-info">
                 <span className="monitor-value">{sensores.nivel_tanque1 ?? '--'}%</span>
                 <span className="monitor-label">Tanque Principal</span>
@@ -863,10 +841,8 @@ function App() {
               </div>
             </div>
 
-            <div className={`monitor-card ${sensores.nivel_tanque2 !== null && sensores.nivel_tanque2 < 20 ? 'warning' : ''} ${sensores.nivel_tanque2 === null ? 'desconectado' : ''}`}>
-              <div className="monitor-icon">
-                <Waves size={24} />
-              </div>
+            <div className={`monitor-card ${sensores.nivel_tanque2 === null ? 'desconectado' : sensores.nivel_tanque2 < 20 ? 'warning' : ''}`}>
+              <div className="monitor-icon"><Waves size={24} /></div>
               <div className="monitor-info">
                 <span className="monitor-value">{sensores.nivel_tanque2 ?? '--'}%</span>
                 <span className="monitor-label">Tanque Reserva</span>
@@ -878,20 +854,8 @@ function App() {
               </div>
             </div>
 
-            <div className={`monitor-card ${sensores.peso === null ? 'desconectado' : ''}`}>
-              <div className="monitor-icon">
-                <Scale size={24} />
-              </div>
-              <div className="monitor-info">
-                <span className="monitor-value">{sensores.peso ?? '--'} kg</span>
-                <span className="monitor-label">Último Pesaje</span>
-              </div>
-            </div>
-
             <div className="monitor-card">
-              <div className="monitor-icon">
-                <Droplets size={24} />
-              </div>
+              <div className="monitor-icon"><Droplets size={24} /></div>
               <div className="monitor-info">
                 <span className="monitor-value">{consumoDiario} L</span>
                 <span className="monitor-label">Consumo Hoy</span>
@@ -899,22 +863,10 @@ function App() {
             </div>
 
             <div className="monitor-card">
-              <div className="monitor-icon">
-                <TrendingUp size={24} />
-              </div>
+              <div className="monitor-icon"><TrendingUp size={24} /></div>
               <div className="monitor-info">
                 <span className="monitor-value">{consumoMensual.toLocaleString()} L</span>
                 <span className="monitor-label">Consumo Mensual</span>
-              </div>
-            </div>
-
-            <div className={`monitor-card ${sensores.flujo === null ? 'desconectado' : ''}`}>
-              <div className="monitor-icon">
-                <Activity size={24} />
-              </div>
-              <div className="monitor-info">
-                <span className="monitor-value">{sensores.flujo ?? '--'} L/min</span>
-                <span className="monitor-label">Flujo Actual</span>
               </div>
             </div>
           </div>
@@ -964,19 +916,15 @@ function App() {
                 <CheckCircle size={32} />
                 <p>Sistema operando normalmente</p>
               </div>
-            ) : (
-              alertas.slice(0, 5).map((alerta) => (
-                <div key={alerta._id} className={`alert-item ${alerta.tipo?.includes('alta') || alerta.tipo?.includes('critica') ? 'critical' : 'warning'}`}>
-                  <div className="alert-icon">
-                    <AlertTriangle size={20} />
-                  </div>
-                  <div className="alert-content">
-                    <p className="alert-message">{alerta.mensaje}</p>
-                    <span className="alert-time">{new Date(alerta.fecha).toLocaleString()}</span>
-                  </div>
+            ) : alertas.slice(0, 5).map((alerta) => (
+              <div key={alerta._id} className={`alert-item ${alerta.tipo?.includes('alta') ? 'critical' : 'warning'}`}>
+                <div className="alert-icon"><AlertTriangle size={20} /></div>
+                <div className="alert-content">
+                  <p className="alert-message">{alerta.mensaje}</p>
+                  <span className="alert-time">{new Date(alerta.fecha).toLocaleString()}</span>
                 </div>
-              ))
-            )}
+              </div>
+            ))}
           </div>
         </section>
       </main>
