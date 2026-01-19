@@ -1243,4 +1243,176 @@ body {
     font-size: 3rem;
   }
 }
+
+/* ==================== BASCULA CORREGIDA ==================== */
+.bascula-content {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+  padding: 24px;
+}
+
+.peso-principal {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  border-radius: var(--radius);
+  padding: 24px;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+
+.peso-icono {
+  width: 64px;
+  height: 64px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.peso-datos {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.peso-label {
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
+.peso-display {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 6px;
+}
+
+.peso-valor {
+  font-size: 3rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.peso-unidad {
+  font-size: 1.2rem;
+  opacity: 0.8;
+}
+
+.peso-tiempo {
+  font-size: 0.75rem;
+  background: rgba(255,255,255,0.2);
+  padding: 4px 10px;
+  border-radius: 12px;
+  margin-top: 8px;
+}
+
+.peso-historial {
+  background: var(--bg-main);
+  border-radius: var(--radius);
+  padding: 20px;
+  overflow: hidden;
+}
+
+.peso-historial h4 {
+  margin: 0 0 16px 0;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+}
+
+.historial-tabla {
+  overflow-x: auto;
+}
+
+.historial-tabla table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.historial-tabla th {
+  background: var(--bg-card);
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.historial-tabla td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+
+.historial-tabla tr:hover td {
+  background: var(--bg-card);
+}
+
+.td-peso {
+  font-weight: 700;
+  color: var(--primary-dark);
+  font-size: 1rem;
+}
+
+.td-tipo {
+  color: var(--text-secondary);
+}
+
+.td-fecha {
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.cerda-grande .td-peso {
+  color: #7c3aed;
+}
+
+.cerda-grande .td-tipo {
+  color: #7c3aed;
+}
+
+.cerdo-pequeno .td-peso {
+  color: var(--primary);
+}
+
+.sin-datos {
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 30px !important;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.status-indicator.online {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.status-indicator.offline {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+@media (max-width: 768px) {
+  .bascula-content {
+    grid-template-columns: 1fr;
+  }
+  
+  .peso-valor {
+    font-size: 2.5rem;
+  }
+}
 }

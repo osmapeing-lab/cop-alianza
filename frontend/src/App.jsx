@@ -769,57 +769,62 @@ function App() {
           </div>
         </section>
 
-        {/* Báscula - NUEVO */}
-        <section className="section">
-          <div className="section-header">
-            <h2><Scale size={20} /> Báscula de Pesaje</h2>
-            <span className={`status-badge ${conexiones.bascula ? 'conectado' : 'desconectado'}`}>
-              {conexiones.bascula ? <><Wifi size={14} /> Conectada</> : <><WifiOff size={14} /> Sin conexión</>}
-            </span>
-          </div>
-          
-          <div className="bascula-container">
-            <div className="bascula-peso-actual">
-              <div className="peso-display">
-                <Scale size={48} />
-                <div className="peso-valor">
-                  <span className="numero">{sensores.peso ?? '--'}</span>
-                  <span className="unidad">kg</span>
-                </div>
-              </div>
-              <div className="peso-info">
-                <p className="peso-tiempo">{tiempoDesdeUltimoPeso()}</p>
-                {ultimoPeso.fecha && (
-                  <p className="peso-fecha">{formatFecha(ultimoPeso.fecha)}</p>
-                )}
-              </div>
-            </div>
+       {/* Báscula de Pesaje */}
+<section className="section">
+  <div className="section-header">
+    <h2><Scale size={20} /> Báscula de Pesaje</h2>
+    <div className={`status-indicator ${conexiones.bascula ? 'online' : 'offline'}`}>
+      {conexiones.bascula ? <Wifi size={14} /> : <WifiOff size={14} />}
+      {conexiones.bascula ? 'Conectada' : 'Sin conexión'}
+    </div>
+  </div>
+  
+  <div className="bascula-content">
+    <div className="peso-principal">
+      <div className="peso-icono">
+        <Scale size={32} />
+      </div>
+      <div className="peso-datos">
+        <span className="peso-label">Último peso</span>
+        <div className="peso-display">
+          <span className="peso-valor">{sensores.peso ?? '--'}</span>
+          <span className="peso-unidad">kg</span>
+        </div>
+        <span className="peso-tiempo">{tiempoDesdeUltimoPeso()}</span>
+      </div>
+    </div>
 
-            <div className="bascula-historial">
-              <h3>Últimos Registros</h3>
-              {historialPeso.length === 0 ? (
-                <p className="sin-datos">Sin registros de peso</p>
-              ) : (
-                <table className="tabla-historial">
-                  <thead>
-                    <tr>
-                      <th>Peso</th>
-                      <th>Fecha</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historialPeso.map((p, i) => (
-                      <tr key={i}>
-                        <td className="peso-cell">{p.peso || p.valor} kg</td>
-                        <td>{formatFecha(p.fecha)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </div>
-        </section>
+    <div className="peso-historial">
+      <h4>Historial de Pesajes</h4>
+      <div className="historial-tabla">
+        <table>
+          <thead>
+            <tr>
+              <th>Peso</th>
+              <th>Tipo</th>
+              <th>Fecha</th>
+            </tr>
+          </thead>
+          <tbody>
+            {historialPeso.length === 0 ? (
+              <tr>
+                <td colSpan="3" className="sin-datos">Sin registros</td>
+              </tr>
+            ) : (
+              historialPeso.map((p, i) => (
+                <tr key={i} className={(p.valor || p.peso) > 100 ? 'cerda-grande' : 'cerdo-pequeno'}>
+                  <td className="td-peso">{p.valor || p.peso} kg</td>
+                  <td className="td-tipo">{(p.valor || p.peso) > 100 ? 'Cerda adulta' : 'Cerdo pequeño'}</td>
+                  <td className="td-fecha">{formatFecha(p.fecha)}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
 
         {/* Monitoreo */}
         <section className="section">

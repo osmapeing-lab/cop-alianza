@@ -1,7 +1,5 @@
 const Reading = require('../models/Reading');
-const { alertaTemperatura, alertaTanqueBajo } = require('./alertController');
 
-// Guardar último peso para mostrar en frontend
 let ultimoPeso = {
   peso: null,
   unidad: 'kg',
@@ -14,9 +12,8 @@ exports.recibirPeso = async (req, res) => {
   try {
     const { peso, unidad = 'kg', sensor_id } = req.body;
     
-    console.log(`[ESP32] Peso recibido: ${peso} ${unidad} de ${sensor_id}`);
+    console.log(`[ESP32] Peso recibido: ${peso} ${unidad}`);
     
-    // Guardar en base de datos
     const reading = new Reading({
       sensor: sensor_id || 'bascula_granja',
       tipo: 'peso',
@@ -25,7 +22,6 @@ exports.recibirPeso = async (req, res) => {
     });
     await reading.save();
     
-    // Actualizar último peso
     ultimoPeso = {
       peso,
       unidad,
@@ -33,17 +29,11 @@ exports.recibirPeso = async (req, res) => {
       sensor_id
     };
     
-    // Emitir por WebSocket a todos los clientes
     if (req.io) {
       req.io.emit('nuevo_peso', ultimoPeso);
-      console.log('[SOCKET] Peso emitido a clientes');
     }
     
-    res.json({ 
-      mensaje: 'Peso registrado', 
-      peso,
-      fecha: ultimoPeso.fecha
-    });
+    res.json({ mensaje: 'Peso registrado', peso, fecha: ultimoPeso.fecha });
   } catch (error) {
     console.log('[ESP32] Error:', error.message);
     res.status(400).json({ mensaje: error.message });
@@ -51,8 +41,24 @@ exports.recibirPeso = async (req, res) => {
 };
 
 // Obtener último peso
-exports.obtenerUltimoPeso = (req, res) => {
-  res.json(ultimoPeso);
+exports.obtenerUltimoPeso = async (req, res) => {
+  try {
+    // Buscar el último peso en la base de datos
+    const ultimo = await Reading.findOne({ tipo: 'peso' }).sort({ fecha: -1 });
+    
+    if (ultimo) {
+      res.json({
+        peso: ultimo.valor,
+        unidad: ultimo.unidad,
+        fecha: ultimo.fecha,
+        sensor_id: ultimo.sensor
+      });
+    } else {
+      res.json(ultimoPeso);
+    }
+  } catch (error) {
+    res.json(ultimoPeso);
+  }
 };
 
 // Obtener historial de pesos
@@ -60,19 +66,28 @@ exports.obtenerHistorialPeso = async (req, res) => {
   try {
     const lecturas = await Reading.find({ tipo: 'peso' })
       .sort({ fecha: -1 })
-      .limit(50);
-    res.json(lecturas);
+      .limit(20);
+    
+    // Formatear respuesta
+    const historial = lecturas.map(l => ({
+      peso: l.valor,
+      valor: l.valor,
+      unidad: l.unidad,
+      fecha: l.fecha,
+      sensor_id: l.sensor
+    }));
+    
+    res.json(historial);
   } catch (error) {
+    console.log('Error historial:', error.message);
     res.status(500).json({ mensaje: error.message });
   }
 };
 
-// Recibir datos de riego (temperatura, humedad, tanques)
+// Recibir datos de riego
 exports.recibirRiego = async (req, res) => {
   try {
     const { temperatura, humedad, nivel_tanque1, nivel_tanque2, sensor_id } = req.body;
-    
-    console.log(`[ESP32] Riego recibido: temp=${temperatura}, hum=${humedad}`);
     
     const lecturas = [];
     
@@ -83,17 +98,6 @@ exports.recibirRiego = async (req, res) => {
         valor: temperatura,
         unidad: '°C'
       }));
-      
-      // Alerta si temperatura > 34°C
-      if (temperatura > 34) {
-        await alertaTemperatura({
-          temperatura,
-          umbral: 34,
-          bomba_activada: true,
-          consumo_agua: 50,
-          resultado: 'Riego activado automaticamente'
-        });
-      }
     }
     
     if (humedad !== undefined) {
@@ -112,14 +116,6 @@ exports.recibirRiego = async (req, res) => {
         valor: nivel_tanque1,
         unidad: '%'
       }));
-      
-      if (nivel_tanque1 < 20) {
-        await alertaTanqueBajo({
-          tanque: 'Tanque Principal',
-          nivel: nivel_tanque1,
-          umbral_minimo: 20
-        });
-      }
     }
     
     if (nivel_tanque2 !== undefined) {
@@ -129,32 +125,17 @@ exports.recibirRiego = async (req, res) => {
         valor: nivel_tanque2,
         unidad: '%'
       }));
-      
-      if (nivel_tanque2 < 20) {
-        await alertaTanqueBajo({
-          tanque: 'Tanque Reserva',
-          nivel: nivel_tanque2,
-          umbral_minimo: 20
-        });
-      }
     }
     
     if (lecturas.length > 0) {
       await Reading.insertMany(lecturas);
     }
     
-    // Emitir por WebSocket
     if (req.io) {
-      req.io.emit('datos_riego', {
-        temperatura,
-        humedad,
-        nivel_tanque1,
-        nivel_tanque2,
-        fecha: new Date()
-      });
+      req.io.emit('datos_riego', { temperatura, humedad, nivel_tanque1, nivel_tanque2, fecha: new Date() });
     }
     
-    res.json({ mensaje: 'Datos de riego registrados' });
+    res.json({ mensaje: 'Datos registrados' });
   } catch (error) {
     res.status(400).json({ mensaje: error.message });
   }
