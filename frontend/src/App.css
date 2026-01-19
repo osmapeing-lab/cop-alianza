@@ -1029,4 +1029,22 @@ body {
     gap: 10px;
     align-items: flex-start;
   }
+  /* ==================== FIX CENTRADO ==================== */
+.app {
+  width: 100%;
+  min-height: 100vh;
+}
+
+.main-content {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (min-width: 1400px) {
+  .main-content {
+    max-width: 1300px;
+  }
+}
 }
