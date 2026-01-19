@@ -239,10 +239,11 @@ body {
 /* ==================== MAIN ==================== */
 .main-content {
   padding: 24px;
-  max-width: 1400px;
-  margin: 0 auto;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
 }
-
 /* ==================== CONEXIONES STATUS ==================== */
 .conexiones-status {
   display: flex;
@@ -1033,6 +1034,7 @@ body {
 .app {
   width: 100%;
   min-height: 100vh;
+  background: var(--bg-main);
 }
 
 .main-content {
