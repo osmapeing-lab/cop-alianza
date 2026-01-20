@@ -655,7 +655,7 @@ function App() {
     <div className="app">
       <header className="header">
         <div className="header-brand">
-          <Building2 size={32} />
+          <img src="/coo-alianzas logo.png" alt="COO Alianzas" style={{height: '40px'}} />
           <div>
             <h1>Cooperativa Alianzas</h1>
             <span className="header-subtitle">Granja Porcina - Lorica, Córdoba</span>
