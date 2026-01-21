@@ -31,9 +31,9 @@ function App() {
   // Lorica: Clima caliente húmedo, temp promedio 32-34°C
   // Porqueriza con techo zinc: +5-7°C sobre ambiente
   const [sensores] = useState({
-    temp_ambiente: 33.4,
+    temp_ambiente: 28.4,
     humedad_ambiente: 76,
-    temp_porqueriza: 38.2,
+    temp_porqueriza: 29.2,
     humedad_porqueriza: 68,
     nivel_tanque1: 74,
     nivel_tanque2: 58,
