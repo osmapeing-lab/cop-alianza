@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import axios from 'axios'
+import io from 'socket.io-client'
 import { 
   Thermometer, Droplets, Wind, Scale, Waves, 
   Power, PowerOff, AlertTriangle, CheckCircle, Clock,
@@ -9,38 +11,302 @@ import {
 } from 'lucide-react'
 import './App.css'
 
+// ==================== CONFIGURACIÓN ====================
+const API_URL = 'https://cop-alianza-backend.onrender.com/api'
+const socket = io('https://cop-alianza-backend.onrender.com')
+
+// Coordenadas Lorica, Córdoba
+const LAT = 9.2816
+const LON = -75.8264
+
 function App() {
   const [user, setUser] = useState(null)
   const [page, setPage] = useState('login')
+  const [loading, setLoading] = useState(false)
   
+  // Login
   const [usuario, setUsuario] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
 
-  // ==================== DATOS ESTÁTICOS REALISTAS ====================
-  
   // Estados de conexión
-  const [conexiones] = useState({
-    api_clima: true,
-    sensor_porqueriza: true,
-    bascula: true
+  const [conexiones, setConexiones] = useState({
+    api_clima: false,
+    sensor_porqueriza: false,
+    bascula: false,
+    backend: false
   })
 
-  // Sensores - DATOS CALIBRADOS REALISTAS
-  // Lorica: Clima caliente húmedo, temp promedio 32-34°C
-  // Porqueriza con techo zinc: +5-7°C sobre ambiente
-  const [sensores] = useState({
-    temp_ambiente: 28.4,
-    humedad_ambiente: 76,
-    temp_porqueriza: 29.2,
-    humedad_porqueriza: 68,
-    nivel_tanque1: 74,
-    nivel_tanque2: 58,
-    flujo: 4.2
+  // Datos de sensores
+  const [sensores, setSensores] = useState({
+    temp_ambiente: null,
+    humedad_ambiente: null,
+    temp_porqueriza: null,
+    humedad_porqueriza: null,
+    nivel_tanque1: null,
+    nivel_tanque2: null,
+    flujo: null
   })
 
-  // Calcular sensación térmica (fórmula de Steadman)
+  // Datos del sistema
+  const [bombas, setBombas] = useState([])
+  const [alertas, setAlertas] = useState([])
+  const [ultimoPeso, setUltimoPeso] = useState(null)
+  const [historialPeso, setHistorialPeso] = useState([])
+  const [consumoDiario, setConsumoDiario] = useState(0)
+  const [consumoMensual, setConsumoMensual] = useState(0)
+  const [consumoSemanal, setConsumoSemanal] = useState([])
+
+  // Datos SuperAdmin
+  const [farms, setFarms] = useState([])
+  const [users, setUsers] = useState([])
+  const [sessions, setSessions] = useState([])
+
+  // ==================== EFECTOS ====================
+
+  // Cargar usuario de localStorage al inicio
+  useEffect(() => {
+    const savedUser = localStorage.getItem('cooalianzas_user')
+    if (savedUser) {
+      const userData = JSON.parse(savedUser)
+      setUser(userData)
+      setPage(userData.rol === 'superadmin' ? 'superadmin' : 'cliente')
+    }
+  }, [])
+
+  // Cargar clima de Lorica (API Open-Meteo)
+  useEffect(() => {
+    const fetchClima = async () => {
+      try {
+        const res = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,relative_humidity_2m&timezone=America/Bogota`
+        )
+        const data = await res.json()
+        if (data.current) {
+          setSensores(prev => ({
+            ...prev,
+            temp_ambiente: data.current.temperature_2m,
+            humedad_ambiente: data.current.relative_humidity_2m
+          }))
+          setConexiones(prev => ({ ...prev, api_clima: true }))
+        }
+      } catch (err) {
+        console.log('Error fetching clima:', err)
+        setConexiones(prev => ({ ...prev, api_clima: false }))
+      }
+    }
+    
+    fetchClima()
+    const interval = setInterval(fetchClima, 5 * 60 * 1000) // Cada 5 min
+    return () => clearInterval(interval)
+  }, [])
+
+  // WebSocket listeners
+  useEffect(() => {
+    socket.on('connect', () => {
+      setConexiones(prev => ({ ...prev, backend: true }))
+    })
+
+    socket.on('disconnect', () => {
+      setConexiones(prev => ({ ...prev, backend: false }))
+    })
+
+    socket.on('lectura_actualizada', (data) => {
+      if (data.tipo === 'porqueriza') {
+        setSensores(prev => ({
+          ...prev,
+          temp_porqueriza: data.temperatura,
+          humedad_porqueriza: data.humedad
+        }))
+        setConexiones(prev => ({ ...prev, sensor_porqueriza: true }))
+      }
+      if (data.tipo === 'tanques') {
+        setSensores(prev => ({
+          ...prev,
+          nivel_tanque1: data.tanque1,
+          nivel_tanque2: data.tanque2
+        }))
+      }
+    })
+
+    socket.on('bomba_actualizada', (data) => {
+      setBombas(prev => prev.map(b => b._id === data._id ? data : b))
+    })
+
+    socket.on('nueva_alerta', (data) => {
+      setAlertas(prev => [data, ...prev].slice(0, 20))
+    })
+
+    socket.on('nuevo_peso', (data) => {
+      setUltimoPeso(data)
+      setHistorialPeso(prev => [data, ...prev].slice(0, 50))
+      setConexiones(prev => ({ ...prev, bascula: true }))
+    })
+
+    return () => {
+      socket.off('connect')
+      socket.off('disconnect')
+      socket.off('lectura_actualizada')
+      socket.off('bomba_actualizada')
+      socket.off('nueva_alerta')
+      socket.off('nuevo_peso')
+    }
+  }, [])
+
+  // Cargar datos cuando hay usuario
+  useEffect(() => {
+    if (user) {
+      fetchAllData()
+    }
+  }, [user])
+
+  // ==================== FUNCIONES API ====================
+
+  const fetchAllData = async () => {
+    try {
+      const token = user?.token
+      const headers = token ? { Authorization: `Bearer ${token}` } : {}
+
+      const [bombasRes, alertasRes, readingsRes] = await Promise.all([
+        axios.get(`${API_URL}/motorbombs`, { headers }),
+        axios.get(`${API_URL}/alerts`, { headers }),
+        axios.get(`${API_URL}/sensors/readings?limit=100`, { headers })
+      ])
+
+      setBombas(bombasRes.data || [])
+      setAlertas(alertasRes.data || [])
+
+      // Procesar lecturas de sensores
+      if (readingsRes.data && readingsRes.data.length > 0) {
+        const lastReading = readingsRes.data[0]
+        if (lastReading.temp_porqueriza) {
+          setSensores(prev => ({
+            ...prev,
+            temp_porqueriza: lastReading.temp_porqueriza,
+            humedad_porqueriza: lastReading.humedad_porqueriza,
+            nivel_tanque1: lastReading.nivel_tanque1,
+            nivel_tanque2: lastReading.nivel_tanque2,
+            flujo: lastReading.flujo
+          }))
+          setConexiones(prev => ({ ...prev, sensor_porqueriza: true }))
+        }
+      }
+
+      // Cargar pesajes
+      try {
+        const pesosRes = await axios.get(`${API_URL}/esp/pesos?limit=50`, { headers })
+        if (pesosRes.data && pesosRes.data.length > 0) {
+          setUltimoPeso(pesosRes.data[0])
+          setHistorialPeso(pesosRes.data)
+          setConexiones(prev => ({ ...prev, bascula: true }))
+        }
+      } catch (e) { console.log('Pesajes no disponibles') }
+
+      // Cargar consumo de agua
+      try {
+        const [diarioRes, mensualRes] = await Promise.all([
+          axios.get(`${API_URL}/water/diario`, { headers }),
+          axios.get(`${API_URL}/water/mensual`, { headers })
+        ])
+        setConsumoDiario(diarioRes.data?.total || 0)
+        setConsumoMensual(mensualRes.data?.total || 0)
+      } catch (e) { console.log('Consumo no disponible') }
+
+      // Si es admin, cargar datos adicionales
+      if (user?.rol === 'superadmin') {
+        try {
+          const [farmsRes, usersRes, sessionsRes] = await Promise.all([
+            axios.get(`${API_URL}/farms`, { headers }),
+            axios.get(`${API_URL}/users`, { headers }),
+            axios.get(`${API_URL}/sessions`, { headers })
+          ])
+          setFarms(farmsRes.data || [])
+          setUsers(usersRes.data || [])
+          setSessions(sessionsRes.data || [])
+        } catch (e) { console.log('Datos admin no disponibles') }
+      }
+
+      setConexiones(prev => ({ ...prev, backend: true }))
+    } catch (err) {
+      console.log('Error fetching data:', err)
+      setConexiones(prev => ({ ...prev, backend: false }))
+    }
+  }
+
+  const handleLogin = async (e) => {
+    e.preventDefault()
+    setLoading(true)
+    setError('')
+    
+    try {
+      const res = await axios.post(`${API_URL}/users/login`, { usuario, password })
+      const userData = {
+        usuario: res.data.usuario,
+        rol: res.data.rol,
+        nombre: res.data.nombre || res.data.usuario,
+        token: res.data.token
+      }
+      setUser(userData)
+      localStorage.setItem('cooalianzas_user', JSON.stringify(userData))
+      setPage(userData.rol === 'superadmin' ? 'superadmin' : 'cliente')
+      setError('')
+    } catch (err) {
+      setError(err.response?.data?.mensaje || 'Usuario o contraseña incorrectos')
+    }
+    setLoading(false)
+  }
+
+  const handleLogout = async () => {
+    try {
+      const token = user?.token
+      if (token) {
+        await axios.post(`${API_URL}/users/logout`, {}, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      }
+    } catch (e) { }
+    
+    setUser(null)
+    localStorage.removeItem('cooalianzas_user')
+    setPage('login')
+    setUsuario('')
+    setPassword('')
+  }
+
+  const toggleBomba = async (id) => {
+    try {
+      const token = user?.token
+      const res = await axios.put(`${API_URL}/motorbombs/${id}/toggle`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      socket.emit('toggle_bomba', res.data)
+      setBombas(prev => prev.map(b => b._id === id ? res.data : b))
+    } catch (err) {
+      console.log('Error toggling bomba:', err)
+    }
+  }
+
+  const descargarReporte = async (tipo) => {
+    try {
+      const token = user?.token
+      const res = await axios.get(`${API_URL}/reporte/excel?tipo=${tipo}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob'
+      })
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', `reporte_${tipo}_${new Date().toISOString().split('T')[0]}.xlsx`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    } catch (err) {
+      console.log('Error descargando reporte:', err)
+    }
+  }
+
+  // ==================== FUNCIONES AUXILIARES ====================
+
   const calcularSensacionTermica = (temp, humedad) => {
     if (!temp || !humedad) return null
     if (temp >= 27 && humedad >= 40) {
@@ -54,184 +320,16 @@ function App() {
 
   const sensacionTermica = calcularSensacionTermica(sensores.temp_porqueriza, sensores.humedad_porqueriza)
 
-  // Último peso registrado
-  const [ultimoPeso] = useState({
-    peso: 87.4,
-    fecha: new Date('2026-01-21T14:32:00'),
-    tipo: 'cerda_adulta'
-  })
-
-  // Historial de pesajes - DESDE NOVIEMBRE 2025 (datos esporádicos realistas)
-  const [historialPeso] = useState([
-    { fecha: '21/01/26', peso: 87.4, tipo: 'Cerda adulta', hora: '14:32' },
-    { fecha: '21/01/26', peso: 12.3, tipo: 'Lechón', hora: '11:15' },
-    { fecha: '20/01/26', peso: 94.2, tipo: 'Cerda adulta', hora: '16:45' },
-    { fecha: '20/01/26', peso: 11.8, tipo: 'Lechón', hora: '10:20' },
-    { fecha: '19/01/26', peso: 89.7, tipo: 'Cerda adulta', hora: '15:30' },
-    { fecha: '18/01/26', peso: 13.1, tipo: 'Lechón', hora: '09:45' },
-    { fecha: '17/01/26', peso: 91.5, tipo: 'Cerda adulta', hora: '14:10' },
-    { fecha: '15/01/26', peso: 86.3, tipo: 'Cerda adulta', hora: '11:30' },
-    { fecha: '12/01/26', peso: 10.7, tipo: 'Lechón', hora: '16:00' },
-    { fecha: '10/01/26', peso: 92.8, tipo: 'Cerda adulta', hora: '10:15' },
-    { fecha: '08/01/26', peso: 88.1, tipo: 'Cerda adulta', hora: '15:20' },
-    { fecha: '05/01/26', peso: 9.4, tipo: 'Lechón', hora: '09:30' },
-    { fecha: '02/01/26', peso: 90.6, tipo: 'Cerda adulta', hora: '14:45' },
-    { fecha: '28/12/25', peso: 85.9, tipo: 'Cerda adulta', hora: '11:00' },
-    { fecha: '23/12/25', peso: 8.6, tipo: 'Lechón', hora: '16:30' },
-    { fecha: '18/12/25', peso: 93.4, tipo: 'Cerda adulta', hora: '10:45' },
-    { fecha: '12/12/25', peso: 87.2, tipo: 'Cerda adulta', hora: '15:15' },
-    { fecha: '05/12/25', peso: 7.8, tipo: 'Lechón', hora: '09:00' },
-    { fecha: '28/11/25', peso: 89.1, tipo: 'Cerda adulta', hora: '14:20' },
-    { fecha: '20/11/25', peso: 6.5, tipo: 'Lechón', hora: '11:45' },
-    { fecha: '15/11/25', peso: 84.7, tipo: 'Cerda adulta', hora: '16:10' },
-    { fecha: '08/11/25', peso: 91.3, tipo: 'Cerda adulta', hora: '10:30' },
-  ])
-
-  // Bombas - 2 conectadas activas, 1 conectada apagada, 1 desconectada
-  const [bombas, setBombas] = useState([
-    { _id: '1', nombre: 'Bomba Principal Riego', estado: true, conectada: true },
-    { _id: '2', nombre: 'Bomba Reserva', estado: false, conectada: true },
-    { _id: '3', nombre: 'Bomba Aspersores', estado: true, conectada: true },
-    { _id: '4', nombre: 'Bomba Pozo Auxiliar', estado: false, conectada: false }
-  ])
-  
-  // Alertas recientes - REALISTAS
-  const [alertas] = useState([
-    { 
-      _id: '1', 
-      tipo: 'temperatura_alta', 
-      mensaje: 'Temperatura porqueriza 38.2°C - Sistema de riego activado',
-      fecha: new Date('2026-01-21T13:45:00'),
-      critica: false
-    },
-    { 
-      _id: '2', 
-      tipo: 'tanque_bajo', 
-      mensaje: 'Tanque reserva al 58% - Programar recarga',
-      fecha: new Date('2026-01-21T10:30:00'),
-      critica: false
-    },
-    { 
-      _id: '3', 
-      tipo: 'sensor_desconectado', 
-      mensaje: 'Bomba Pozo Auxiliar sin conexión',
-      fecha: new Date('2026-01-20T16:15:00'),
-      critica: false
-    },
-    { 
-      _id: '4', 
-      tipo: 'temperatura_alta', 
-      mensaje: 'Temperatura porqueriza 41.5°C - ALERTA CRÍTICA - Riego automático activado',
-      fecha: new Date('2026-01-19T14:20:00'),
-      critica: true
-    },
-    { 
-      _id: '5', 
-      tipo: 'pesaje', 
-      mensaje: 'Cerda #12 pesada: 94.2 kg - Peso óptimo para venta',
-      fecha: new Date('2026-01-20T16:45:00'),
-      critica: false
-    }
-  ])
-
-  // Consumo de agua - REALISTAS para granja porcina pequeña (~50 cerdos)
-  // Cerdo adulto: 8-12 L/día, Lechón: 2-4 L/día
-  // Más agua para riego/limpieza: ~400 L/día adicionales
-  const [consumoDiario] = useState(847)
-  const [consumoMensual] = useState(25410)
-
-  // Historial consumo semanal (últimos 7 días)
-  const [consumoSemanal] = useState([
-    { dia: 'Lun', litros: 823 },
-    { dia: 'Mar', litros: 891 },
-    { dia: 'Mié', litros: 756 },
-    { dia: 'Jue', litros: 912 },
-    { dia: 'Vie', litros: 847 },
-    { dia: 'Sáb', litros: 634 },
-    { dia: 'Dom', litros: 578 }
-  ])
-
-  // Datos para SuperAdmin
-  const [farms] = useState([
-    { 
-      _id: '1', 
-      nombre: 'COO-ALIANZAS Granja Porcina', 
-      ubicacion: 'Lorica, Córdoba', 
-      propietario: 'Cooperativa Alianzas', 
-      telefono: '314 582 7391',
-      email: 'contacto@cooalianzas.com',
-      activo: true,
-      fecha_registro: new Date('2025-10-15')
-    },
-  ])
-  
-  const [users] = useState([
-    { _id: '1', usuario: 'jefaleidis', correo: 'leidis@cooalianzas.com', rol: 'superadmin', activo: true, ultimo_acceso: new Date('2026-01-21T08:00:00') },
-    { _id: '2', usuario: 'ingenieros', correo: 'ingenieros.omp@gmail.com', rol: 'superadmin', activo: true, ultimo_acceso: new Date('2026-01-21T14:30:00') },
-    { _id: '3', usuario: 'operario1', correo: 'operario@cooalianzas.com', rol: 'cliente', activo: true, ultimo_acceso: new Date('2026-01-21T07:00:00') },
-    { _id: '4', usuario: 'veterinario', correo: 'vet@cooalianzas.com', rol: 'cliente', activo: false, ultimo_acceso: new Date('2026-01-10T09:30:00') },
-  ])
-  
-  // Sesiones - Solo 1 en línea actualmente (ingenieros)
-  const [sessions] = useState([
-    { _id: '1', usuario: 'ingenieros', fecha_entrada: new Date('2026-01-21T14:30:00'), fecha_salida: null, ip: '181.52.xxx.xxx' },
-    { _id: '2', usuario: 'operario1', fecha_entrada: new Date('2026-01-21T07:00:00'), fecha_salida: new Date('2026-01-21T12:00:00'), ip: '181.52.xxx.xxx' },
-    { _id: '3', usuario: 'jefaleidis', fecha_entrada: new Date('2026-01-21T08:00:00'), fecha_salida: new Date('2026-01-21T10:30:00'), ip: '190.25.xxx.xxx' },
-    { _id: '4', usuario: 'operario1', fecha_entrada: new Date('2026-01-20T06:30:00'), fecha_salida: new Date('2026-01-20T14:00:00'), ip: '181.52.xxx.xxx' },
-    { _id: '5', usuario: 'jefaleidis', fecha_entrada: new Date('2026-01-20T09:00:00'), fecha_salida: new Date('2026-01-20T17:00:00'), ip: '190.25.xxx.xxx' },
-    { _id: '6', usuario: 'ingenieros', fecha_entrada: new Date('2026-01-19T10:00:00'), fecha_salida: new Date('2026-01-19T18:30:00'), ip: '181.52.xxx.xxx' },
-  ])
-
-  // ==================== FUNCIONES ====================
-
-  const handleLogin = (e) => {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    
-    setTimeout(() => {
-      const validUsers = {
-        'jefaleidis': { password: 'cooalianza2026', rol: 'superadmin', nombre: 'Jefa Leidis' },
-        'ingenieros': { password: 'omp2026', rol: 'superadmin', nombre: 'INGENIEROS OMP' },
-        'operario1': { password: 'granja2026', rol: 'cliente', nombre: 'Operario Granja' },
-        'demo': { password: 'demo', rol: 'cliente', nombre: 'Usuario Demo' }
-      }
-      
-      if (validUsers[usuario] && validUsers[usuario].password === password) {
-        setUser({ usuario, rol: validUsers[usuario].rol, nombre: validUsers[usuario].nombre })
-        setPage(validUsers[usuario].rol === 'superadmin' ? 'superadmin' : 'cliente')
-        setError('')
-      } else {
-        setError('Usuario o contraseña incorrectos')
-      }
-      setLoading(false)
-    }, 800)
-  }
-
-  const handleLogout = () => {
-    setUser(null)
-    setPage('login')
-    setUsuario('')
-    setPassword('')
-  }
-
-  const toggleBomba = (id) => {
-    setBombas(bombas.map(b => 
-      b._id === id && b.conectada ? { ...b, estado: !b.estado } : b
-    ))
-  }
-
   const formatFecha = (fecha) => {
+    if (!fecha) return '-'
     return new Date(fecha).toLocaleString('es-CO', {
-      day: '2-digit',
-      month: '2-digit',
-      year: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
+      day: '2-digit', month: '2-digit', year: '2-digit',
+      hour: '2-digit', minute: '2-digit'
     })
   }
 
   const getTempStatus = (temp) => {
+    if (!temp) return { clase: 'desconectado', texto: 'Sin datos', icono: WifiOff }
     if (temp >= 40) return { clase: 'critico', texto: 'CRÍTICO', icono: AlertTriangle }
     if (temp >= 37) return { clase: 'alerta', texto: 'Alerta', icono: AlertCircle }
     return { clase: 'normal', texto: 'Normal', icono: CheckCircle }
@@ -309,13 +407,15 @@ function App() {
             </div>
           </div>
           <div className="header-right">
+            <button className="btn-refresh" onClick={fetchAllData} title="Actualizar datos">
+              <RefreshCw size={18} />
+            </button>
             <div className="user-info">
               <UserCheck size={18} />
               <span>{user?.nombre}</span>
             </div>
             <button className="btn-logout" onClick={handleLogout}>
-              <LogOut size={18} />
-              Salir
+              <LogOut size={18} /> Salir
             </button>
           </div>
         </header>
@@ -323,6 +423,10 @@ function App() {
         <main className="dashboard">
           {/* Indicadores de conexión */}
           <div className="conexiones-bar">
+            <div className={`conexion-item ${conexiones.backend ? 'conectado' : 'desconectado'}`}>
+              {conexiones.backend ? <Wifi size={16} /> : <WifiOff size={16} />}
+              <span>Backend</span>
+            </div>
             <div className={`conexion-item ${conexiones.api_clima ? 'conectado' : 'desconectado'}`}>
               {conexiones.api_clima ? <Wifi size={16} /> : <WifiOff size={16} />}
               <span>API Clima</span>
@@ -338,12 +442,12 @@ function App() {
           </div>
 
           {/* Alerta si temperatura alta */}
-          {sensores.temp_porqueriza >= 37 && (
+          {sensores.temp_porqueriza && sensores.temp_porqueriza >= 37 && (
             <div className={`alerta-banner ${sensores.temp_porqueriza >= 40 ? 'critico' : 'alerta'}`}>
               <AlertTriangle size={24} />
               <div>
                 <strong>{sensores.temp_porqueriza >= 40 ? 'ALERTA CRÍTICA' : 'ATENCIÓN'}: Temperatura Elevada</strong>
-                <p>Porqueriza a {sensores.temp_porqueriza}°C (Sensación: {sensacionTermica}°C) - Sistema de riego {sensores.temp_porqueriza >= 38 ? 'ACTIVADO' : 'en espera'}</p>
+                <p>Porqueriza a {sensores.temp_porqueriza}°C {sensacionTermica && `(Sensación: ${sensacionTermica}°C)`}</p>
               </div>
             </div>
           )}
@@ -363,13 +467,15 @@ function App() {
                 <div className="climate-header">
                   <CloudRain size={20} />
                   <span>Ambiente Exterior</span>
-                  <span className="status-badge conectado"><Wifi size={14} /> En línea</span>
+                  <span className={`status-badge ${conexiones.api_clima ? 'conectado' : 'desconectado'}`}>
+                    {conexiones.api_clima ? <><Wifi size={14} /> En línea</> : <><WifiOff size={14} /> Sin datos</>}
+                  </span>
                 </div>
                 <div className="climate-data">
                   <div className="climate-item">
                     <Thermometer size={28} className="icon-temp" />
                     <div className="climate-value">
-                      <span className="value">{sensores.temp_ambiente}</span>
+                      <span className="value">{sensores.temp_ambiente ?? '--'}</span>
                       <span className="unit">°C</span>
                     </div>
                     <span className="label">Temperatura</span>
@@ -377,7 +483,7 @@ function App() {
                   <div className="climate-item">
                     <Droplets size={28} className="icon-humidity" />
                     <div className="climate-value">
-                      <span className="value">{sensores.humedad_ambiente}</span>
+                      <span className="value">{sensores.humedad_ambiente ?? '--'}</span>
                       <span className="unit">%</span>
                     </div>
                     <span className="label">Humedad</span>
@@ -399,7 +505,7 @@ function App() {
                   <div className="climate-item">
                     <Thermometer size={28} className="icon-temp" />
                     <div className="climate-value">
-                      <span className={`value ${tempStatus.clase}`}>{sensores.temp_porqueriza}</span>
+                      <span className={`value ${tempStatus.clase}`}>{sensores.temp_porqueriza ?? '--'}</span>
                       <span className="unit">°C</span>
                     </div>
                     <span className="label">Temperatura</span>
@@ -407,7 +513,7 @@ function App() {
                   <div className="climate-item">
                     <Droplets size={28} className="icon-humidity" />
                     <div className="climate-value">
-                      <span className="value">{sensores.humedad_porqueriza}</span>
+                      <span className="value">{sensores.humedad_porqueriza ?? '--'}</span>
                       <span className="unit">%</span>
                     </div>
                     <span className="label">Humedad</span>
@@ -415,8 +521,8 @@ function App() {
                   <div className="climate-item">
                     <Wind size={28} className="icon-wind" />
                     <div className="climate-value">
-                      <span className={`value ${sensacionTermica >= 45 ? 'critico' : sensacionTermica >= 40 ? 'alerta' : ''}`}>
-                        {sensacionTermica}
+                      <span className={`value ${sensacionTermica && sensacionTermica >= 45 ? 'critico' : sensacionTermica >= 40 ? 'alerta' : ''}`}>
+                        {sensacionTermica ?? '--'}
                       </span>
                       <span className="unit">°C</span>
                     </div>
@@ -434,38 +540,36 @@ function App() {
             </div>
             
             <div className="water-grid">
-              {/* Tanques */}
               <div className="card tanques-card">
                 <h3><Waves size={18} /> Nivel de Tanques</h3>
                 <div className="tanques-container">
                   <div className="tanque">
                     <div className="tanque-visual">
                       <div 
-                        className={`tanque-nivel ${sensores.nivel_tanque1 < 30 ? 'bajo' : sensores.nivel_tanque1 < 50 ? 'medio' : 'alto'}`}
-                        style={{ height: `${sensores.nivel_tanque1}%` }}
+                        className={`tanque-nivel ${(sensores.nivel_tanque1 || 0) < 30 ? 'bajo' : (sensores.nivel_tanque1 || 0) < 50 ? 'medio' : 'alto'}`}
+                        style={{ height: `${sensores.nivel_tanque1 || 0}%` }}
                       ></div>
                     </div>
                     <div className="tanque-info">
                       <span className="tanque-nombre">Principal</span>
-                      <span className="tanque-porcentaje">{sensores.nivel_tanque1}%</span>
+                      <span className="tanque-porcentaje">{sensores.nivel_tanque1 ?? '--'}%</span>
                     </div>
                   </div>
                   <div className="tanque">
                     <div className="tanque-visual">
                       <div 
-                        className={`tanque-nivel ${sensores.nivel_tanque2 < 30 ? 'bajo' : sensores.nivel_tanque2 < 50 ? 'medio' : 'alto'}`}
-                        style={{ height: `${sensores.nivel_tanque2}%` }}
+                        className={`tanque-nivel ${(sensores.nivel_tanque2 || 0) < 30 ? 'bajo' : (sensores.nivel_tanque2 || 0) < 50 ? 'medio' : 'alto'}`}
+                        style={{ height: `${sensores.nivel_tanque2 || 0}%` }}
                       ></div>
                     </div>
                     <div className="tanque-info">
                       <span className="tanque-nombre">Reserva</span>
-                      <span className="tanque-porcentaje">{sensores.nivel_tanque2}%</span>
+                      <span className="tanque-porcentaje">{sensores.nivel_tanque2 ?? '--'}%</span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Consumo */}
               <div className="card consumo-card">
                 <h3><TrendingUp size={18} /> Consumo de Agua</h3>
                 <div className="consumo-stats">
@@ -479,22 +583,7 @@ function App() {
                   </div>
                   <div className="consumo-item">
                     <span className="consumo-label">Flujo actual</span>
-                    <span className="consumo-value">{sensores.flujo} L/min</span>
-                  </div>
-                </div>
-                <div className="consumo-grafica">
-                  <span className="grafica-titulo">Últimos 7 días</span>
-                  <div className="barras-container">
-                    {consumoSemanal.map((d, i) => (
-                      <div key={i} className="barra-item">
-                        <div 
-                          className="barra" 
-                          style={{ height: `${(d.litros / 1000) * 100}%` }}
-                          title={`${d.litros} L`}
-                        ></div>
-                        <span className="barra-label">{d.dia}</span>
-                      </div>
-                    ))}
+                    <span className="consumo-value">{sensores.flujo ?? '--'} L/min</span>
                   </div>
                 </div>
               </div>
@@ -511,13 +600,17 @@ function App() {
               <div className="card peso-actual-card">
                 <h3><Scale size={18} /> Último Pesaje</h3>
                 <div className="peso-display">
-                  <span className="peso-valor">{ultimoPeso.peso}</span>
+                  <span className="peso-valor">{ultimoPeso?.peso ?? '--'}</span>
                   <span className="peso-unidad">kg</span>
                 </div>
-                <div className="peso-info">
-                  <span className="peso-tipo">{ultimoPeso.tipo === 'cerda_adulta' ? '🐷 Cerda adulta' : '🐽 Lechón'}</span>
-                  <span className="peso-fecha">{formatFecha(ultimoPeso.fecha)}</span>
-                </div>
+                {ultimoPeso && (
+                  <div className="peso-info">
+                    <span className="peso-tipo">
+                      {ultimoPeso.peso >= 50 ? '🐷 Cerda adulta' : '🐽 Lechón'}
+                    </span>
+                    <span className="peso-fecha">{formatFecha(ultimoPeso.fecha || ultimoPeso.createdAt)}</span>
+                  </div>
+                )}
               </div>
 
               <div className="card historial-peso-card">
@@ -527,24 +620,26 @@ function App() {
                     <thead>
                       <tr>
                         <th>Fecha</th>
-                        <th>Hora</th>
                         <th>Peso</th>
                         <th>Tipo</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {historialPeso.slice(0, 10).map((p, i) => (
-                        <tr key={i}>
-                          <td>{p.fecha}</td>
-                          <td>{p.hora}</td>
-                          <td><strong>{p.peso} kg</strong></td>
-                          <td>
-                            <span className={`tipo-badge ${p.tipo === 'Cerda adulta' ? 'adulta' : 'lechon'}`}>
-                              {p.tipo}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
+                      {historialPeso.length === 0 ? (
+                        <tr><td colSpan="3" style={{textAlign:'center'}}>Sin datos de pesaje</td></tr>
+                      ) : (
+                        historialPeso.slice(0, 10).map((p, i) => (
+                          <tr key={p._id || i}>
+                            <td>{formatFecha(p.fecha || p.createdAt)}</td>
+                            <td><strong>{p.peso} kg</strong></td>
+                            <td>
+                              <span className={`tipo-badge ${p.peso >= 50 ? 'adulta' : 'lechon'}`}>
+                                {p.peso >= 50 ? 'Cerda adulta' : 'Lechón'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -559,34 +654,38 @@ function App() {
             </div>
             
             <div className="bombas-grid">
-              {bombas.map((bomba) => (
-                <div key={bomba._id} className={`bomba-card ${!bomba.conectada ? 'desconectada' : bomba.estado ? 'encendida' : 'apagada'}`}>
-                  <div className="bomba-header">
-                    {bomba.conectada ? (
-                      bomba.estado ? <Power size={24} className="icon-on" /> : <PowerOff size={24} className="icon-off" />
-                    ) : (
-                      <WifiOff size={24} className="icon-disconnected" />
-                    )}
-                    <span className="bomba-nombre">{bomba.nombre}</span>
+              {bombas.length === 0 ? (
+                <p>No hay bombas registradas</p>
+              ) : (
+                bombas.map((bomba) => (
+                  <div key={bomba._id} className={`bomba-card ${!bomba.conectada ? 'desconectada' : bomba.estado ? 'encendida' : 'apagada'}`}>
+                    <div className="bomba-header">
+                      {bomba.conectada !== false ? (
+                        bomba.estado ? <Power size={24} className="icon-on" /> : <PowerOff size={24} className="icon-off" />
+                      ) : (
+                        <WifiOff size={24} className="icon-disconnected" />
+                      )}
+                      <span className="bomba-nombre">{bomba.nombre}</span>
+                    </div>
+                    <div className="bomba-status">
+                      {bomba.conectada === false ? (
+                        <span className="status desconectada">Sin conexión</span>
+                      ) : bomba.estado ? (
+                        <span className="status encendida">ENCENDIDA</span>
+                      ) : (
+                        <span className="status apagada">Apagada</span>
+                      )}
+                    </div>
+                    <button 
+                      className={`btn-bomba ${bomba.estado ? 'apagar' : 'encender'}`}
+                      onClick={() => toggleBomba(bomba._id)}
+                      disabled={bomba.conectada === false}
+                    >
+                      {bomba.conectada === false ? 'No disponible' : (bomba.estado ? 'Apagar' : 'Encender')}
+                    </button>
                   </div>
-                  <div className="bomba-status">
-                    {!bomba.conectada ? (
-                      <span className="status desconectada">Sin conexión</span>
-                    ) : bomba.estado ? (
-                      <span className="status encendida">ENCENDIDA</span>
-                    ) : (
-                      <span className="status apagada">Apagada</span>
-                    )}
-                  </div>
-                  <button 
-                    className={`btn-bomba ${bomba.estado ? 'apagar' : 'encender'}`}
-                    onClick={() => toggleBomba(bomba._id)}
-                    disabled={!bomba.conectada}
-                  >
-                    {bomba.conectada ? (bomba.estado ? 'Apagar' : 'Encender') : 'No disponible'}
-                  </button>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </section>
 
@@ -597,17 +696,21 @@ function App() {
             </div>
             
             <div className="alertas-lista">
-              {alertas.map((alerta) => (
-                <div key={alerta._id} className={`alerta-item ${alerta.critica ? 'critica' : ''}`}>
-                  <div className="alerta-icon">
-                    {alerta.critica ? <AlertTriangle size={20} /> : <AlertCircle size={20} />}
+              {alertas.length === 0 ? (
+                <p className="no-data">No hay alertas recientes</p>
+              ) : (
+                alertas.slice(0, 5).map((alerta) => (
+                  <div key={alerta._id} className={`alerta-item ${alerta.critica || alerta.tipo === 'critica' ? 'critica' : ''}`}>
+                    <div className="alerta-icon">
+                      {alerta.critica || alerta.tipo === 'critica' ? <AlertTriangle size={20} /> : <AlertCircle size={20} />}
+                    </div>
+                    <div className="alerta-content">
+                      <p className="alerta-mensaje">{alerta.mensaje}</p>
+                      <span className="alerta-fecha">{formatFecha(alerta.fecha || alerta.createdAt)}</span>
+                    </div>
                   </div>
-                  <div className="alerta-content">
-                    <p className="alerta-mensaje">{alerta.mensaje}</p>
-                    <span className="alerta-fecha">{formatFecha(alerta.fecha)}</span>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </section>
         </main>
@@ -617,7 +720,7 @@ function App() {
 
   // ==================== RENDER DASHBOARD SUPERADMIN ====================
   if (page === 'superadmin') {
-    const sesionesActivas = sessions.filter(s => !s.fecha_salida).length
+    const sesionesActivas = sessions.filter(s => !s.fecha_salida && s.activa !== false).length
 
     return (
       <div className="app">
@@ -632,6 +735,9 @@ function App() {
           <div className="header-right">
             <button className="btn-nav" onClick={() => setPage('cliente')}>
               <Activity size={18} /> Ver Dashboard
+            </button>
+            <button className="btn-refresh" onClick={fetchAllData} title="Actualizar datos">
+              <RefreshCw size={18} />
             </button>
             <div className="user-info admin">
               <UserCheck size={18} />
@@ -671,7 +777,7 @@ function App() {
             <div className="stat-card alerta">
               <AlertTriangle size={24} />
               <div>
-                <span className="stat-value">{alertas.filter(a => a.critica).length}</span>
+                <span className="stat-value">{alertas.filter(a => a.critica || a.tipo === 'critica').length}</span>
                 <span className="stat-label">Alertas</span>
               </div>
             </div>
@@ -681,7 +787,6 @@ function App() {
           <section className="section">
             <div className="section-header">
               <h2><Home size={20} /> Granjas Registradas</h2>
-              <button className="btn-add"><Plus size={16} /> Nueva Granja</button>
             </div>
             
             <div className="tabla-container">
@@ -691,29 +796,26 @@ function App() {
                     <th>Nombre</th>
                     <th>Ubicación</th>
                     <th>Propietario</th>
-                    <th>Teléfono</th>
                     <th>Estado</th>
-                    <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {farms.map((farm) => (
-                    <tr key={farm._id}>
-                      <td><strong>{farm.nombre}</strong></td>
-                      <td>{farm.ubicacion}</td>
-                      <td>{farm.propietario}</td>
-                      <td>{farm.telefono}</td>
-                      <td>
-                        <span className={`estado-badge ${farm.activo ? 'activo' : 'inactivo'}`}>
-                          {farm.activo ? 'Activa' : 'Inactiva'}
-                        </span>
-                      </td>
-                      <td>
-                        <button className="btn-icon" title="Editar"><RefreshCw size={16} /></button>
-                        <button className="btn-icon danger" title="Eliminar"><Trash2 size={16} /></button>
-                      </td>
-                    </tr>
-                  ))}
+                  {farms.length === 0 ? (
+                    <tr><td colSpan="4" style={{textAlign:'center'}}>No hay granjas registradas</td></tr>
+                  ) : (
+                    farms.map((farm) => (
+                      <tr key={farm._id}>
+                        <td><strong>{farm.nombre}</strong></td>
+                        <td>{farm.ubicacion}</td>
+                        <td>{farm.propietario}</td>
+                        <td>
+                          <span className={`estado-badge ${farm.activo !== false ? 'activo' : 'inactivo'}`}>
+                            {farm.activo !== false ? 'Activa' : 'Inactiva'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -723,7 +825,6 @@ function App() {
           <section className="section">
             <div className="section-header">
               <h2><Users size={20} /> Gestión de Usuarios</h2>
-              <button className="btn-add"><Plus size={16} /> Nuevo Usuario</button>
             </div>
             
             <div className="tabla-container">
@@ -733,35 +834,30 @@ function App() {
                     <th>Usuario</th>
                     <th>Correo</th>
                     <th>Rol</th>
-                    <th>Último acceso</th>
                     <th>Estado</th>
-                    <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((u) => (
-                    <tr key={u._id}>
-                      <td><strong>{u.usuario}</strong></td>
-                      <td>{u.correo}</td>
-                      <td>
-                        <span className={`rol-badge ${u.rol}`}>
-                          {u.rol === 'superadmin' ? 'Admin' : 'Cliente'}
-                        </span>
-                      </td>
-                      <td>{formatFecha(u.ultimo_acceso)}</td>
-                      <td>
-                        <span className={`estado-badge ${u.activo ? 'activo' : 'inactivo'}`}>
-                          {u.activo ? 'Activo' : 'Inactivo'}
-                        </span>
-                      </td>
-                      <td>
-                        <button className="btn-icon" title={u.activo ? 'Desactivar' : 'Activar'}>
-                          {u.activo ? <UserX size={16} /> : <UserCheck size={16} />}
-                        </button>
-                        <button className="btn-icon danger" title="Eliminar"><Trash2 size={16} /></button>
-                      </td>
-                    </tr>
-                  ))}
+                  {users.length === 0 ? (
+                    <tr><td colSpan="4" style={{textAlign:'center'}}>No hay usuarios</td></tr>
+                  ) : (
+                    users.map((u) => (
+                      <tr key={u._id}>
+                        <td><strong>{u.usuario}</strong></td>
+                        <td>{u.correo}</td>
+                        <td>
+                          <span className={`rol-badge ${u.rol}`}>
+                            {u.rol === 'superadmin' ? 'Admin' : 'Cliente'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`estado-badge ${u.activo !== false ? 'activo' : 'inactivo'}`}>
+                            {u.activo !== false ? 'Activo' : 'Inactivo'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -780,57 +876,51 @@ function App() {
                     <th>Usuario</th>
                     <th>Entrada</th>
                     <th>Salida</th>
-                    <th>Duración</th>
                     <th>Estado</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {sessions.map((s) => {
-                    const duracion = s.fecha_salida 
-                      ? Math.round((new Date(s.fecha_salida) - new Date(s.fecha_entrada)) / 60000)
-                      : Math.round((new Date() - new Date(s.fecha_entrada)) / 60000)
-                    const horas = Math.floor(duracion / 60)
-                    const mins = duracion % 60
-                    
-                    return (
+                  {sessions.length === 0 ? (
+                    <tr><td colSpan="4" style={{textAlign:'center'}}>No hay sesiones</td></tr>
+                  ) : (
+                    sessions.slice(0, 10).map((s) => (
                       <tr key={s._id}>
                         <td><strong>{s.usuario}</strong></td>
                         <td>{formatFecha(s.fecha_entrada)}</td>
                         <td>{s.fecha_salida ? formatFecha(s.fecha_salida) : '-'}</td>
-                        <td>{horas > 0 ? `${horas}h ${mins}m` : `${mins}m`}</td>
                         <td>
-                          <span className={`estado-badge ${s.fecha_salida ? 'cerrada' : 'activo'}`}>
-                            {s.fecha_salida ? 'Cerrada' : 'En línea'}
+                          <span className={`estado-badge ${s.fecha_salida || s.activa === false ? 'cerrada' : 'activo'}`}>
+                            {s.fecha_salida || s.activa === false ? 'Cerrada' : 'En línea'}
                           </span>
                         </td>
                       </tr>
-                    )
-                  })}
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           </section>
 
-          {/* Exportar */}
+          {/* Reportes */}
           <section className="section">
             <div className="section-header">
               <h2><FileSpreadsheet size={20} /> Reportes</h2>
             </div>
             
             <div className="reportes-grid">
-              <button className="btn-reporte">
+              <button className="btn-reporte" onClick={() => descargarReporte('sensores')}>
                 <Download size={20} />
                 <span>Exportar Datos Sensores</span>
               </button>
-              <button className="btn-reporte">
+              <button className="btn-reporte" onClick={() => descargarReporte('pesajes')}>
                 <Download size={20} />
                 <span>Exportar Pesajes</span>
               </button>
-              <button className="btn-reporte">
+              <button className="btn-reporte" onClick={() => descargarReporte('agua')}>
                 <Download size={20} />
                 <span>Exportar Consumo Agua</span>
               </button>
-              <button className="btn-reporte">
+              <button className="btn-reporte" onClick={() => descargarReporte('completo')}>
                 <Download size={20} />
                 <span>Reporte Completo</span>
               </button>
