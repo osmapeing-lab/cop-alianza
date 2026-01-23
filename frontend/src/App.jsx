@@ -1,20 +1,23 @@
 /*
  * ═══════════════════════════════════════════════════════════════════════
- * COO ALIANZAS - FRONTEND v3.0 CON PANEL CONTABLE
+ * COO ALIANZAS - FRONTEND v4.0 PROFESIONAL
  * ═══════════════════════════════════════════════════════════════════════
  * 
- * Nuevas funcionalidades:
- * - Panel lateral con métricas contables
- * - Gráficas comparativas (lo que debería ser vs lo que es)
- * - Conexión real con ESP32 vía backend
- * - Indicadores financieros del proyecto
+ * Color: AMARILLO PROFESIONAL
+ * Funcionalidades:
+ * - Login con autenticación JWT
+ * - Dashboard SuperAdmin
+ * - Dashboard Cliente
+ * - Panel Contable lateral
+ * - Conexión ESP32 temperatura
+ * - API clima Lorica
  * 
  * ═══════════════════════════════════════════════════════════════════════
  */
 
 import { useState, useEffect } from 'react'
-import { io } from 'socket.io-client'
 import axios from 'axios'
+import { io } from 'socket.io-client'
 import './App.css'
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -22,33 +25,26 @@ import './App.css'
 // ═══════════════════════════════════════════════════════════════════════
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://cop-alianza-backend.onrender.com'
-const socket = io(API_URL)
+let socket = null
 
 // ═══════════════════════════════════════════════════════════════════════
-// DATOS CONTABLES DEL PROYECTO (Basados en presentación)
+// DATOS CONTABLES
 // ═══════════════════════════════════════════════════════════════════════
 
 const DATOS_CONTABLES = {
   inversion_hardware: 497367,
   costo_operativo_mensual: 0,
-  ahorro_mensual_estimado: 150000,    // Por reducción mortalidad
+  ahorro_mensual_estimado: 150000,
   roi_esperado_meses: 4,
   presupuesto_total: 500000,
   ejecutado: 497367,
-  
-  // Comparativo: Lo que debería ser vs Lo que es
   comparativo: {
-    temperatura_ideal: { min: 22, max: 28, unidad: '°C' },
-    humedad_ideal: { min: 60, max: 70, unidad: '%' },
-    consumo_agua_diario_ideal: 150,  // Litros por cerdo
-    peso_promedio_esperado: 100,     // kg a los 6 meses
+    temperatura_ideal: { min: 22, max: 28 },
+    humedad_ideal: { min: 60, max: 70 },
   },
-  
-  // Métricas de eficiencia
   eficiencia: {
-    mortalidad_antes: 8,      // % antes del sistema
-    mortalidad_despues: 2,    // % esperado con sistema
-    kg_alimento_por_kg: 3.2,  // Conversión alimenticia
+    mortalidad_antes: 8,
+    mortalidad_despues: 2,
   }
 }
 
@@ -60,208 +56,202 @@ function App() {
   // Estados de autenticación
   const [usuario, setUsuario] = useState(null)
   const [token, setToken] = useState(localStorage.getItem('token'))
-  const [loginData, setLoginData] = useState({ usuario: '', password: '' })
-  const [loginError, setLoginError] = useState('')
+  const [rol, setRol] = useState(localStorage.getItem('rol'))
   
-  // Estados de conexión
-  const [conexiones, setConexiones] = useState({
-    backend: false,
-    api_clima: false,
-    sensor_porqueriza: false,
-    bascula: false
-  })
+  // Estados de login
+  const [loginUsuario, setLoginUsuario] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+  const [loginError, setLoginError] = useState('')
+  const [cargando, setCargando] = useState(false)
   
   // Estados de datos
   const [datosAmbiente, setDatosAmbiente] = useState({
     temp_exterior: null,
     humedad_exterior: null,
     temp_porqueriza: null,
-    humedad_porqueriza: null,
-    sensacion_termica: null
+    humedad_porqueriza: null
   })
   
   const [tanques, setTanques] = useState({
-    tanque1: null,
-    tanque2: null
+    tanque1: 75,
+    tanque2: 60
   })
   
   const [consumoAgua, setConsumoAgua] = useState({
     diario: 0,
-    mensual: 0,
-    flujo: 0
+    mensual: 0
   })
   
   const [bombas, setBombas] = useState([])
   const [alertas, setAlertas] = useState([])
-  const [pesajes, setPesajes] = useState({ ultimo: null, historial: [] })
   
-  // Estados para admin
+  // Estados admin
   const [farms, setFarms] = useState([])
   const [users, setUsers] = useState([])
   const [sessions, setSessions] = useState([])
   
-  // Estado para panel contable
-  const [mostrarPanelContable, setMostrarPanelContable] = useState(true)
+  // Estados de conexión
+  const [conexiones, setConexiones] = useState({
+    backend: false,
+    clima: false,
+    sensor: false
+  })
+  
+  // Panel contable
+  const [mostrarPanel, setMostrarPanel] = useState(true)
+  
+  // Modal crear usuario/granja
+  const [modalUsuario, setModalUsuario] = useState(false)
+  const [modalGranja, setModalGranja] = useState(false)
+  const [nuevoUsuario, setNuevoUsuario] = useState({ usuario: '', correo: '', password: '', rol: 'cliente' })
+  const [nuevaGranja, setNuevaGranja] = useState({ nombre: '', ubicacion: '', contacto: '' })
 
   // ═══════════════════════════════════════════════════════════════════════
   // EFECTOS
   // ═══════════════════════════════════════════════════════════════════════
 
-  // Verificar token al cargar
   useEffect(() => {
     if (token) {
-      verificarToken()
+      verificarSesion()
     }
   }, [])
 
-  // Cargar datos cuando hay usuario
   useEffect(() => {
     if (usuario) {
-      cargarDatos()
+      // Conectar WebSocket
+      socket = io(API_URL)
+      
+      socket.on('connect', () => {
+        console.log('WebSocket conectado')
+        setConexiones(prev => ({ ...prev, backend: true }))
+      })
+      
+      socket.on('disconnect', () => {
+        setConexiones(prev => ({ ...prev, backend: false }))
+      })
+      
+      socket.on('lectura_actualizada', (data) => {
+        if (data.temperatura !== undefined) {
+          setDatosAmbiente(prev => ({
+            ...prev,
+            temp_porqueriza: data.temperatura,
+            humedad_porqueriza: data.humedad
+          }))
+          setConexiones(prev => ({ ...prev, sensor: true }))
+        }
+      })
+      
+      socket.on('bomba_actualizada', () => {
+        cargarBombas()
+      })
+      
+      // Cargar datos iniciales
+      cargarTodosDatos()
       cargarClimaLorica()
       
+      // Intervalo de actualización
       const interval = setInterval(() => {
-        cargarDatos()
+        cargarTodosDatos()
         cargarClimaLorica()
-      }, 30000) // Actualizar cada 30 segundos
+      }, 30000)
       
-      return () => clearInterval(interval)
+      return () => {
+        clearInterval(interval)
+        if (socket) socket.disconnect()
+      }
     }
   }, [usuario])
-
-  // WebSocket listeners
-  useEffect(() => {
-    socket.on('connect', () => {
-      console.log('WebSocket conectado')
-      setConexiones(prev => ({ ...prev, backend: true }))
-    })
-    
-    socket.on('disconnect', () => {
-      console.log('WebSocket desconectado')
-      setConexiones(prev => ({ ...prev, backend: false }))
-    })
-    
-    socket.on('lectura_actualizada', (data) => {
-      console.log('Lectura recibida:', data)
-      if (data.temp_porqueriza !== undefined) {
-        setDatosAmbiente(prev => ({
-          ...prev,
-          temp_porqueriza: data.temp_porqueriza,
-          humedad_porqueriza: data.humedad_porqueriza
-        }))
-        setConexiones(prev => ({ ...prev, sensor_porqueriza: true }))
-      }
-    })
-    
-    socket.on('bomba_actualizada', (data) => {
-      cargarBombas()
-    })
-    
-    socket.on('nuevo_peso', (data) => {
-      setPesajes(prev => ({
-        ultimo: data,
-        historial: [data, ...prev.historial].slice(0, 10)
-      }))
-      setConexiones(prev => ({ ...prev, bascula: true }))
-    })
-    
-    socket.on('nueva_alerta', (data) => {
-      setAlertas(prev => [data, ...prev].slice(0, 5))
-    })
-    
-    return () => {
-      socket.off('connect')
-      socket.off('disconnect')
-      socket.off('lectura_actualizada')
-      socket.off('bomba_actualizada')
-      socket.off('nuevo_peso')
-      socket.off('nueva_alerta')
-    }
-  }, [])
 
   // ═══════════════════════════════════════════════════════════════════════
   // FUNCIONES DE AUTENTICACIÓN
   // ═══════════════════════════════════════════════════════════════════════
 
-  const verificarToken = async () => {
+  const verificarSesion = async () => {
     try {
       const res = await axios.get(`${API_URL}/api/users/me`, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      setUsuario(res.data)
+      setUsuario(res.data.usuario || res.data.nombre)
+      setRol(res.data.rol)
       setConexiones(prev => ({ ...prev, backend: true }))
     } catch (error) {
-      localStorage.removeItem('token')
-      setToken(null)
+      cerrarSesion()
     }
   }
 
-  const handleLogin = async (e) => {
+  const iniciarSesion = async (e) => {
     e.preventDefault()
     setLoginError('')
+    setCargando(true)
     
     try {
-      const res = await axios.post(`${API_URL}/api/users/login`, loginData)
-      const { token: nuevoToken, usuario: user, session_id } = res.data
+      const res = await axios.post(`${API_URL}/api/users/login`, {
+        usuario: loginUsuario,
+        password: loginPassword
+      })
+      
+      const { token: nuevoToken, usuario: nombreUsuario, rol: rolUsuario, session_id } = res.data
       
       localStorage.setItem('token', nuevoToken)
+      localStorage.setItem('rol', rolUsuario)
       localStorage.setItem('session_id', session_id)
+      
       setToken(nuevoToken)
-      setUsuario(user)
+      setRol(rolUsuario)
+      setUsuario(nombreUsuario)
       setConexiones(prev => ({ ...prev, backend: true }))
       
     } catch (error) {
-      setLoginError(error.response?.data?.mensaje || 'Error de conexión')
+      const mensaje = error.response?.data?.mensaje || 'Error de conexión al servidor'
+      setLoginError(mensaje)
+    } finally {
+      setCargando(false)
     }
   }
 
-  const handleLogout = async () => {
+  const cerrarSesion = async () => {
     try {
       const sessionId = localStorage.getItem('session_id')
-      if (sessionId) {
+      if (sessionId && token) {
         await axios.put(`${API_URL}/api/sessions/${sessionId}/logout`, {}, {
           headers: { Authorization: `Bearer ${token}` }
         })
       }
-    } catch (error) {
-      console.log('Error cerrando sesión:', error)
+    } catch (e) {
+      console.log('Error cerrando sesión')
     }
     
     localStorage.removeItem('token')
+    localStorage.removeItem('rol')
     localStorage.removeItem('session_id')
     setToken(null)
+    setRol(null)
     setUsuario(null)
+    if (socket) socket.disconnect()
   }
 
   // ═══════════════════════════════════════════════════════════════════════
   // FUNCIONES DE CARGA DE DATOS
   // ═══════════════════════════════════════════════════════════════════════
 
-  const cargarDatos = async () => {
-    try {
+  const cargarTodosDatos = async () => {
+    await Promise.all([
+      cargarDatosSensor(),
+      cargarBombas(),
+      cargarAlertas()
+    ])
+    
+    if (rol === 'superadmin') {
       await Promise.all([
-        cargarDatosPorqueriza(),
-        cargarBombas(),
-        cargarAlertas(),
-        cargarPesajes(),
-        cargarConsumoAgua()
+        cargarGranjas(),
+        cargarUsuarios(),
+        cargarSesiones()
       ])
-      
-      if (usuario?.rol === 'superadmin') {
-        await Promise.all([
-          cargarFarms(),
-          cargarUsers(),
-          cargarSessions()
-        ])
-      }
-    } catch (error) {
-      console.error('Error cargando datos:', error)
     }
   }
 
   const cargarClimaLorica = async () => {
     try {
-      // Coordenadas de Lorica, Córdoba
       const lat = 9.2367
       const lon = -75.8167
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m&timezone=America/Bogota`
@@ -274,42 +264,46 @@ function App() {
         temp_exterior: temperature_2m,
         humedad_exterior: relative_humidity_2m
       }))
-      setConexiones(prev => ({ ...prev, api_clima: true }))
-      
+      setConexiones(prev => ({ ...prev, clima: true }))
     } catch (error) {
-      console.error('Error obteniendo clima:', error)
-      setConexiones(prev => ({ ...prev, api_clima: false }))
+      console.error('Error cargando clima:', error)
+      setConexiones(prev => ({ ...prev, clima: false }))
     }
   }
 
-  const cargarDatosPorqueriza = async () => {
+  const cargarDatosSensor = async () => {
     try {
+      // Intentar endpoint específico ESP
       const res = await axios.get(`${API_URL}/api/esp/porqueriza`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       
-      if (res.data.temperatura !== null) {
+      if (res.data && res.data.temperatura !== null) {
         setDatosAmbiente(prev => ({
           ...prev,
           temp_porqueriza: res.data.temperatura,
           humedad_porqueriza: res.data.humedad
         }))
-        setConexiones(prev => ({ ...prev, sensor_porqueriza: res.data.conectado }))
+        setConexiones(prev => ({ ...prev, sensor: res.data.conectado }))
       }
     } catch (error) {
-      // Intentar endpoint alternativo
+      // Intentar endpoint alternativo de readings
       try {
-        const res = await axios.get(`${API_URL}/api/sensors/readings?tipo=temp_porqueriza&limit=1`, {
+        const res = await axios.get(`${API_URL}/api/sensors/readings?limit=1`, {
           headers: { Authorization: `Bearer ${token}` }
         })
-        if (res.data.length > 0) {
-          setDatosAmbiente(prev => ({
-            ...prev,
-            temp_porqueriza: res.data[0].valor
-          }))
+        
+        if (res.data && res.data.length > 0) {
+          const ultima = res.data[0]
+          if (ultima.tipo === 'temp_porqueriza' || ultima.tipo === 'temperatura') {
+            setDatosAmbiente(prev => ({
+              ...prev,
+              temp_porqueriza: ultima.valor
+            }))
+          }
         }
       } catch (e) {
-        console.log('Sin datos de porqueriza')
+        console.log('Sin datos de sensor')
       }
     }
   }
@@ -321,7 +315,7 @@ function App() {
       })
       setBombas(res.data)
     } catch (error) {
-      console.error('Error cargando bombas:', error)
+      console.error('Error cargando bombas')
     }
   }
 
@@ -332,73 +326,40 @@ function App() {
       })
       setAlertas(res.data.slice(0, 5))
     } catch (error) {
-      console.error('Error cargando alertas:', error)
+      console.error('Error cargando alertas')
     }
   }
 
-  const cargarPesajes = async () => {
-    try {
-      const res = await axios.get(`${API_URL}/api/esp/pesos`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      if (res.data.length > 0) {
-        setPesajes({
-          ultimo: res.data[0],
-          historial: res.data.slice(0, 10)
-        })
-        setConexiones(prev => ({ ...prev, bascula: true }))
-      }
-    } catch (error) {
-      console.log('Sin datos de pesajes')
-    }
-  }
-
-  const cargarConsumoAgua = async () => {
-    try {
-      const [diario, mensual] = await Promise.all([
-        axios.get(`${API_URL}/api/water/diario`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API_URL}/api/water/mensual`, { headers: { Authorization: `Bearer ${token}` } })
-      ])
-      setConsumoAgua({
-        diario: diario.data.total || 0,
-        mensual: mensual.data.total || 0,
-        flujo: 0
-      })
-    } catch (error) {
-      console.log('Sin datos de agua')
-    }
-  }
-
-  const cargarFarms = async () => {
+  const cargarGranjas = async () => {
     try {
       const res = await axios.get(`${API_URL}/api/farms`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       setFarms(res.data)
     } catch (error) {
-      console.error('Error cargando granjas:', error)
+      console.error('Error cargando granjas')
     }
   }
 
-  const cargarUsers = async () => {
+  const cargarUsuarios = async () => {
     try {
       const res = await axios.get(`${API_URL}/api/users`, {
         headers: { Authorization: `Bearer ${token}` }
       })
       setUsers(res.data)
     } catch (error) {
-      console.error('Error cargando usuarios:', error)
+      console.error('Error cargando usuarios')
     }
   }
 
-  const cargarSessions = async () => {
+  const cargarSesiones = async () => {
     try {
       const res = await axios.get(`${API_URL}/api/sessions`, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      setSessions(res.data)
+      setSessions(res.data.slice(0, 10))
     } catch (error) {
-      console.error('Error cargando sesiones:', error)
+      console.error('Error cargando sesiones')
     }
   }
 
@@ -411,29 +372,86 @@ function App() {
       await axios.put(`${API_URL}/api/motorbombs/${id}/toggle`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      socket.emit('toggle_bomba', { id })
+      if (socket) socket.emit('toggle_bomba', { id })
       cargarBombas()
     } catch (error) {
-      console.error('Error toggling bomba:', error)
+      alert('Error al cambiar estado de bomba')
     }
   }
 
-  const descargarReporte = async (tipo) => {
+  const crearUsuario = async (e) => {
+    e.preventDefault()
     try {
-      const res = await axios.get(`${API_URL}/api/reporte/excel?tipo=${tipo}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        responseType: 'blob'
+      await axios.post(`${API_URL}/api/users/register`, nuevoUsuario, {
+        headers: { Authorization: `Bearer ${token}` }
       })
-      
-      const url = window.URL.createObjectURL(new Blob([res.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', `reporte_${tipo}_${new Date().toISOString().split('T')[0]}.xlsx`)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
+      setModalUsuario(false)
+      setNuevoUsuario({ usuario: '', correo: '', password: '', rol: 'cliente' })
+      cargarUsuarios()
+      alert('Usuario creado exitosamente')
     } catch (error) {
-      console.error('Error descargando reporte:', error)
+      alert(error.response?.data?.mensaje || 'Error al crear usuario')
+    }
+  }
+
+  const toggleUsuario = async (id) => {
+    try {
+      await axios.put(`${API_URL}/api/users/${id}/toggle`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      cargarUsuarios()
+    } catch (error) {
+      alert('Error al cambiar estado de usuario')
+    }
+  }
+
+  const eliminarUsuario = async (id) => {
+    if (!confirm('¿Estás seguro de eliminar este usuario?')) return
+    try {
+      await axios.delete(`${API_URL}/api/users/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      cargarUsuarios()
+    } catch (error) {
+      alert('Error al eliminar usuario')
+    }
+  }
+
+  const crearGranja = async (e) => {
+    e.preventDefault()
+    try {
+      await axios.post(`${API_URL}/api/farms`, nuevaGranja, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setModalGranja(false)
+      setNuevaGranja({ nombre: '', ubicacion: '', contacto: '' })
+      cargarGranjas()
+      alert('Granja creada exitosamente')
+    } catch (error) {
+      alert(error.response?.data?.mensaje || 'Error al crear granja')
+    }
+  }
+
+  const toggleGranja = async (id) => {
+    try {
+      await axios.put(`${API_URL}/api/farms/${id}/toggle`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      cargarGranjas()
+    } catch (error) {
+      alert('Error al cambiar estado de granja')
+    }
+  }
+
+  const eliminarGranja = async (id) => {
+    if (!confirm('¿Estás seguro de eliminar esta granja?')) return
+    try {
+      await axios.delete(`${API_URL}/api/farms/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      cargarGranjas()
+    } catch (error) {
+      alert('Error al eliminar granja')
     }
   }
 
@@ -441,34 +459,21 @@ function App() {
   // FUNCIONES AUXILIARES
   // ═══════════════════════════════════════════════════════════════════════
 
-  const calcularSensacionTermica = (temp, hum) => {
-    if (temp === null || hum === null) return null
-    if (temp >= 27 && hum >= 40) {
-      const sensacion = -8.784695 + 1.61139411 * temp + 2.338549 * hum 
-        - 0.14611605 * temp * hum - 0.012308094 * temp * temp 
-        - 0.016424828 * hum * hum + 0.002211732 * temp * temp * hum 
-        + 0.00072546 * temp * hum * hum - 0.000003582 * temp * temp * hum * hum
-      return Math.round(sensacion * 10) / 10
-    }
-    return temp
-  }
-
-  const getEstadoTemperatura = (temp) => {
-    if (temp === null) return { estado: 'sin-datos', texto: 'Sin datos', color: '#666' }
-    if (temp >= 40) return { estado: 'critico', texto: 'CRÍTICO', color: '#dc2626' }
-    if (temp >= 37) return { estado: 'alerta', texto: 'Alerta', color: '#f59e0b' }
-    return { estado: 'normal', texto: 'Normal', color: '#10b981' }
+  const getEstadoTemp = (temp) => {
+    if (temp === null) return { clase: '', texto: 'Sin datos', icono: '❓' }
+    if (temp >= 40) return { clase: 'critico', texto: 'CRÍTICO', icono: '🔴' }
+    if (temp >= 35) return { clase: 'alerta', texto: 'Alerta', icono: '🟠' }
+    return { clase: 'normal', texto: 'Normal', icono: '🟢' }
   }
 
   const getColorTanque = (nivel) => {
-    if (nivel === null) return '#666'
-    if (nivel < 30) return '#dc2626'
+    if (nivel < 25) return '#dc2626'
     if (nivel < 50) return '#f59e0b'
-    return '#10b981'
+    return '#d4a006'
   }
 
   // ═══════════════════════════════════════════════════════════════════════
-  // COMPONENTE: PANEL CONTABLE LATERAL
+  // COMPONENTE: PANEL CONTABLE
   // ═══════════════════════════════════════════════════════════════════════
 
   const PanelContable = () => {
@@ -476,122 +481,80 @@ function App() {
     const tempActual = datosAmbiente.temp_porqueriza
     const humActual = datosAmbiente.humedad_porqueriza
     
-    // Calcular desviaciones
     const desvTemp = tempActual !== null 
       ? tempActual - comparativo.temperatura_ideal.max 
       : null
-    
-    const desvHum = humActual !== null
-      ? humActual < comparativo.humedad_ideal.min 
-        ? humActual - comparativo.humedad_ideal.min
-        : humActual > comparativo.humedad_ideal.max
-          ? humActual - comparativo.humedad_ideal.max
-          : 0
-      : null
 
     return (
-      <div className="panel-contable">
+      <aside className={`panel-contable ${mostrarPanel ? 'visible' : 'oculto'}`}>
         <div className="panel-header">
-          <h3>📊 Métricas Contables</h3>
-          <button 
-            className="btn-toggle-panel"
-            onClick={() => setMostrarPanelContable(!mostrarPanelContable)}
-          >
-            {mostrarPanelContable ? '◀' : '▶'}
+          <h3>📊 Panel Contable</h3>
+          <button onClick={() => setMostrarPanel(!mostrarPanel)}>
+            {mostrarPanel ? '◀' : '▶'}
           </button>
         </div>
         
-        {mostrarPanelContable && (
+        {mostrarPanel && (
           <div className="panel-content">
             {/* Inversión */}
             <div className="metrica-card">
-              <h4>💰 Inversión</h4>
-              <div className="metrica-valor grande">
-                ${DATOS_CONTABLES.inversion_hardware.toLocaleString()}
-              </div>
-              <div className="metrica-sub">
-                Costo operativo: <strong>${DATOS_CONTABLES.costo_operativo_mensual}/mes</strong>
-              </div>
+              <h4>💰 Inversión Total</h4>
+              <div className="metrica-valor">${DATOS_CONTABLES.inversion_hardware.toLocaleString()}</div>
+              <div className="metrica-sub">Costo operativo: $0/mes</div>
               <div className="barra-progreso">
-                <div 
-                  className="progreso" 
-                  style={{ width: `${(DATOS_CONTABLES.ejecutado / DATOS_CONTABLES.presupuesto_total) * 100}%` }}
-                />
+                <div className="progreso" style={{ 
+                  width: `${(DATOS_CONTABLES.ejecutado / DATOS_CONTABLES.presupuesto_total) * 100}%` 
+                }}></div>
               </div>
-              <div className="metrica-sub">
-                {Math.round((DATOS_CONTABLES.ejecutado / DATOS_CONTABLES.presupuesto_total) * 100)}% del presupuesto
-              </div>
+              <small>{Math.round((DATOS_CONTABLES.ejecutado / DATOS_CONTABLES.presupuesto_total) * 100)}% ejecutado</small>
             </div>
 
             {/* Comparativo Temperatura */}
             <div className="metrica-card comparativo">
               <h4>🌡️ Temperatura</h4>
-              <div className="comparativo-row">
-                <div className="comparativo-item ideal">
-                  <span className="label">Ideal</span>
-                  <span className="valor">{comparativo.temperatura_ideal.min}-{comparativo.temperatura_ideal.max}°C</span>
+              <div className="comparativo-grid">
+                <div className="comp-item ideal">
+                  <span>Ideal</span>
+                  <strong>{comparativo.temperatura_ideal.min}-{comparativo.temperatura_ideal.max}°C</strong>
                 </div>
-                <div className={`comparativo-item actual ${desvTemp !== null && desvTemp > 0 ? 'alerta' : ''}`}>
-                  <span className="label">Actual</span>
-                  <span className="valor">{tempActual !== null ? `${tempActual}°C` : '--'}</span>
+                <div className={`comp-item actual ${desvTemp > 0 ? 'alerta' : ''}`}>
+                  <span>Actual</span>
+                  <strong>{tempActual !== null ? `${tempActual}°C` : '--'}</strong>
                 </div>
               </div>
               {desvTemp !== null && desvTemp > 0 && (
-                <div className="desviacion negativa">
-                  ⚠️ +{desvTemp.toFixed(1)}°C sobre lo ideal
-                </div>
+                <div className="desviacion negativa">⚠️ +{desvTemp.toFixed(1)}°C sobre lo ideal</div>
               )}
               {desvTemp !== null && desvTemp <= 0 && (
-                <div className="desviacion positiva">
-                  ✓ Dentro del rango ideal
-                </div>
+                <div className="desviacion positiva">✓ Dentro del rango</div>
               )}
-            </div>
-
-            {/* Comparativo Humedad */}
-            <div className="metrica-card comparativo">
-              <h4>💧 Humedad</h4>
-              <div className="comparativo-row">
-                <div className="comparativo-item ideal">
-                  <span className="label">Ideal</span>
-                  <span className="valor">{comparativo.humedad_ideal.min}-{comparativo.humedad_ideal.max}%</span>
-                </div>
-                <div className={`comparativo-item actual ${desvHum !== null && desvHum !== 0 ? 'alerta' : ''}`}>
-                  <span className="label">Actual</span>
-                  <span className="valor">{humActual !== null ? `${humActual}%` : '--'}</span>
-                </div>
-              </div>
             </div>
 
             {/* Eficiencia */}
             <div className="metrica-card">
               <h4>📈 Eficiencia Esperada</h4>
-              <div className="eficiencia-item">
+              <div className="eficiencia-row">
                 <span>Mortalidad antes:</span>
-                <span className="valor negativo">{eficiencia.mortalidad_antes}%</span>
+                <span className="valor-negativo">{eficiencia.mortalidad_antes}%</span>
               </div>
-              <div className="eficiencia-item">
+              <div className="eficiencia-row">
                 <span>Mortalidad esperada:</span>
-                <span className="valor positivo">{eficiencia.mortalidad_despues}%</span>
+                <span className="valor-positivo">{eficiencia.mortalidad_despues}%</span>
               </div>
-              <div className="ahorro">
+              <div className="ahorro-box">
                 Reducción: <strong>{eficiencia.mortalidad_antes - eficiencia.mortalidad_despues}%</strong>
               </div>
             </div>
 
             {/* ROI */}
             <div className="metrica-card roi">
-              <h4>📊 ROI Proyectado</h4>
-              <div className="metrica-valor">
-                {DATOS_CONTABLES.roi_esperado_meses} meses
-              </div>
-              <div className="metrica-sub">
-                Ahorro mensual: ${DATOS_CONTABLES.ahorro_mensual_estimado.toLocaleString()}
-              </div>
+              <h4>📊 Retorno de Inversión</h4>
+              <div className="metrica-valor">{DATOS_CONTABLES.roi_esperado_meses} meses</div>
+              <div className="metrica-sub">Ahorro: ${DATOS_CONTABLES.ahorro_mensual_estimado.toLocaleString()}/mes</div>
             </div>
           </div>
         )}
-      </div>
+      </aside>
     )
   }
 
@@ -602,47 +565,50 @@ function App() {
   if (!usuario) {
     return (
       <div className="login-container">
-        <div className="login-card">
-          <div className="login-header">
-            <img src="/logo.png" alt="COO ALIANZAS" className="login-logo" />
-            <h1>COO ALIANZAS</h1>
-            <p>Sistema de Monitoreo IoT</p>
+        <div className="login-box">
+          <div className="login-logo">
+            <img src="/logo-alianzas.png" alt="COO Alianzas" onError={(e) => e.target.style.display = 'none'} />
+            <span className="logo-emoji">🐷</span>
           </div>
+          <h1>COO ALIANZAS</h1>
+          <p className="login-subtitle">Sistema de Monitoreo IoT - Porqueriza Tecnificada</p>
           
-          <form onSubmit={handleLogin} className="login-form">
-            {loginError && (
-              <div className="login-error">{loginError}</div>
-            )}
-            
-            <div className="form-group">
+          {loginError && (
+            <div className="error-message">{loginError}</div>
+          )}
+          
+          <form onSubmit={iniciarSesion}>
+            <div className="input-group">
               <label>Usuario</label>
               <input
                 type="text"
-                value={loginData.usuario}
-                onChange={(e) => setLoginData({ ...loginData, usuario: e.target.value })}
+                value={loginUsuario}
+                onChange={(e) => setLoginUsuario(e.target.value)}
                 placeholder="Ingresa tu usuario"
                 required
+                autoFocus
               />
             </div>
             
-            <div className="form-group">
+            <div className="input-group">
               <label>Contraseña</label>
               <input
                 type="password"
-                value={loginData.password}
-                onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
                 placeholder="Ingresa tu contraseña"
                 required
               />
             </div>
             
-            <button type="submit" className="btn-login">
-              Iniciar Sesión
+            <button type="submit" className="btn-login" disabled={cargando}>
+              {cargando ? 'Ingresando...' : 'Iniciar Sesión'}
             </button>
           </form>
           
           <div className="login-footer">
             <p>INGENIEROS OMP © 2026</p>
+            <small>Lorica, Córdoba - Colombia</small>
           </div>
         </div>
       </div>
@@ -653,215 +619,160 @@ function App() {
   // RENDER: DASHBOARD CLIENTE
   // ═══════════════════════════════════════════════════════════════════════
 
-  if (usuario.rol === 'cliente') {
-    const estadoTemp = getEstadoTemperatura(datosAmbiente.temp_porqueriza)
-    const sensacion = calcularSensacionTermica(
-      datosAmbiente.temp_porqueriza,
-      datosAmbiente.humedad_porqueriza
-    )
+  if (rol === 'cliente') {
+    const estadoTemp = getEstadoTemp(datosAmbiente.temp_porqueriza)
 
     return (
       <div className="app">
-        {/* Sidebar izquierdo - Panel Contable */}
         <PanelContable />
         
         <div className="main-content">
           {/* Header */}
           <header className="header">
             <div className="header-left">
+              <img src="/logo-alianzas.png" alt="" className="header-logo" onError={(e) => e.target.style.display = 'none'} />
               <h1>🐷 COO ALIANZAS</h1>
-              <span className="user-badge">👤 {usuario.nombre || usuario.usuario}</span>
+              <span className="user-badge">👤 {usuario}</span>
             </div>
             <div className="header-right">
-              <div className="conexiones">
-                <span className={`conexion ${conexiones.backend ? 'ok' : 'error'}`}>
+              <div className="conexiones-status">
+                <span className={conexiones.backend ? 'ok' : 'error'}>
                   Backend {conexiones.backend ? '✓' : '✗'}
                 </span>
-                <span className={`conexion ${conexiones.api_clima ? 'ok' : 'error'}`}>
-                  Clima {conexiones.api_clima ? '✓' : '✗'}
+                <span className={conexiones.clima ? 'ok' : 'error'}>
+                  Clima {conexiones.clima ? '✓' : '✗'}
                 </span>
-                <span className={`conexion ${conexiones.sensor_porqueriza ? 'ok' : 'error'}`}>
-                  Sensor {conexiones.sensor_porqueriza ? '✓' : '✗'}
+                <span className={conexiones.sensor ? 'ok' : 'error'}>
+                  Sensor {conexiones.sensor ? '✓' : '✗'}
                 </span>
               </div>
-              <button onClick={handleLogout} className="btn-logout">
-                Cerrar Sesión
-              </button>
+              <button onClick={cerrarSesion} className="btn-logout">Cerrar Sesión</button>
             </div>
           </header>
 
           {/* Alerta de temperatura */}
-          {estadoTemp.estado !== 'normal' && estadoTemp.estado !== 'sin-datos' && (
-            <div className={`alerta-banner ${estadoTemp.estado}`}>
-              ⚠️ {estadoTemp.texto}: Temperatura en porqueriza {datosAmbiente.temp_porqueriza}°C
-              {estadoTemp.estado === 'critico' && ' - Bombas activadas automáticamente'}
+          {estadoTemp.clase && estadoTemp.clase !== 'normal' && (
+            <div className={`alerta-banner ${estadoTemp.clase}`}>
+              {estadoTemp.icono} {estadoTemp.texto}: Temperatura Porqueriza Tecnificada {datosAmbiente.temp_porqueriza}°C
             </div>
           )}
 
-          {/* Grid principal */}
-          <div className="dashboard-grid">
-            {/* Clima y Porqueriza */}
-            <div className="card clima-card">
-              <h3>🌤️ Condiciones Ambientales</h3>
-              <div className="clima-grid">
-                <div className="clima-item">
-                  <span className="clima-label">Exterior (Lorica)</span>
-                  <span className="clima-valor">
-                    {datosAmbiente.temp_exterior !== null 
-                      ? `${datosAmbiente.temp_exterior}°C` 
-                      : '--'}
-                  </span>
-                  <span className="clima-sub">
-                    {datosAmbiente.humedad_exterior !== null 
-                      ? `${datosAmbiente.humedad_exterior}% hum` 
-                      : ''}
-                  </span>
-                </div>
-                <div className={`clima-item porqueriza ${estadoTemp.estado}`}>
-                  <span className="clima-label">Porqueriza (Sensor)</span>
-                  <span className="clima-valor" style={{ color: estadoTemp.color }}>
-                    {datosAmbiente.temp_porqueriza !== null 
-                      ? `${datosAmbiente.temp_porqueriza}°C` 
-                      : '--'}
-                  </span>
-                  <span className="clima-sub">
-                    {datosAmbiente.humedad_porqueriza !== null 
-                      ? `${datosAmbiente.humedad_porqueriza}% hum` 
-                      : ''}
-                    {sensacion !== null && sensacion !== datosAmbiente.temp_porqueriza && (
-                      <> | ST: {sensacion}°C</>
-                    )}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Tanques */}
-            <div className="card tanques-card">
-              <h3>🛢️ Tanques de Agua</h3>
-              <div className="tanques-grid">
-                <div className="tanque">
-                  <div className="tanque-visual">
-                    <div 
-                      className="tanque-nivel"
-                      style={{ 
-                        height: `${tanques.tanque1 || 0}%`,
-                        backgroundColor: getColorTanque(tanques.tanque1)
-                      }}
-                    />
-                  </div>
-                  <span className="tanque-label">Tanque 1</span>
-                  <span className="tanque-valor">
-                    {tanques.tanque1 !== null ? `${tanques.tanque1}%` : '--'}
-                  </span>
-                </div>
-                <div className="tanque">
-                  <div className="tanque-visual">
-                    <div 
-                      className="tanque-nivel"
-                      style={{ 
-                        height: `${tanques.tanque2 || 0}%`,
-                        backgroundColor: getColorTanque(tanques.tanque2)
-                      }}
-                    />
-                  </div>
-                  <span className="tanque-label">Tanque 2</span>
-                  <span className="tanque-valor">
-                    {tanques.tanque2 !== null ? `${tanques.tanque2}%` : '--'}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Consumo de Agua */}
-            <div className="card consumo-card">
-              <h3>💧 Consumo de Agua</h3>
-              <div className="consumo-stats">
-                <div className="consumo-item">
-                  <span className="consumo-label">Hoy</span>
-                  <span className="consumo-valor">{consumoAgua.diario} L</span>
-                </div>
-                <div className="consumo-item">
-                  <span className="consumo-label">Este mes</span>
-                  <span className="consumo-valor">{consumoAgua.mensual} L</span>
-                </div>
-                <div className="consumo-item">
-                  <span className="consumo-label">Flujo actual</span>
-                  <span className="consumo-valor">{consumoAgua.flujo} L/min</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Pesajes */}
-            <div className="card pesajes-card">
-              <h3>⚖️ Báscula</h3>
-              <div className="ultimo-peso">
-                <span className="peso-valor">
-                  {pesajes.ultimo ? `${pesajes.ultimo.peso} kg` : '--'}
-                </span>
-                <span className="peso-fecha">
-                  {pesajes.ultimo 
-                    ? new Date(pesajes.ultimo.createdAt).toLocaleString() 
-                    : 'Sin registros'}
-                </span>
-              </div>
-              {pesajes.historial.length > 0 && (
-                <div className="historial-pesos">
-                  <h4>Últimos pesajes</h4>
-                  <ul>
-                    {pesajes.historial.slice(0, 5).map((p, i) => (
-                      <li key={i}>
-                        {p.peso} kg - {new Date(p.createdAt).toLocaleDateString()}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-
-            {/* Bombas */}
-            <div className="card bombas-card">
-              <h3>🔧 Control de Bombas</h3>
-              <div className="bombas-grid">
-                {bombas.map(bomba => (
-                  <div key={bomba._id} className={`bomba ${bomba.estado ? 'encendida' : 'apagada'} ${!bomba.conectada ? 'desconectada' : ''}`}>
-                    <span className="bomba-nombre">{bomba.nombre}</span>
-                    <span className="bomba-estado">
-                      {!bomba.conectada ? '⚫ Desconectada' : bomba.estado ? '🟢 Encendida' : '🔴 Apagada'}
+          {/* Dashboard */}
+          <main className="dashboard">
+            <div className="cards-grid">
+              {/* Clima Exterior */}
+              <div className="card">
+                <h3>🌤️ Clima Exterior (Lorica)</h3>
+                <div className="clima-datos">
+                  <div className="clima-item">
+                    <span className="valor-grande">
+                      {datosAmbiente.temp_exterior !== null ? `${datosAmbiente.temp_exterior}°C` : '--'}
                     </span>
-                    <button 
-                      onClick={() => toggleBomba(bomba._id)}
-                      disabled={!bomba.conectada}
-                      className={`btn-bomba ${bomba.estado ? 'apagar' : 'encender'}`}
-                    >
-                      {bomba.estado ? 'Apagar' : 'Encender'}
-                    </button>
+                    <span className="etiqueta">Temperatura</span>
                   </div>
-                ))}
-                {bombas.length === 0 && (
-                  <p className="sin-datos">No hay bombas configuradas</p>
-                )}
+                  <div className="clima-item">
+                    <span className="valor-grande">
+                      {datosAmbiente.humedad_exterior !== null ? `${datosAmbiente.humedad_exterior}%` : '--'}
+                    </span>
+                    <span className="etiqueta">Humedad</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Temperatura Porqueriza */}
+              <div className={`card sensor-card ${estadoTemp.clase}`}>
+                <h3>🌡️ Temperatura Porqueriza Tecnificada</h3>
+                <div className="sensor-datos">
+                  <div className="sensor-principal">
+                    <span className="valor-gigante">
+                      {datosAmbiente.temp_porqueriza !== null ? datosAmbiente.temp_porqueriza : '--'}
+                    </span>
+                    <span className="unidad">°C</span>
+                  </div>
+                  <div className="sensor-secundario">
+                    <span>Humedad: {datosAmbiente.humedad_porqueriza !== null ? `${datosAmbiente.humedad_porqueriza}%` : '--'}</span>
+                  </div>
+                  <div className={`estado-badge ${estadoTemp.clase}`}>
+                    {estadoTemp.icono} {estadoTemp.texto}
+                  </div>
+                </div>
+              </div>
+
+              {/* Tanques */}
+              <div className="card">
+                <h3>🛢️ Nivel de Tanques</h3>
+                <div className="tanques-grid">
+                  <div className="tanque">
+                    <div className="tanque-visual">
+                      <div 
+                        className="tanque-nivel" 
+                        style={{ 
+                          height: `${tanques.tanque1}%`,
+                          backgroundColor: getColorTanque(tanques.tanque1)
+                        }}
+                      ></div>
+                    </div>
+                    <span className="tanque-nombre">Tanque 1</span>
+                    <span className="tanque-valor">{tanques.tanque1}%</span>
+                  </div>
+                  <div className="tanque">
+                    <div className="tanque-visual">
+                      <div 
+                        className="tanque-nivel" 
+                        style={{ 
+                          height: `${tanques.tanque2}%`,
+                          backgroundColor: getColorTanque(tanques.tanque2)
+                        }}
+                      ></div>
+                    </div>
+                    <span className="tanque-nombre">Tanque 2</span>
+                    <span className="tanque-valor">{tanques.tanque2}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bombas */}
+              <div className="card">
+                <h3>🔧 Control de Bombas</h3>
+                <div className="bombas-lista">
+                  {bombas.length > 0 ? bombas.map(bomba => (
+                    <div key={bomba._id} className={`bomba-item ${bomba.estado ? 'encendida' : ''} ${!bomba.conectada ? 'desconectada' : ''}`}>
+                      <div className="bomba-info">
+                        <span className="bomba-nombre">{bomba.nombre}</span>
+                        <span className="bomba-estado">
+                          {!bomba.conectada ? '⚫ Desconectada' : bomba.estado ? '🟢 Encendida' : '🔴 Apagada'}
+                        </span>
+                      </div>
+                      <button 
+                        onClick={() => toggleBomba(bomba._id)}
+                        className={`btn-bomba ${bomba.estado ? 'apagar' : 'encender'}`}
+                        disabled={!bomba.conectada}
+                      >
+                        {bomba.estado ? 'Apagar' : 'Encender'}
+                      </button>
+                    </div>
+                  )) : (
+                    <p className="sin-datos">No hay bombas configuradas</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Alertas */}
+              <div className="card alertas-card">
+                <h3>🔔 Alertas Recientes</h3>
+                <div className="alertas-lista">
+                  {alertas.length > 0 ? alertas.map((alerta, i) => (
+                    <div key={i} className={`alerta-item ${alerta.tipo}`}>
+                      <span className="alerta-mensaje">{alerta.mensaje}</span>
+                      <span className="alerta-fecha">{new Date(alerta.createdAt || alerta.fecha).toLocaleString()}</span>
+                    </div>
+                  )) : (
+                    <p className="sin-alertas">✓ Sin alertas recientes</p>
+                  )}
+                </div>
               </div>
             </div>
-
-            {/* Alertas */}
-            <div className="card alertas-card">
-              <h3>🔔 Alertas Recientes</h3>
-              <ul className="alertas-lista">
-                {alertas.map((alerta, i) => (
-                  <li key={i} className={`alerta-item ${alerta.tipo}`}>
-                    <span className="alerta-mensaje">{alerta.mensaje}</span>
-                    <span className="alerta-fecha">
-                      {new Date(alerta.createdAt).toLocaleString()}
-                    </span>
-                  </li>
-                ))}
-                {alertas.length === 0 && (
-                  <li className="sin-alertas">No hay alertas recientes ✓</li>
-                )}
-              </ul>
-            </div>
-          </div>
+          </main>
         </div>
       </div>
     )
@@ -873,58 +784,60 @@ function App() {
 
   return (
     <div className="app">
-      {/* Sidebar izquierdo - Panel Contable */}
       <PanelContable />
       
       <div className="main-content">
         {/* Header */}
         <header className="header">
           <div className="header-left">
-            <h1>🐷 COO ALIANZAS - Admin</h1>
-            <span className="user-badge admin">👑 {usuario.nombre || usuario.usuario}</span>
+            <img src="/logo-alianzas.png" alt="" className="header-logo" onError={(e) => e.target.style.display = 'none'} />
+            <h1>🐷 COO ALIANZAS - Panel Administrativo</h1>
+            <span className="user-badge admin">👑 {usuario}</span>
           </div>
           <div className="header-right">
-            <button onClick={handleLogout} className="btn-logout">
-              Cerrar Sesión
-            </button>
+            <button onClick={cerrarSesion} className="btn-logout">Cerrar Sesión</button>
           </div>
         </header>
 
         {/* Stats */}
         <div className="admin-stats">
           <div className="stat-card">
+            <span className="stat-icono">🏠</span>
             <span className="stat-valor">{farms.length}</span>
             <span className="stat-label">Granjas</span>
           </div>
           <div className="stat-card">
+            <span className="stat-icono">👥</span>
             <span className="stat-valor">{users.length}</span>
             <span className="stat-label">Usuarios</span>
           </div>
           <div className="stat-card">
-            <span className="stat-valor">
-              {sessions.filter(s => !s.fecha_salida).length}
-            </span>
+            <span className="stat-icono">📊</span>
+            <span className="stat-valor">{sessions.filter(s => !s.fecha_salida).length}</span>
             <span className="stat-label">Sesiones Activas</span>
           </div>
           <div className="stat-card alerta">
-            <span className="stat-valor">
-              {alertas.filter(a => a.tipo === 'critica').length}
-            </span>
+            <span className="stat-icono">⚠️</span>
+            <span className="stat-valor">{alertas.filter(a => a.tipo === 'critica' || a.tipo === 'critico').length}</span>
             <span className="stat-label">Alertas Críticas</span>
           </div>
         </div>
 
-        {/* Grid Admin */}
-        <div className="admin-grid">
+        {/* Admin Grid */}
+        <main className="admin-grid">
           {/* Granjas */}
           <div className="card">
-            <h3>🏠 Granjas</h3>
+            <div className="card-header">
+              <h3>🏠 Granjas</h3>
+              <button onClick={() => setModalGranja(true)} className="btn-agregar">+ Nueva</button>
+            </div>
             <table className="tabla-admin">
               <thead>
                 <tr>
                   <th>Nombre</th>
                   <th>Ubicación</th>
                   <th>Estado</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -933,46 +846,70 @@ function App() {
                     <td>{farm.nombre}</td>
                     <td>{farm.ubicacion}</td>
                     <td>
-                      <span className={`badge ${farm.activo ? 'activo' : 'inactivo'}`}>
-                        {farm.activo ? 'Activa' : 'Inactiva'}
+                      <span className={`badge ${farm.activo !== false ? 'activo' : 'inactivo'}`}>
+                        {farm.activo !== false ? 'Activa' : 'Inactiva'}
                       </span>
+                    </td>
+                    <td className="acciones">
+                      <button onClick={() => toggleGranja(farm._id)} className="btn-accion">
+                        {farm.activo !== false ? '⏸️' : '▶️'}
+                      </button>
+                      <button onClick={() => eliminarGranja(farm._id)} className="btn-accion eliminar">🗑️</button>
                     </td>
                   </tr>
                 ))}
+                {farms.length === 0 && (
+                  <tr><td colSpan="4" className="sin-datos">No hay granjas registradas</td></tr>
+                )}
               </tbody>
             </table>
           </div>
 
           {/* Usuarios */}
           <div className="card">
-            <h3>👥 Usuarios</h3>
+            <div className="card-header">
+              <h3>👥 Usuarios</h3>
+              <button onClick={() => setModalUsuario(true)} className="btn-agregar">+ Nuevo</button>
+            </div>
             <table className="tabla-admin">
               <thead>
                 <tr>
                   <th>Usuario</th>
                   <th>Rol</th>
                   <th>Estado</th>
+                  <th>Último Acceso</th>
+                  <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map(user => (
                   <tr key={user._id}>
                     <td>{user.usuario}</td>
-                    <td>{user.rol}</td>
+                    <td><span className={`rol-badge ${user.rol}`}>{user.rol}</span></td>
                     <td>
                       <span className={`badge ${user.activo ? 'activo' : 'inactivo'}`}>
                         {user.activo ? 'Activo' : 'Inactivo'}
                       </span>
                     </td>
+                    <td>{user.ultimo_acceso ? new Date(user.ultimo_acceso).toLocaleString() : 'Nunca'}</td>
+                    <td className="acciones">
+                      <button onClick={() => toggleUsuario(user._id)} className="btn-accion">
+                        {user.activo ? '⏸️' : '▶️'}
+                      </button>
+                      <button onClick={() => eliminarUsuario(user._id)} className="btn-accion eliminar">🗑️</button>
+                    </td>
                   </tr>
                 ))}
+                {users.length === 0 && (
+                  <tr><td colSpan="5" className="sin-datos">No hay usuarios registrados</td></tr>
+                )}
               </tbody>
             </table>
           </div>
 
           {/* Sesiones */}
           <div className="card">
-            <h3>📋 Sesiones</h3>
+            <h3>📋 Historial de Sesiones</h3>
             <table className="tabla-admin">
               <thead>
                 <tr>
@@ -983,15 +920,11 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {sessions.slice(0, 10).map(session => (
+                {sessions.map(session => (
                   <tr key={session._id}>
                     <td>{session.usuario}</td>
                     <td>{new Date(session.fecha_entrada).toLocaleString()}</td>
-                    <td>
-                      {session.fecha_salida 
-                        ? new Date(session.fecha_salida).toLocaleString() 
-                        : '-'}
-                    </td>
+                    <td>{session.fecha_salida ? new Date(session.fecha_salida).toLocaleString() : '-'}</td>
                     <td>
                       <span className={`badge ${!session.fecha_salida ? 'activo' : 'inactivo'}`}>
                         {!session.fecha_salida ? 'Activa' : 'Cerrada'}
@@ -999,29 +932,128 @@ function App() {
                     </td>
                   </tr>
                 ))}
+                {sessions.length === 0 && (
+                  <tr><td colSpan="4" className="sin-datos">No hay sesiones registradas</td></tr>
+                )}
               </tbody>
             </table>
           </div>
 
-          {/* Reportes */}
-          <div className="card">
-            <h3>📊 Reportes</h3>
-            <div className="reportes-grid">
-              <button onClick={() => descargarReporte('sensores')} className="btn-reporte">
-                📈 Sensores
-              </button>
-              <button onClick={() => descargarReporte('pesajes')} className="btn-reporte">
-                ⚖️ Pesajes
-              </button>
-              <button onClick={() => descargarReporte('agua')} className="btn-reporte">
-                💧 Agua
-              </button>
-              <button onClick={() => descargarReporte('completo')} className="btn-reporte">
-                📋 Completo
-              </button>
+          {/* Sensor en tiempo real */}
+          <div className="card sensor-card">
+            <h3>🌡️ Temperatura Porqueriza Tecnificada (Tiempo Real)</h3>
+            <div className="sensor-datos">
+              <div className="sensor-principal">
+                <span className="valor-gigante">
+                  {datosAmbiente.temp_porqueriza !== null ? datosAmbiente.temp_porqueriza : '--'}
+                </span>
+                <span className="unidad">°C</span>
+              </div>
+              <div className="sensor-secundario">
+                <span>Humedad: {datosAmbiente.humedad_porqueriza !== null ? `${datosAmbiente.humedad_porqueriza}%` : '--'}</span>
+              </div>
+              <div className={`estado-badge ${getEstadoTemp(datosAmbiente.temp_porqueriza).clase}`}>
+                {getEstadoTemp(datosAmbiente.temp_porqueriza).icono} {getEstadoTemp(datosAmbiente.temp_porqueriza).texto}
+              </div>
+              <div className="sensor-conexion">
+                Sensor: {conexiones.sensor ? '🟢 Conectado' : '🔴 Desconectado'}
+              </div>
             </div>
           </div>
-        </div>
+        </main>
+
+        {/* Modal Crear Usuario */}
+        {modalUsuario && (
+          <div className="modal-overlay">
+            <div className="modal">
+              <h3>Crear Nuevo Usuario</h3>
+              <form onSubmit={crearUsuario}>
+                <div className="form-group">
+                  <label>Usuario</label>
+                  <input
+                    type="text"
+                    value={nuevoUsuario.usuario}
+                    onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, usuario: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Correo</label>
+                  <input
+                    type="email"
+                    value={nuevoUsuario.correo}
+                    onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, correo: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Contraseña</label>
+                  <input
+                    type="password"
+                    value={nuevoUsuario.password}
+                    onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, password: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Rol</label>
+                  <select
+                    value={nuevoUsuario.rol}
+                    onChange={(e) => setNuevoUsuario({ ...nuevoUsuario, rol: e.target.value })}
+                  >
+                    <option value="cliente">Cliente</option>
+                    <option value="superadmin">SuperAdmin</option>
+                  </select>
+                </div>
+                <div className="modal-actions">
+                  <button type="button" onClick={() => setModalUsuario(false)} className="btn-cancelar">Cancelar</button>
+                  <button type="submit" className="btn-guardar">Crear Usuario</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal Crear Granja */}
+        {modalGranja && (
+          <div className="modal-overlay">
+            <div className="modal">
+              <h3>Crear Nueva Granja</h3>
+              <form onSubmit={crearGranja}>
+                <div className="form-group">
+                  <label>Nombre</label>
+                  <input
+                    type="text"
+                    value={nuevaGranja.nombre}
+                    onChange={(e) => setNuevaGranja({ ...nuevaGranja, nombre: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Ubicación</label>
+                  <input
+                    type="text"
+                    value={nuevaGranja.ubicacion}
+                    onChange={(e) => setNuevaGranja({ ...nuevaGranja, ubicacion: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Contacto</label>
+                  <input
+                    type="text"
+                    value={nuevaGranja.contacto}
+                    onChange={(e) => setNuevaGranja({ ...nuevaGranja, contacto: e.target.value })}
+                  />
+                </div>
+                <div className="modal-actions">
+                  <button type="button" onClick={() => setModalGranja(false)} className="btn-cancelar">Cancelar</button>
+                  <button type="submit" className="btn-guardar">Crear Granja</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
