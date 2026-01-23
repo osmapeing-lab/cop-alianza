@@ -1,15 +1,17 @@
 /*
  * ═══════════════════════════════════════════════════════════════════════
- * COO ALIANZAS - ESP CONTROLLER (ACTUALIZADO)
+ * COO ALIANZAS - ESP CONTROLLER
  * ═══════════════════════════════════════════════════════════════════════
  * 
  * Controlador para recibir datos de sensores ESP32
  * 
  * Endpoints:
- *   POST /api/esp/riego    → Recibir temp/humedad de porqueriza
- *   POST /api/esp/peso     → Recibir datos de báscula
- *   GET  /api/esp/bombas   → Estado de bombas para ESP-01
- *   POST /api/esp/heartbeat → Heartbeat de dispositivos
+ *   POST /api/esp/riego      -> Temperatura/humedad porqueriza
+ *   GET  /api/esp/porqueriza -> Obtener ultimos datos temp
+ *   POST /api/esp/flujo      -> Datos de flujo de agua
+ *   GET  /api/esp/flujo      -> Obtener ultimos datos flujo
+ *   POST /api/esp/peso       -> Datos de bascula
+ *   GET  /api/esp/bombas     -> Estado de bombas
  * 
  * ═══════════════════════════════════════════════════════════════════════
  */
@@ -19,187 +21,251 @@ const Alert = require('../models/Alert');
 const Motorbomb = require('../models/Motorbomb');
 const Weighing = require('../models/Weighing');
 
-// Variable para almacenar último dato recibido (para consulta rápida)
+// Ultimos datos para consulta rapida
 let ultimosDatosPorqueriza = {
   temperatura: null,
   humedad: null,
   sensor_id: null,
   fecha: null,
-  rssi: null
+  conectado: false
+};
+
+let ultimosDatosFlujo = {
+  caudal: 0,
+  volumen_total: 0,
+  volumen_diario: 0,
+  sensor_id: null,
+  fecha: null,
+  conectado: false
 };
 
 // ═══════════════════════════════════════════════════════════════════════
 // RECIBIR DATOS DE TEMPERATURA Y HUMEDAD (DHT22)
 // POST /api/esp/riego
 // ═══════════════════════════════════════════════════════════════════════
+
 exports.recibirRiego = async (req, res) => {
   try {
-    const { 
-      sensor_id, 
-      temperatura, 
-      humedad, 
-      temp_porqueriza,      // Alias
-      humedad_porqueriza,   // Alias
-      nivel_tanque1, 
-      nivel_tanque2,
-      alerta,
-      critico,
-      rssi,
-      uptime,
-      ip
-    } = req.body;
+    const { sensor_id, temperatura, humedad, rssi } = req.body;
     
-    console.log('═══════════════════════════════════════════════');
-    console.log('[ESP32] Datos recibidos:', new Date().toISOString());
-    console.log('  Sensor ID:', sensor_id);
-    console.log('  Temperatura:', temperatura || temp_porqueriza, '°C');
-    console.log('  Humedad:', humedad || humedad_porqueriza, '%');
+    console.log('========================================');
+    console.log('[ESP32] Datos temperatura recibidos');
+    console.log('  Sensor:', sensor_id);
+    console.log('  Temp:', temperatura, 'C');
+    console.log('  Hum:', humedad, '%');
     console.log('  RSSI:', rssi, 'dBm');
-    console.log('  IP:', ip);
-    console.log('═══════════════════════════════════════════════');
+    console.log('========================================');
     
-    const temp = temperatura || temp_porqueriza;
-    const hum = humedad || humedad_porqueriza;
     const lecturas = [];
     
-    // Guardar temperatura
-    if (temp !== undefined && temp !== null) {
+    if (temperatura !== undefined) {
       lecturas.push({
         sensor: sensor_id || 'esp_porqueriza',
         tipo: 'temp_porqueriza',
-        valor: temp,
-        unidad: '°C'
+        valor: temperatura,
+        unidad: 'C'
       });
       
-      // Verificar umbrales y crear alertas
-      if (temp >= 40) {
-        const alertaCritica = new Alert({
-          tipo: 'critica',
-          mensaje: `🔴 CRÍTICO: Temperatura ${temp}°C en porqueriza - Riesgo de estrés térmico severo`,
-          valor: temp,
-          sensor_id: sensor_id
+      // Alertas de temperatura
+      if (temperatura >= 40) {
+        const alerta = new Alert({
+          tipo: 'critico',
+          mensaje: 'CRITICO: Temperatura ' + temperatura + 'C - Riesgo de estres termico',
+          valor: temperatura
         });
-        await alertaCritica.save();
-        
-        // Activar bombas automáticamente
+        await alerta.save();
         await Motorbomb.updateMany({ conectada: true }, { estado: true });
-        console.log('🚨 ALERTA CRÍTICA: Bombas activadas automáticamente');
-        
-      } else if (temp >= 37) {
-        const alertaAlta = new Alert({
+        console.log('[ALERTA] Temperatura critica - Bombas activadas');
+      } else if (temperatura >= 35) {
+        const alerta = new Alert({
           tipo: 'alerta',
-          mensaje: `🟠 ALERTA: Temperatura ${temp}°C en porqueriza - Por encima del umbral`,
-          valor: temp,
-          sensor_id: sensor_id
+          mensaje: 'ALERTA: Temperatura ' + temperatura + 'C - Por encima del umbral',
+          valor: temperatura
         });
-        await alertaAlta.save();
-        console.log('⚠️ ALERTA: Temperatura alta');
-        
-      } else if (temp < 34) {
-        // Temperatura normal, desactivar bombas automáticas
-        // (Solo las que fueron activadas automáticamente)
-        console.log('✓ Temperatura normal');
+        await alerta.save();
       }
     }
     
-    // Guardar humedad
-    if (hum !== undefined && hum !== null) {
+    if (humedad !== undefined) {
       lecturas.push({
         sensor: sensor_id || 'esp_porqueriza',
         tipo: 'humedad_porqueriza',
-        valor: hum,
+        valor: humedad,
         unidad: '%'
       });
     }
     
-    // Guardar niveles de tanque (si vienen)
-    if (nivel_tanque1 !== undefined) {
-      lecturas.push({
-        sensor: sensor_id || 'esp_tanques',
-        tipo: 'nivel_tanque1',
-        valor: nivel_tanque1,
-        unidad: '%'
-      });
-      
-      // Alerta si tanque bajo
-      if (nivel_tanque1 < 20) {
-        const alertaTanque = new Alert({
-          tipo: 'nivel_bajo',
-          mensaje: `🛢️ Tanque 1 nivel crítico: ${nivel_tanque1}%`,
-          valor: nivel_tanque1
-        });
-        await alertaTanque.save();
-      }
-    }
-    
-    if (nivel_tanque2 !== undefined) {
-      lecturas.push({
-        sensor: sensor_id || 'esp_tanques',
-        tipo: 'nivel_tanque2',
-        valor: nivel_tanque2,
-        unidad: '%'
-      });
-    }
-    
-    // Guardar todas las lecturas
     if (lecturas.length > 0) {
       await Reading.insertMany(lecturas);
     }
     
-    // Actualizar últimos datos para consulta rápida
+    // Actualizar cache
     ultimosDatosPorqueriza = {
-      temperatura: temp,
-      humedad: hum,
-      sensor_id: sensor_id,
+      temperatura,
+      humedad,
+      sensor_id,
       fecha: new Date(),
-      rssi: rssi,
-      ip: ip
+      conectado: true
     };
     
-    // Emitir por WebSocket si está disponible
+    // WebSocket
     if (global.io) {
       global.io.emit('lectura_actualizada', {
-        temp_porqueriza: temp,
-        humedad_porqueriza: hum,
-        sensor_id: sensor_id,
+        temperatura,
+        humedad,
+        sensor_id,
         timestamp: new Date()
       });
     }
     
     res.status(201).json({ 
-      mensaje: 'Datos registrados correctamente',
-      datos: {
-        temperatura: temp,
-        humedad: hum,
-        lecturas_guardadas: lecturas.length
-      }
+      mensaje: 'Datos registrados',
+      temperatura,
+      humedad
     });
     
   } catch (error) {
-    console.error('[ESP32] Error en recibirRiego:', error);
+    console.error('[ESP32] Error:', error);
     res.status(400).json({ mensaje: error.message });
   }
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// OBTENER ÚLTIMO DATO DE PORQUERIZA (para frontend)
+// OBTENER DATOS DE PORQUERIZA
 // GET /api/esp/porqueriza
 // ═══════════════════════════════════════════════════════════════════════
+
 exports.obtenerDatosPorqueriza = async (req, res) => {
   try {
-    // Buscar última lectura de temperatura
     const ultimaTemp = await Reading.findOne({ tipo: 'temp_porqueriza' })
       .sort({ createdAt: -1 });
     
     const ultimaHum = await Reading.findOne({ tipo: 'humedad_porqueriza' })
       .sort({ createdAt: -1 });
     
+    const conectado = ultimosDatosPorqueriza.fecha && 
+      (new Date() - ultimosDatosPorqueriza.fecha) < 120000;
+    
     res.json({
       temperatura: ultimaTemp?.valor || ultimosDatosPorqueriza.temperatura,
       humedad: ultimaHum?.valor || ultimosDatosPorqueriza.humedad,
       fecha: ultimaTemp?.createdAt || ultimosDatosPorqueriza.fecha,
-      conectado: ultimosDatosPorqueriza.fecha && 
-        (new Date() - ultimosDatosPorqueriza.fecha) < 120000 // 2 minutos
+      conectado
+    });
+  } catch (error) {
+    res.status(500).json({ mensaje: error.message });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// RECIBIR DATOS DE FLUJO DE AGUA (YF-S201)
+// POST /api/esp/flujo
+// ═══════════════════════════════════════════════════════════════════════
+
+exports.recibirFlujo = async (req, res) => {
+  try {
+    const { sensor_id, caudal_l_min, volumen_l, volumen_diario_l, rssi } = req.body;
+    
+    console.log('========================================');
+    console.log('[ESP32] Datos flujo de agua recibidos');
+    console.log('  Sensor:', sensor_id);
+    console.log('  Caudal:', caudal_l_min, 'L/min');
+    console.log('  Volumen total:', volumen_l, 'L');
+    console.log('  Volumen diario:', volumen_diario_l, 'L');
+    console.log('  RSSI:', rssi, 'dBm');
+    console.log('========================================');
+    
+    const lecturas = [];
+    
+    if (caudal_l_min !== undefined) {
+      lecturas.push({
+        sensor: sensor_id || 'esp_flujo',
+        tipo: 'caudal_agua',
+        valor: caudal_l_min,
+        unidad: 'L/min'
+      });
+    }
+    
+    if (volumen_l !== undefined) {
+      lecturas.push({
+        sensor: sensor_id || 'esp_flujo',
+        tipo: 'volumen_agua',
+        valor: volumen_l,
+        unidad: 'L'
+      });
+    }
+    
+    if (volumen_diario_l !== undefined) {
+      lecturas.push({
+        sensor: sensor_id || 'esp_flujo',
+        tipo: 'volumen_diario',
+        valor: volumen_diario_l,
+        unidad: 'L'
+      });
+    }
+    
+    if (lecturas.length > 0) {
+      await Reading.insertMany(lecturas);
+    }
+    
+    // Actualizar cache
+    ultimosDatosFlujo = {
+      caudal: caudal_l_min,
+      volumen_total: volumen_l,
+      volumen_diario: volumen_diario_l,
+      sensor_id,
+      fecha: new Date(),
+      conectado: true
+    };
+    
+    // WebSocket
+    if (global.io) {
+      global.io.emit('lectura_actualizada', {
+        caudal_l_min,
+        volumen_l,
+        volumen_diario_l,
+        sensor_id,
+        timestamp: new Date()
+      });
+    }
+    
+    res.status(201).json({ 
+      mensaje: 'Datos de flujo registrados',
+      caudal: caudal_l_min,
+      volumen: volumen_l
+    });
+    
+  } catch (error) {
+    console.error('[ESP32] Error flujo:', error);
+    res.status(400).json({ mensaje: error.message });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// OBTENER DATOS DE FLUJO
+// GET /api/esp/flujo
+// ═══════════════════════════════════════════════════════════════════════
+
+exports.obtenerDatosFlujo = async (req, res) => {
+  try {
+    const ultimoCaudal = await Reading.findOne({ tipo: 'caudal_agua' })
+      .sort({ createdAt: -1 });
+    
+    const ultimoVolumen = await Reading.findOne({ tipo: 'volumen_agua' })
+      .sort({ createdAt: -1 });
+    
+    const ultimoVolumenDiario = await Reading.findOne({ tipo: 'volumen_diario' })
+      .sort({ createdAt: -1 });
+    
+    const conectado = ultimosDatosFlujo.fecha && 
+      (new Date() - ultimosDatosFlujo.fecha) < 120000;
+    
+    res.json({
+      caudal: ultimoCaudal?.valor || ultimosDatosFlujo.caudal,
+      volumen_total: ultimoVolumen?.valor || ultimosDatosFlujo.volumen_total,
+      volumen_diario: ultimoVolumenDiario?.valor || ultimosDatosFlujo.volumen_diario,
+      fecha: ultimoCaudal?.createdAt || ultimosDatosFlujo.fecha,
+      conectado
     });
   } catch (error) {
     res.status(500).json({ mensaje: error.message });
@@ -210,49 +276,37 @@ exports.obtenerDatosPorqueriza = async (req, res) => {
 // RECIBIR DATOS DE PESO (HX711)
 // POST /api/esp/peso
 // ═══════════════════════════════════════════════════════════════════════
+
 exports.recibirPeso = async (req, res) => {
   try {
-    const { sensor_id, peso, unidad, cerdo, tipo_animal, manual } = req.body;
+    const { sensor_id, peso, unidad, tipo_animal } = req.body;
     
     console.log('[ESP32] Peso recibido:', peso, unidad || 'kg');
     
-    // Guardar en colección de pesajes
     const pesaje = new Weighing({
-      cerdo: cerdo || `Cerdo_${Date.now()}`,
-      peso: peso,
+      cerdo: 'Cerdo_' + Date.now(),
+      peso,
       unidad: unidad || 'kg',
-      tipo_animal: tipo_animal,
-      manual: manual || false,
+      tipo_animal,
       validado: false
     });
     await pesaje.save();
     
-    // También guardar como lectura
     const lectura = new Reading({
-      sensor: sensor_id || 'bascula_granja',
+      sensor: sensor_id || 'bascula',
       tipo: 'peso',
       valor: peso,
       unidad: unidad || 'kg'
     });
     await lectura.save();
     
-    // Emitir por WebSocket
     if (global.io) {
-      global.io.emit('nuevo_peso', {
-        peso: peso,
-        unidad: unidad || 'kg',
-        timestamp: new Date()
-      });
+      global.io.emit('nuevo_peso', { peso, unidad: unidad || 'kg' });
     }
     
-    res.status(201).json({ 
-      mensaje: 'Peso registrado correctamente',
-      id: pesaje._id,
-      peso: peso
-    });
+    res.status(201).json({ mensaje: 'Peso registrado', peso });
     
   } catch (error) {
-    console.error('[ESP32] Error en recibirPeso:', error);
     res.status(400).json({ mensaje: error.message });
   }
 };
@@ -261,14 +315,11 @@ exports.recibirPeso = async (req, res) => {
 // OBTENER HISTORIAL DE PESOS
 // GET /api/esp/pesos
 // ═══════════════════════════════════════════════════════════════════════
+
 exports.obtenerHistorialPeso = async (req, res) => {
   try {
     const limite = parseInt(req.query.limite) || 20;
-    
-    const pesajes = await Weighing.find()
-      .sort({ createdAt: -1 })
-      .limit(limite);
-    
+    const pesajes = await Weighing.find().sort({ createdAt: -1 }).limit(limite);
     res.json(pesajes);
   } catch (error) {
     res.status(500).json({ mensaje: error.message });
@@ -276,9 +327,10 @@ exports.obtenerHistorialPeso = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// OBTENER ESTADO DE BOMBAS (para ESP-01)
+// OBTENER ESTADO DE BOMBAS
 // GET /api/esp/bombas
 // ═══════════════════════════════════════════════════════════════════════
+
 exports.obtenerEstadoBombas = async (req, res) => {
   try {
     const bombas = await Motorbomb.find();
@@ -289,41 +341,15 @@ exports.obtenerEstadoBombas = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// HEARTBEAT DE DISPOSITIVOS
+// HEARTBEAT
 // POST /api/esp/heartbeat
 // ═══════════════════════════════════════════════════════════════════════
+
 exports.heartbeat = async (req, res) => {
   try {
-    const { dispositivo_id, tipo, rssi, uptime, ip, estados } = req.body;
-    
-    console.log(`[HEARTBEAT] ${tipo} - ${dispositivo_id} - RSSI: ${rssi} dBm`);
-    
-    res.json({ 
-      mensaje: 'OK',
-      timestamp: new Date()
-    });
-  } catch (error) {
-    res.status(400).json({ mensaje: error.message });
-  }
-};
-
-// ═══════════════════════════════════════════════════════════════════════
-// CONFIRMAR CAMBIO DE BOMBA
-// POST /api/esp/confirmar
-// ═══════════════════════════════════════════════════════════════════════
-exports.confirmarCambio = async (req, res) => {
-  try {
-    const { bomba_id, estado, dispositivo_id } = req.body;
-    
-    console.log(`[ESP] Bomba ${bomba_id} confirmada: ${estado ? 'ON' : 'OFF'}`);
-    
-    // Actualizar estado confirmado en BD
-    await Motorbomb.findByIdAndUpdate(bomba_id, {
-      estado: estado,
-      ultima_confirmacion: new Date()
-    });
-    
-    res.json({ mensaje: 'Confirmado' });
+    const { dispositivo_id, tipo, rssi } = req.body;
+    console.log('[HEARTBEAT]', tipo, '-', dispositivo_id, '- RSSI:', rssi);
+    res.json({ mensaje: 'OK', timestamp: new Date() });
   } catch (error) {
     res.status(400).json({ mensaje: error.message });
   }
