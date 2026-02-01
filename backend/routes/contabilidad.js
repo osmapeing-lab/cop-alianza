@@ -7,7 +7,7 @@ const {
   updateContabilidad,
   deleteContabilidad,
   getResumenContable
-} = require('../controllers/contabilidadController');
+} = require('../controllers/LaContabilidadController');
 
 router.get('/', getContabilidad);
 router.get('/resumen', getResumenContable);
