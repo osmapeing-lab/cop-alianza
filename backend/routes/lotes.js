@@ -21,3 +21,5 @@ router.put('/:id/finalizar', finalizarLote);
 router.delete('/:id', deleteLote);
 
 module.exports = router;
+
+        //espacio para comit 
