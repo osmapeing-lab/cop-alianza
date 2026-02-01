@@ -20,6 +20,9 @@ const Reading = require('../models/Reading');
 const Alert = require('../models/Alert');
 const Motorbomb = require('../models/Motorbomb');
 const Weighing = require('../models/Weighing');
+const Lote = require('../models/lote');
+const WaterConsumption = require('../models/WaterConsumption');
+const Config = require('../models/Config');
 
 // Ultimos datos para consulta rapida
 let ultimosDatosPorqueriza = {
@@ -56,6 +59,9 @@ exports.recibirRiego = async (req, res) => {
     console.log('  RSSI:', rssi, 'dBm');
     console.log('========================================');
     
+    // Obtener configuracion de umbrales
+    const config = await Config.findOne() || { umbral_temp_max: 37, umbral_temp_critico: 40 };
+    
     const lecturas = [];
     
     if (temperatura !== undefined) {
@@ -66,17 +72,21 @@ exports.recibirRiego = async (req, res) => {
         unidad: 'C'
       });
       
-      // Alertas de temperatura
-      if (temperatura >= 40) {
+      // Alertas de temperatura usando config
+      if (temperatura >= config.umbral_temp_critico) {
         const alerta = new Alert({
           tipo: 'critico',
           mensaje: 'CRITICO: Temperatura ' + temperatura + 'C - Riesgo de estres termico',
           valor: temperatura
         });
         await alerta.save();
-        await Motorbomb.updateMany({ conectada: true }, { estado: true });
-        console.log('[ALERTA] Temperatura critica - Bombas activadas');
-      } else if (temperatura >= 35) {
+        
+        // Activar bombas automaticamente si esta habilitado
+        if (config.bomba_automatica) {
+          await Motorbomb.updateMany({ conectada: true }, { estado: true });
+          console.log('[ALERTA] Temperatura critica - Bombas activadas');
+        }
+      } else if (temperatura >= config.umbral_temp_max) {
         const alerta = new Alert({
           tipo: 'alerta',
           mensaje: 'ALERTA: Temperatura ' + temperatura + 'C - Por encima del umbral',
@@ -202,6 +212,20 @@ exports.recibirFlujo = async (req, res) => {
         valor: volumen_diario_l,
         unidad: 'L'
       });
+      
+      // Guardar consumo diario en WaterConsumption
+      const hoy = new Date();
+      hoy.setHours(0, 0, 0, 0);
+      
+      await WaterConsumption.findOneAndUpdate(
+        { fecha: { $gte: hoy }, tipo: 'diario' },
+        { 
+          litros: volumen_diario_l,
+          tipo: 'diario',
+          fecha: new Date()
+        },
+        { upsert: true, new: true }
+      );
     }
     
     if (lecturas.length > 0) {
@@ -279,19 +303,36 @@ exports.obtenerDatosFlujo = async (req, res) => {
 
 exports.recibirPeso = async (req, res) => {
   try {
-    const { sensor_id, peso, unidad, tipo_animal } = req.body;
+    const { sensor_id, peso, unidad } = req.body;
     
     console.log('[ESP32] Peso recibido:', peso, unidad || 'kg');
     
+    // Buscar lote activo para asociar el pesaje
+    const loteActivo = await Lote.findOne({ activo: true }).sort({ createdAt: -1 });
+    
     const pesaje = new Weighing({
-      cerdo: 'Cerdo_' + Date.now(),
+      lote: loteActivo ? loteActivo._id : null,
       peso,
       unidad: unidad || 'kg',
-      tipo_animal,
-      validado: false
+      sensor_id: sensor_id || 'bascula',
+      cantidad_cerdos_pesados: 1
     });
     await pesaje.save();
     
+    // Actualizar peso promedio del lote si existe
+    if (loteActivo) {
+      const pesajesLote = await Weighing.find({ lote: loteActivo._id });
+      const totalPeso = pesajesLote.reduce((sum, p) => sum + (p.peso_promedio || p.peso), 0);
+      const pesoPromedio = totalPeso / pesajesLote.length;
+      
+      await Lote.findByIdAndUpdate(loteActivo._id, {
+        peso_promedio_actual: Math.round(pesoPromedio * 100) / 100
+      });
+      
+      console.log('[ESP32] Peso asociado a lote:', loteActivo.nombre);
+    }
+    
+    // Guardar lectura
     const lectura = new Reading({
       sensor: sensor_id || 'bascula',
       tipo: 'peso',
@@ -300,13 +341,23 @@ exports.recibirPeso = async (req, res) => {
     });
     await lectura.save();
     
+    // WebSocket
     if (global.io) {
-      global.io.emit('nuevo_peso', { peso, unidad: unidad || 'kg' });
+      global.io.emit('nuevo_peso', { 
+        peso, 
+        unidad: unidad || 'kg',
+        lote: loteActivo ? loteActivo.nombre : null
+      });
     }
     
-    res.status(201).json({ mensaje: 'Peso registrado', peso });
+    res.status(201).json({ 
+      mensaje: 'Peso registrado', 
+      peso,
+      lote: loteActivo ? loteActivo.nombre : 'Sin lote activo'
+    });
     
   } catch (error) {
+    console.error('[ESP32] Error peso:', error);
     res.status(400).json({ mensaje: error.message });
   }
 };
@@ -319,7 +370,10 @@ exports.recibirPeso = async (req, res) => {
 exports.obtenerHistorialPeso = async (req, res) => {
   try {
     const limite = parseInt(req.query.limite) || 20;
-    const pesajes = await Weighing.find().sort({ createdAt: -1 }).limit(limite);
+    const pesajes = await Weighing.find()
+      .populate('lote', 'nombre')
+      .sort({ createdAt: -1 })
+      .limit(limite);
     res.json(pesajes);
   } catch (error) {
     res.status(500).json({ mensaje: error.message });

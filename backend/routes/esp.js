@@ -47,8 +47,10 @@ router.get('/test', (req, res) => {
       'GET /api/esp/flujo',
       'POST /api/esp/peso',
       'GET /api/esp/pesos',
-      'GET /api/esp/bombas'
-    ]
+      'GET /api/esp/bombas',
+      'POST /api/esp/heartbeat'
+    ],
+    timestamp: new Date()
   });
 });
 

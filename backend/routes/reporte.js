@@ -1,8 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { enviarReporteEmail, descargarReporte } = require('../controllers/reporteController');
+const { generarReporteExcel, obtenerResumen } = require('../controllers/reporteController');
 
-router.post('/enviar', enviarReporteEmail);
-router.post('/descargar', descargarReporte);
+router.get('/excel', generarReporteExcel);
+router.get('/resumen', obtenerResumen);
 
 module.exports = router;

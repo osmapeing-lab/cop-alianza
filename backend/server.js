@@ -18,8 +18,10 @@ const farmRoutes = require('./routes/farms');
 const espRoutes = require('./routes/esp');
 const reporteRoutes = require('./routes/reporte');
 const idtoluRoutes = require('./routes/idtolu');
-
 const Session = require('./models/Session');
+const loteRoutes = require('./routes/lotes');
+const contabilidadRoutes = require('./routes/contabilidad');
+const pesajeRoutes = require('./routes/pesajes');
 
 const app = express();
 const server = http.createServer(app);
@@ -50,6 +52,10 @@ app.use('/api/farms', farmRoutes);
 app.use('/api/esp', espRoutes);
 app.use('/api/reporte', reporteRoutes);
 app.use('/api/idtolu', idtoluRoutes);
+app.use('/api/lotes', loteRoutes);
+app.use('/api/contabilidad', contabilidadRoutes);
+app.use('/api/pesajes', pesajeRoutes);
+
 
 app.get('/', (req, res) => {
   res.json({ 

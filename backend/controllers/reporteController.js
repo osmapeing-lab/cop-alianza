@@ -1,142 +1,256 @@
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ * COO ALIANZAS - CONTROLADOR DE REPORTES
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+
 const ExcelJS = require('exceljs');
-const { Resend } = require('resend');
-const path = require('path');
-const os = require('os');
-const fs = require('fs');
+const Reading = require('../models/Reading');
+const Weighing = require('../models/Weighing');
+const Lote = require('../models/lote');
+const Contabilidad = require('../models/contabilidad');
+const WaterConsumption = require('../models/WaterConsumption');
+const Alert = require('../models/Alert');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+// ═══════════════════════════════════════════════════════════════════════
+// GENERAR REPORTE EXCEL COMPLETO
+// GET /api/reporte/excel
+// ═══════════════════════════════════════════════════════════════════════
 
-exports.generarReporteExcel = async (datos) => {
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'COP Alianza';
-  workbook.created = new Date();
-
-  const sheet = workbook.addWorksheet('Reporte Granja');
-
-  sheet.columns = [
-    { width: 30 },
-    { width: 25 },
-    { width: 20 }
-  ];
-
-  sheet.mergeCells('A1:C1');
-  const titleCell = sheet.getCell('A1');
-  titleCell.value = 'REPORTE GRANJA PORCINA COO-ALIANZAS';
-  titleCell.font = { bold: true, size: 16, color: { argb: 'FFFFFF' } };
-  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '2d6a4f' } };
-  titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
-  sheet.getRow(1).height = 35;
-
-  sheet.mergeCells('A2:C2');
-  const fechaCell = sheet.getCell('A2');
-  fechaCell.value = `Fecha: ${new Date().toLocaleString()}`;
-  fechaCell.font = { italic: true, size: 10 };
-  fechaCell.alignment = { horizontal: 'center' };
-
-  const headerRow = sheet.getRow(4);
-  headerRow.values = ['Parametro', 'Valor', 'Estado'];
-  headerRow.font = { bold: true };
-  headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'e8f5e9' } };
-
-  const filas = [
-    ['Temperatura Ambiente', `${datos.temp_ambiente || '--'} °C`, datos.temp_ambiente ? 'OK' : 'Sin datos'],
-    ['Temperatura Porqueriza', `${datos.temp_porqueriza || '--'} °C`, datos.temp_porqueriza ? 'OK' : 'Sin datos'],
-    ['Humedad Ambiente', `${datos.humedad_ambiente || '--'} %`, datos.humedad_ambiente ? 'OK' : 'Sin datos'],
-    ['Humedad Porqueriza', `${datos.humedad_porqueriza || '--'} %`, datos.humedad_porqueriza ? 'OK' : 'Sin datos'],
-    ['Sensacion Termica', `${datos.sensacion_termica || '--'} °C`, ''],
-    ['Consumo Diario', `${datos.consumo_diario || 0} L`, ''],
-    ['Consumo Mensual', `${datos.consumo_mensual || 0} L`, ''],
-    ['Tanque Principal', `${datos.nivel_tanque1 || '--'} %`, datos.nivel_tanque1 < 20 ? 'BAJO' : 'OK'],
-    ['Tanque Reserva', `${datos.nivel_tanque2 || '--'} %`, datos.nivel_tanque2 < 20 ? 'BAJO' : 'OK']
-  ];
-
-  let rowIndex = 5;
-  filas.forEach((fila) => {
-    const row = sheet.getRow(rowIndex);
-    row.values = fila;
-    row.alignment = { horizontal: 'center' };
-    rowIndex++;
-  });
-
-  rowIndex++;
-  sheet.getCell(`A${rowIndex}`).value = 'ESTADO DE BOMBAS';
-  sheet.getCell(`A${rowIndex}`).font = { bold: true };
-  rowIndex++;
-
-  if (datos.bombas && datos.bombas.length > 0) {
-    datos.bombas.forEach((bomba) => {
-      const row = sheet.getRow(rowIndex);
-      row.values = [bomba.nombre, bomba.estado ? 'ENCENDIDA' : 'APAGADA', bomba.conectada ? 'Conectada' : 'Sin conexion'];
-      rowIndex++;
-    });
-  }
-
-  return workbook;
-};
-
-exports.enviarReporteEmail = async (req, res) => {
+exports.generarReporteExcel = async (req, res) => {
   try {
-    const { datos } = req.body;
-
-    if (!process.env.RESEND_API_KEY) {
-      return res.status(500).json({ mensaje: 'API de email no configurada' });
-    }
-
-    const workbook = await exports.generarReporteExcel(datos || {});
+    const { tipo } = req.query;
     
-    const tempDir = os.tmpdir();
-    const fileName = `reporte_${Date.now()}.xlsx`;
-    const filePath = path.join(tempDir, fileName);
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'COO Alianzas';
+    workbook.created = new Date();
+
+    // Estilos comunes
+    const headerStyle = {
+      font: { bold: true, color: { argb: 'FFFFFF' } },
+      fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD633' } },
+      alignment: { horizontal: 'center', vertical: 'middle' }
+    };
+
+    const titleStyle = {
+      font: { bold: true, size: 16, color: { argb: '000000' } },
+      alignment: { horizontal: 'center', vertical: 'middle' }
+    };
+
+    // ─────────────────────────────────────────────────────────────────────
+    // HOJA 1: RESUMEN EJECUTIVO
+    // ─────────────────────────────────────────────────────────────────────
+    const resumenSheet = workbook.addWorksheet('Resumen Ejecutivo');
+    resumenSheet.columns = [
+      { width: 30 },
+      { width: 25 },
+      { width: 20 }
+    ];
+
+    resumenSheet.mergeCells('A1:C1');
+    resumenSheet.getCell('A1').value = 'REPORTE COO ALIANZAS - GRANJA PORCINA';
+    resumenSheet.getCell('A1').style = titleStyle;
+    resumenSheet.getRow(1).height = 35;
+
+    resumenSheet.getCell('A2').value = `Fecha: ${new Date().toLocaleString()}`;
     
-    await workbook.xlsx.writeFile(filePath);
+    // Obtener datos
+    const ultimaTemp = await Reading.findOne({ tipo: 'temp_porqueriza' }).sort({ createdAt: -1 });
+    const ultimaHum = await Reading.findOne({ tipo: 'humedad_porqueriza' }).sort({ createdAt: -1 });
+    const ultimoFlujo = await Reading.findOne({ tipo: 'volumen_diario' }).sort({ createdAt: -1 });
+    const lotesActivos = await Lote.countDocuments({ activo: true });
+    const totalCerdos = await Lote.aggregate([
+      { $match: { activo: true } },
+      { $group: { _id: null, total: { $sum: '$cantidad_cerdos' } } }
+    ]);
 
-    const fileBuffer = fs.readFileSync(filePath);
-    const base64File = fileBuffer.toString('base64');
+    const datosResumen = [
+      ['', '', ''],
+      ['MONITOREO ACTUAL', '', ''],
+      ['Temperatura Porqueriza', ultimaTemp?.valor ? `${ultimaTemp.valor} °C` : 'Sin datos', ''],
+      ['Humedad Porqueriza', ultimaHum?.valor ? `${ultimaHum.valor} %` : 'Sin datos', ''],
+      ['Consumo Agua Hoy', ultimoFlujo?.valor ? `${ultimoFlujo.valor} L` : 'Sin datos', ''],
+      ['', '', ''],
+      ['PRODUCCION', '', ''],
+      ['Lotes Activos', lotesActivos, ''],
+      ['Total Cerdos', totalCerdos[0]?.total || 0, '']
+    ];
 
-    await resend.emails.send({
-      from: 'COP Alianza <onboarding@resend.dev>',
-      to: ['osmapeing@gmail.com'],
-      subject: `Reporte Diario - COP Alianza - ${new Date().toLocaleDateString()}`,
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px;">
-          <h2 style="color: #2d6a4f;">Reporte Diario - COP Alianza</h2>
-          <p>Adjunto el reporte generado del sistema de monitoreo.</p>
-          <p><strong>Fecha:</strong> ${new Date().toLocaleString()}</p>
-          <hr>
-          <p style="color: #6b7280; font-size: 12px;">Cooperativa Alianzas - Lorica, Córdoba</p>
-        </div>
-      `,
-      attachments: [
-        {
-          filename: `Reporte_COP_Alianza_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`,
-          content: base64File
-        }
-      ]
+    datosResumen.forEach((row, i) => {
+      const rowNum = i + 4;
+      resumenSheet.getRow(rowNum).values = row;
+      if (row[0] === 'MONITOREO ACTUAL' || row[0] === 'PRODUCCION') {
+        resumenSheet.getRow(rowNum).font = { bold: true };
+        resumenSheet.getRow(rowNum).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3CD' } };
+      }
     });
 
-    try {
-      fs.unlinkSync(filePath);
-    } catch (e) {
-      console.log('No se pudo eliminar archivo temporal');
-    }
+    // ─────────────────────────────────────────────────────────────────────
+    // HOJA 2: LOTES
+    // ─────────────────────────────────────────────────────────────────────
+    const lotesSheet = workbook.addWorksheet('Lotes');
+    lotesSheet.columns = [
+      { header: 'Nombre', key: 'nombre', width: 20 },
+      { header: 'Cantidad Cerdos', key: 'cantidad', width: 18 },
+      { header: 'Estado', key: 'estado', width: 15 },
+      { header: 'Peso Promedio', key: 'peso', width: 18 },
+      { header: 'Fecha Inicio', key: 'fecha', width: 20 },
+      { header: 'Activo', key: 'activo', width: 10 }
+    ];
 
-    res.json({ mensaje: 'Reporte enviado correctamente' });
+    lotesSheet.getRow(1).style = headerStyle;
+
+    const lotes = await Lote.find().sort({ createdAt: -1 });
+    lotes.forEach(lote => {
+      lotesSheet.addRow({
+        nombre: lote.nombre,
+        cantidad: lote.cantidad_cerdos,
+        estado: lote.estado,
+        peso: lote.peso_promedio_actual ? `${lote.peso_promedio_actual} kg` : '-',
+        fecha: lote.fecha_inicio?.toLocaleDateString() || '-',
+        activo: lote.activo ? 'Si' : 'No'
+      });
+    });
+
+    // ─────────────────────────────────────────────────────────────────────
+    // HOJA 3: PESAJES
+    // ─────────────────────────────────────────────────────────────────────
+    const pesajesSheet = workbook.addWorksheet('Pesajes');
+    pesajesSheet.columns = [
+      { header: 'Fecha', key: 'fecha', width: 20 },
+      { header: 'Lote', key: 'lote', width: 20 },
+      { header: 'Peso Total', key: 'peso', width: 15 },
+      { header: 'Cerdos Pesados', key: 'cantidad', width: 18 },
+      { header: 'Peso Promedio', key: 'promedio', width: 18 }
+    ];
+
+    pesajesSheet.getRow(1).style = headerStyle;
+
+    const pesajes = await Weighing.find().populate('lote', 'nombre').sort({ createdAt: -1 }).limit(100);
+    pesajes.forEach(p => {
+      pesajesSheet.addRow({
+        fecha: p.createdAt?.toLocaleString() || '-',
+        lote: p.lote?.nombre || 'Sin lote',
+        peso: `${p.peso} kg`,
+        cantidad: p.cantidad_cerdos_pesados || 1,
+        promedio: p.peso_promedio ? `${p.peso_promedio} kg` : '-'
+      });
+    });
+
+    // ─────────────────────────────────────────────────────────────────────
+    // HOJA 4: CONTABILIDAD
+    // ─────────────────────────────────────────────────────────────────────
+    const contaSheet = workbook.addWorksheet('Contabilidad');
+    contaSheet.columns = [
+      { header: 'Fecha', key: 'fecha', width: 15 },
+      { header: 'Tipo', key: 'tipo', width: 12 },
+      { header: 'Categoria', key: 'categoria', width: 18 },
+      { header: 'Descripcion', key: 'descripcion', width: 30 },
+      { header: 'Cantidad', key: 'cantidad', width: 12 },
+      { header: 'Precio Unit', key: 'precio', width: 15 },
+      { header: 'Total', key: 'total', width: 15 },
+      { header: 'Lote', key: 'lote', width: 15 }
+    ];
+
+    contaSheet.getRow(1).style = headerStyle;
+
+    const contabilidad = await Contabilidad.find().populate('lote', 'nombre').sort({ fecha: -1 });
+    let totalIngresos = 0;
+    let totalGastos = 0;
+
+    contabilidad.forEach(c => {
+      if (c.tipo === 'ingreso') totalIngresos += c.total;
+      if (c.tipo === 'gasto') totalGastos += c.total;
+
+      contaSheet.addRow({
+        fecha: c.fecha?.toLocaleDateString() || '-',
+        tipo: c.tipo,
+        categoria: c.categoria,
+        descripcion: c.descripcion || '-',
+        cantidad: c.cantidad,
+        precio: `$${c.precio_unitario?.toLocaleString()}`,
+        total: `$${c.total?.toLocaleString()}`,
+        lote: c.lote?.nombre || '-'
+      });
+    });
+
+    // Totales
+    const lastRow = contaSheet.lastRow.number + 2;
+    contaSheet.getCell(`F${lastRow}`).value = 'Total Ingresos:';
+    contaSheet.getCell(`G${lastRow}`).value = `$${totalIngresos.toLocaleString()}`;
+    contaSheet.getCell(`G${lastRow}`).font = { bold: true, color: { argb: '10B981' } };
+
+    contaSheet.getCell(`F${lastRow + 1}`).value = 'Total Gastos:';
+    contaSheet.getCell(`G${lastRow + 1}`).value = `$${totalGastos.toLocaleString()}`;
+    contaSheet.getCell(`G${lastRow + 1}`).font = { bold: true, color: { argb: 'DC2626' } };
+
+    contaSheet.getCell(`F${lastRow + 2}`).value = 'Balance:';
+    contaSheet.getCell(`G${lastRow + 2}`).value = `$${(totalIngresos - totalGastos).toLocaleString()}`;
+    contaSheet.getCell(`G${lastRow + 2}`).font = { bold: true };
+
+    // ─────────────────────────────────────────────────────────────────────
+    // HOJA 5: ALERTAS
+    // ─────────────────────────────────────────────────────────────────────
+    const alertasSheet = workbook.addWorksheet('Alertas');
+    alertasSheet.columns = [
+      { header: 'Fecha', key: 'fecha', width: 20 },
+      { header: 'Tipo', key: 'tipo', width: 15 },
+      { header: 'Mensaje', key: 'mensaje', width: 50 }
+    ];
+
+    alertasSheet.getRow(1).style = headerStyle;
+
+    const alertas = await Alert.find().sort({ createdAt: -1 }).limit(50);
+    alertas.forEach(a => {
+      alertasSheet.addRow({
+        fecha: a.createdAt?.toLocaleString() || '-',
+        tipo: a.tipo,
+        mensaje: a.mensaje
+      });
+    });
+
+    // Enviar archivo
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=Reporte_COO_Alianzas_${new Date().toISOString().split('T')[0]}.xlsx`);
+
+    await workbook.xlsx.write(res);
+    res.end();
+
   } catch (error) {
-    console.log('Error enviando reporte:', error);
+    console.error('[REPORTE] Error:', error);
     res.status(500).json({ mensaje: error.message });
   }
 };
 
-exports.descargarReporte = async (req, res) => {
+// ═══════════════════════════════════════════════════════════════════════
+// OBTENER RESUMEN PARA DASHBOARD
+// GET /api/reporte/resumen
+// ═══════════════════════════════════════════════════════════════════════
+
+exports.obtenerResumen = async (req, res) => {
   try {
-    const { datos } = req.body;
-    const workbook = await exports.generarReporteExcel(datos || {});
+    const lotesActivos = await Lote.countDocuments({ activo: true });
+    
+    const totalCerdos = await Lote.aggregate([
+      { $match: { activo: true } },
+      { $group: { _id: null, total: { $sum: '$cantidad_cerdos' } } }
+    ]);
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=Reporte_COP_Alianza.xlsx');
+    const contabilidad = await Contabilidad.find();
+    const gastos = contabilidad.filter(c => c.tipo === 'gasto').reduce((sum, c) => sum + c.total, 0);
+    const ingresos = contabilidad.filter(c => c.tipo === 'ingreso').reduce((sum, c) => sum + c.total, 0);
 
-    await workbook.xlsx.write(res);
-    res.end();
+    const ultimoPesaje = await Weighing.findOne().sort({ createdAt: -1 });
+
+    res.json({
+      lotes_activos: lotesActivos,
+      total_cerdos: totalCerdos[0]?.total || 0,
+      total_gastos: gastos,
+      total_ingresos: ingresos,
+      balance: ingresos - gastos,
+      ultimo_peso: ultimoPesaje?.peso || 0
+    });
+
   } catch (error) {
     res.status(500).json({ mensaje: error.message });
   }
