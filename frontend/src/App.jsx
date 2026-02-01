@@ -142,7 +142,7 @@ const IconRefresh = () => (
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════
 
-function App() {}
+function App() {
   // Estados de autenticación
   const [user, setUser] = useState(null)
   const [token, setToken] = useState(localStorage.getItem('token') || null)
@@ -1875,5 +1875,5 @@ function App() {}
     </div>
   )
 
-
+}
 export default App      
