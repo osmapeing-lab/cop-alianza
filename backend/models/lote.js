@@ -43,4 +43,4 @@ const loteSchema = new mongoose.Schema({
   timestamps: true
 });
 
-module.exports = mongoose.model('Lote', loteSchema);
+module.exports = mongoose.model('lote', loteSchema);
