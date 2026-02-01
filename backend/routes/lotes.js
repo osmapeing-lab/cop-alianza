@@ -9,7 +9,7 @@ const {
   deleteLote,
   finalizarLote,
   getResumenLote
-} = require('../controllers/loteController');
+} = require('../controllers/lotecontroller');
 
 router.get('/', getLotes);
 router.get('/activos', getLotesActivos);
