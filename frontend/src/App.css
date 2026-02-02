@@ -11,10 +11,10 @@
    ═══════════════════════════════════════════════════════════════════════ */
 
 :root {
-  --primary: #D4A800;
-  --primary-dark: #B8920A;
-  --primary-light: #F5D547;
-  --primary-bg: #FEF9E7;
+  --primary: #FFD633;
+--primary-dark: #fde37a;
+--primary-light: #FFE566;
+--primary-bg: #FFFBEB;
   
   --white: #FFFFFF;
   --gray-50: #F9FAFB;
