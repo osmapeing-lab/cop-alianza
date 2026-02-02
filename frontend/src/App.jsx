@@ -20,20 +20,6 @@ const LON = -75.8091
 // ═══════════════════════════════════════════════════════════════════════
 
 
-const IconCerdo = ({ size = 24 }) => (
-  <svg width={size} height={size} viewBox="0 0 64 64" fill="currentColor">
-    <ellipse cx="32" cy="38" rx="24" ry="20" fill="currentColor"/>
-    <circle cx="20" cy="32" r="4" fill="#FFF"/>
-    <circle cx="44" cy="32" r="4" fill="#FFF"/>
-    <circle cx="21" cy="33" r="2" fill="#333"/>
-    <circle cx="45" cy="33" r="2" fill="#333"/>
-    <ellipse cx="32" cy="44" rx="10" ry="7" fill="#FFB6C1"/>
-    <circle cx="28" cy="44" r="2" fill="#FF8C94"/>
-    <circle cx="36" cy="44" r="2" fill="#FF8C94"/>
-    <ellipse cx="16" cy="22" rx="6" ry="8" fill="currentColor"/>
-    <ellipse cx="48" cy="22" rx="6" ry="8" fill="currentColor"/>
-  </svg>
-)
 
 const IconTemp = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
@@ -154,19 +140,7 @@ const IconRefresh = () => (
 // ═══════════════════════════════════════════════════════════════════════
 
 function App() {
-  // 1. AÑADE ESTA VARIABLE AQUÍ ARRIBA
-  const enMantenimiento = true; 
-
-  // 2. AÑADE ESTE BLOQUE "IF"
-  if (enMantenimiento) {
-    return (
-      <div style={{ textAlign: 'center', marginTop: '20%', fontFamily: 'sans-serif' }}>
-        <h1>SISTEMA EN MANTENIMIENTO</h1>
-        <p>Estamos ajustando los servidores. Volvemos en breve. 🐷</p>
-      </div>
-    );
-  }
-
+ 
   // Estados de autenticación
   const [user, setUser] = useState(null)
   const [token, setToken] = useState(localStorage.getItem('token') || null)
@@ -722,8 +696,7 @@ function App() {
   const formatearDinero = (valor) => {
     return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(valor || 0)
   }
-
-  // ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
   // RENDER: LOGIN
   // ═══════════════════════════════════════════════════════════════════════
 
@@ -732,12 +705,11 @@ function App() {
       <div className="login-container">
         <div className="login-box">
           <div className="login-logo">
-            <IconCerdo />
-            <h1>COO Alianzas</h1>
-            <p>Sistema de Monitoreo Porcino</p>
+            <img src="/coo-alianzas logo.png" alt="COO Alianzas" style={{width: '120px', height: 'auto'}} />
+            <h1>Sistema de Automatizacion IOT</h1>
           </div>
           
-          <form onSubmit={handleLogin}>
+          <form onSubmit={handleLogin} style={{padding: '30px 45px'}}>
             {errorLogin && <div className="error-msg">{errorLogin}</div>}
             
             <div className="input-group">
@@ -783,7 +755,6 @@ function App() {
       </div>
     )
   }
-
   // ═══════════════════════════════════════════════════════════════════════
   // RENDER: DASHBOARD PRINCIPAL
   // ═══════════════════════════════════════════════════════════════════════
@@ -799,8 +770,10 @@ function App() {
             <span></span>
           </button>
           <div className="logo">
-            <IconCerdo />
-            <span>COO Alianzas</span>
+             <div className="login-logo">
+  <img src="/coo-alianzas logo.png" alt="COO Alianzas" style={{width: '120px', height: 'auto'}} />
+            <h1>Sistema de Automatizacion IOT</h1>
+          </div>
           </div>
         </div>
         
