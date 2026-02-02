@@ -772,7 +772,6 @@ function App() {
           <div className="logo">
              <div className="login-logo">
   <img src="/coo-alianzas logo.png" alt="COO Alianzas" style={{width: '120px', height: 'auto'}} />
-            <h1>Sistema de Automatizacion IOT</h1>
           </div>
           </div>
         </div>
