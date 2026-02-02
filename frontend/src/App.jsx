@@ -932,19 +932,20 @@ function App() {
                 </div>
 
                 {/* Flujo de agua */}
-                <div className="card">
-                  <div className="card-header">
-                    <IconAgua />
-                    <h3>Consumo Agua</h3>
-                    <span className={`estado-badge ${flujo.conectado ? 'conectado' : 'desconectado'}`}>
-                      {flujo.conectado ? 'Conectado' : 'Desconectado'}
-                    </span>
-                  </div>
-                  <div className="card-body">
-                    <div className="dato-principal">{flujo.volumen_diario} L</div>
-                    <div className="dato-secundario">Caudal: {flujo.caudal} L/min</div>
-                  </div>
-                </div>
+<div className="card">
+  <div className="card-header">
+    <IconAgua />
+    <h3>Consumo Agua</h3>
+    <span className={`estado-badge ${flujo.conectado ? 'conectado' : 'desconectado'}`}>
+      {flujo.conectado ? 'Conectado' : 'Desconectado'}
+    </span>
+  </div>
+  <div className="card-body">
+    <div className="dato-principal">{flujo.volumen_total ? `${flujo.volumen_total.toFixed(1)} L` : '0 L'}</div>
+    <div className="dato-secundario">Volumen Total</div>
+    <div className="dato-secundario">Caudal: {flujo.caudal || 0} L/min</div>
+  </div>
+</div>
 
                 {/* Último peso */}
                 <div className="card">
