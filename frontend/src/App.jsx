@@ -761,32 +761,32 @@ function App() {
 
   return (
     <div className="app">
-   {/* Header */}
-<header className="header">
-  <div className="header-left">
-    <button className="btn-menu" onClick={() => setMenuAbierto(!menuAbierto)}>
-      <span></span>
-      <span></span>
-      <span></span>
-    </button>
-    <div className="logo">
-      <img src="/coo-alianzas logo.png" alt="COO Alianzas" style={{height: '40px', width: 'auto'}} />
-      <span>COO Alianzas</span>
-    </div>
-  </div>
-  
-  <div className="header-right">
-    <span className="user-info">
-      <IconUsuario />
-      {user.usuario}
-    </span>
-    <span className="rol-badge">{user.rol}</span>
-    <button className="btn-logout" onClick={handleLogout}>
-      <IconLogout />
-      Salir
-    </button>
-  </div>
-</header>
+      {/* Header */}
+      <header className="header">
+        <div className="header-left">
+          <button className="btn-menu" onClick={() => setMenuAbierto(!menuAbierto)}>
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+          <div className="logo">
+             <div className="login-logo">
+  <img src="/coo-alianzas logo.png" alt="COO Alianzas" style={{width: '120px', height: 'auto'}} />
+          </div>
+          </div>
+        </div>
+        
+        <div className="header-right">
+          <span className="user-info">
+            <IconUsuario />
+            {user.usuario} ({user.rol})
+          </span>
+          <button className="btn-logout" onClick={handleLogout}>
+            <IconLogout />
+            Salir
+          </button>
+        </div>
+      </header>
 
       <div className="main-container">
         {/* Sidebar */}
@@ -930,23 +930,25 @@ function App() {
                     </div>
                   </div>
                 </div>
-
-           {/* Flujo de agua */}
+{/* Flujo de agua */}
 <div className="card">
   <div className="card-header">
     <IconAgua />
     <h3>Consumo Agua</h3>
-    <span className={`estado-badge ${flujo.conectado ? 'conectado' : 'desconectado'}`}>
-      {flujo.conectado ? 'Conectado' : 'Desconectado'}
+    <span className={`estado-badge ${flujo.RSSI ? 'conectado' : 'desconectado'}`}>
+      {flujo.RSSI ? 'Conectado' : 'Desconectado'}
     </span>
   </div>
   <div className="card-body">
-    <div className="dato-principal">
-      {flujo.volumen_total ? `${flujo.volumen_total.toFixed(1)} L` : 'Sin datos'}
+    {/* Mostramos el Volumen Total como consumo acumulado actual */}
+    <div className="dato-principal" style={{ fontSize: '1.8rem' }}>
+      {flujo["Volumen total"] || 0} L
     </div>
-    <div className="dato-secundario">Volumen Total</div>
     <div className="dato-secundario">
-      Caudal: {flujo.caudal ? `${flujo.caudal} L/min` : 'Sin datos'}
+      <strong>Consumo Actual:</strong> {flujo.Caudal || 0} L/min
+    </div>
+    <div className="dato-secundario" style={{ fontSize: '0.8rem', marginTop: '5px', opacity: 0.8 }}>
+      Señal (RSSI): {flujo.RSSI || 0} dBm
     </div>
   </div>
 </div>
