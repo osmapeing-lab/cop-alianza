@@ -3,6 +3,7 @@ import axios from 'axios'
 import { io } from 'socket.io-client'
 import './App.css'
 
+
 // ═══════════════════════════════════════════════════════════════════════
 // CONFIGURACIÓN
 // ═══════════════════════════════════════════════════════════════════════
@@ -153,6 +154,19 @@ const IconRefresh = () => (
 // ═══════════════════════════════════════════════════════════════════════
 
 function App() {
+  // 1. AÑADE ESTA VARIABLE AQUÍ ARRIBA
+  const enMantenimiento = true; 
+
+  // 2. AÑADE ESTE BLOQUE "IF"
+  if (enMantenimiento) {
+    return (
+      <div style={{ textAlign: 'center', marginTop: '20%', fontFamily: 'sans-serif' }}>
+        <h1>SISTEMA EN MANTENIMIENTO</h1>
+        <p>Estamos ajustando los servidores. Volvemos en breve. 🐷</p>
+      </div>
+    );
+  }
+
   // Estados de autenticación
   const [user, setUser] = useState(null)
   const [token, setToken] = useState(localStorage.getItem('token') || null)
