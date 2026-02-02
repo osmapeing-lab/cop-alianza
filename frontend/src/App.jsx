@@ -931,7 +931,7 @@ function App() {
                   </div>
                 </div>
 
-                {/* Flujo de agua */}
+            {/* Flujo de agua */}
 <div className="card">
   <div className="card-header">
     <IconAgua />
@@ -941,9 +941,13 @@ function App() {
     </span>
   </div>
   <div className="card-body">
-    <div className="dato-principal">{flujo.volumen_total ? `${flujo.volumen_total.toFixed(1)} L` : '0 L'}</div>
+    <div className="dato-principal">
+      {flujo.volumen_total !== null ? `${flujo.volumen_total.toFixed(1)} L` : 'Sin datos'}
+    </div>
     <div className="dato-secundario">Volumen Total</div>
-    <div className="dato-secundario">Caudal: {flujo.caudal || 0} L/min</div>
+    <div className="dato-secundario">
+      Caudal: {flujo.caudal !== null ? `${flujo.caudal} L/min` : 'Sin datos'}
+    </div>
   </div>
 </div>
 
