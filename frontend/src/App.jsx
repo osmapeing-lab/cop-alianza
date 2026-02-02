@@ -761,32 +761,32 @@ function App() {
 
   return (
     <div className="app">
-      {/* Header */}
-      <header className="header">
-        <div className="header-left">
-          <button className="btn-menu" onClick={() => setMenuAbierto(!menuAbierto)}>
-            <span></span>
-            <span></span>
-            <span></span>
-          </button>
-          <div className="logo">
-             <div className="login-logo">
-  <img src="/coo-alianzas logo.png" alt="COO Alianzas" style={{width: '120px', height: 'auto'}} />
-          </div>
-          </div>
-        </div>
-        
-        <div className="header-right">
-          <span className="user-info">
-            <IconUsuario />
-            {user.usuario} ({user.rol})
-          </span>
-          <button className="btn-logout" onClick={handleLogout}>
-            <IconLogout />
-            Salir
-          </button>
-        </div>
-      </header>
+   {/* Header */}
+<header className="header">
+  <div className="header-left">
+    <button className="btn-menu" onClick={() => setMenuAbierto(!menuAbierto)}>
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+    <div className="logo">
+      <img src="/coo-alianzas logo.png" alt="COO Alianzas" style={{height: '40px', width: 'auto'}} />
+      <span>COO Alianzas</span>
+    </div>
+  </div>
+  
+  <div className="header-right">
+    <span className="user-info">
+      <IconUsuario />
+      {user.usuario}
+    </span>
+    <span className="rol-badge">{user.rol}</span>
+    <button className="btn-logout" onClick={handleLogout}>
+      <IconLogout />
+      Salir
+    </button>
+  </div>
+</header>
 
       <div className="main-container">
         {/* Sidebar */}

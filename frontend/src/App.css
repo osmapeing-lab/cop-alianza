@@ -117,9 +117,10 @@ body {
 }
 
 .login-form {
-  padding: 35px 50px 30px;
+  padding: 35px 40px 30px;
   background: var(--white);
 }
+
 .error-msg {
   background: var(--danger-light);
   color: var(--danger);
