@@ -929,30 +929,21 @@ function App() {
                       {getEstadoTemp(porqueriza.temp).texto}
                     </div>
                   </div>
-                </div>
-{/* Flujo de agua */}
+                </div>{/* Flujo de agua */}
 <div className="card">
   <div className="card-header">
     <IconAgua />
     <h3>Consumo Agua</h3>
-    <span className={`estado-badge ${flujo.RSSI ? 'conectado' : 'desconectado'}`}>
-      {flujo.RSSI ? 'Conectado' : 'Desconectado'}
+    <span className={`estado-badge ${flujo.conectado ? 'conectado' : 'desconectado'}`}>
+      {flujo.conectado ? 'Conectado' : 'Desconectado'}
     </span>
   </div>
   <div className="card-body">
-    {/* Mostramos el Volumen Total como consumo acumulado actual */}
-    <div className="dato-principal" style={{ fontSize: '1.8rem' }}>
-      {flujo["Volumen total"] || 0} L
-    </div>
-    <div className="dato-secundario">
-      <strong>Consumo Actual:</strong> {flujo.Caudal || 0} L/min
-    </div>
-    <div className="dato-secundario" style={{ fontSize: '0.8rem', marginTop: '5px', opacity: 0.8 }}>
-      Señal (RSSI): {flujo.RSSI || 0} dBm
-    </div>
+    <div className="dato-principal">{flujo.volumen_total ? `${flujo.volumen_total.toFixed(1)} L` : '0 L'}</div>
+    <div className="dato-secundario">Volumen Total</div>
+    <div className="dato-secundario">Caudal: {flujo.caudal || 0} L/min</div>
   </div>
 </div>
-
                 {/* Último peso */}
                 <div className="card">
                   <div className="card-header">
