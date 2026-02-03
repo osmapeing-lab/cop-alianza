@@ -140,6 +140,50 @@ const IconRefresh = () => (
 // ═══════════════════════════════════════════════════════════════════════
 
 function App() {
+
+  // ... (tus imports de arriba se mantienen igual)
+
+// 1. CREAMOS EL COMPONENTE DE MANTENIMIENTO (Ponlo fuera de la función App)
+const PantallaMantenimiento = () => (
+  <div style={{
+    height: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center',
+    backgroundColor: '#f4f7f6', fontFamily: 'sans-serif', textAlign: 'center', padding: '20px'
+  }}>
+    <div style={{
+      background: 'white', padding: '40px', borderRadius: '15px', 
+      boxShadow: '0 10px 25px rgba(0,0,0,0.1)', maxWidth: '450px'
+    }}>
+      <div style={{ fontSize: '60px', marginBottom: '20px' }}>🛠️</div>
+      <h1 style={{ color: '#2c3e50', margin: '0 0 15px' }}>¡Volvemos pronto!</h1>
+      <p style={{ color: '#7f8c8d', lineHeight: '1.6' }}>
+        Estamos realizando mejoras técnicas en el <strong>Sistema de Automatización IOT</strong>. 
+        Disculpa las molestias, regresaremos en unos minutos.
+      </p>
+      <div className="loader-mantenimiento"></div>
+      <p style={{ fontSize: '12px', color: '#bdc3c7', marginTop: '20px' }}>EQUIPO COO ALIANZAS</p>
+    </div>
+    <style>{`
+      .loader-mantenimiento {
+        border: 4px solid #f3f3f3; border-top: 4px solid #3498db;
+        border-radius: 50%; width: 30px; height: 30px;
+        animation: spin 1s linear infinite; margin: 20px auto;
+      }
+      @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    `}</style>
+  </div>
+);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // INTERRUPTOR DE MANTENIMIENTO
+  // ═══════════════════════════════════════════════════════════════════════
+  const [enMantenimiento, setEnMantenimiento] = useState(true); // <--- CAMBIA A false PARA ACTIVAR LA WEB
+
+  // Si el mantenimiento está activo, mostramos la pantalla y cortamos la ejecución aquí
+  if (enMantenimiento) {
+    return <PantallaMantenimiento />;
+  }
+
+
  
   // Estados de autenticación
   const [user, setUser] = useState(null)
@@ -1001,6 +1045,7 @@ function App() {
               </div>
             </div>
           )}
+
 
     {/* ════════════════════════════════════════════════════════════════ */}
           {/* PÁGINA: LOTES */}
