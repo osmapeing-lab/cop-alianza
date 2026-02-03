@@ -31,11 +31,11 @@ const weighingSchema = new mongoose.Schema({
   timestamps: true
 });
 
-weighingSchema.pre('save', function(next) {
+// Calcular peso promedio antes de guardar (sin next)
+weighingSchema.pre('save', async function() {
   if (this.cantidad_cerdos_pesados > 0) {
     this.peso_promedio = this.peso / this.cantidad_cerdos_pesados;
   }
-  next();
 });
 
 module.exports = mongoose.model('Weighing', weighingSchema);
