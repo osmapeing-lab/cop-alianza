@@ -2568,3 +2568,741 @@ table td.sin-datos {
     padding: 8px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DASHBOARD MEJORADO
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.dashboard-section {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.dashboard-section h3 {
+  margin: 0 0 16px;
+  color: #1b4332;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+/* Estado General de la Granja */
+.estado-granja-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.estado-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: linear-gradient(135deg, #f8faf9 0%, #e8f5e9 100%);
+  border-radius: 12px;
+  border-left: 4px solid #2d6a4f;
+}
+
+.estado-icono {
+  font-size: 2rem;
+}
+
+.estado-numero {
+  display: block;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1b4332;
+}
+
+.estado-label {
+  display: block;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+/* Resumen Contable Dashboard */
+.contable-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.contable-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 12px;
+  background: #f8faf9;
+}
+
+.contable-card.ingresos {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  border-left: 4px solid #10b981;
+}
+
+.contable-card.gastos {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border-left: 4px solid #ef4444;
+}
+
+.contable-card.balance.positivo {
+  background: linear-gradient(135deg, #d1fae5 0%, #6ee7b7 100%);
+  border-left: 4px solid #059669;
+}
+
+.contable-card.balance.negativo {
+  background: linear-gradient(135deg, #fee2e2 0%, #f87171 100%);
+  border-left: 4px solid #dc2626;
+}
+
+.contable-icon {
+  font-size: 1.5rem;
+}
+
+.contable-valor {
+  display: block;
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #1b4332;
+}
+
+.contable-label {
+  display: block;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+/* Balance Visual */
+.balance-visual {
+  margin-top: 12px;
+}
+
+.balance-barra {
+  display: flex;
+  height: 30px;
+  border-radius: 8px;
+  overflow: hidden;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.balance-ingresos {
+  background: linear-gradient(90deg, #10b981, #34d399);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 60px;
+}
+
+.balance-gastos {
+  background: linear-gradient(90deg, #f87171, #ef4444);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 60px;
+}
+
+/* Lotes con progreso */
+.lote-progreso {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.progreso-label {
+  font-size: 0.75rem;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.progreso-barra {
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progreso-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2d6a4f, #40916c);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.progreso-valores {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: #888;
+  margin-top: 4px;
+}
+
+/* Sin alertas */
+.sin-alertas {
+  text-align: center;
+  padding: 30px;
+  color: #666;
+}
+
+.sin-alertas-icon {
+  font-size: 3rem;
+  display: block;
+  margin-bottom: 10px;
+}
+
+.sin-alertas p {
+  margin: 0;
+  font-weight: 600;
+  color: #2d6a4f;
+}
+
+.sin-alertas small {
+  color: #888;
+}
+
+/* Alertas mejoradas */
+.alerta-icono {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+/* Actividad Reciente */
+.actividad-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.actividad-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #f8faf9;
+  border-radius: 8px;
+  border-left: 3px solid #2d6a4f;
+}
+
+.actividad-icono {
+  font-size: 1.2rem;
+}
+
+.actividad-info span {
+  display: block;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.actividad-info small {
+  color: #888;
+  font-size: 0.75rem;
+}
+
+/* Bombas mejoradas */
+.bomba-header-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.status-indicator {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 12px;
+}
+
+.status-indicator.conectado {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.status-indicator.desconectado {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.bomba-ubicacion {
+  font-size: 0.85rem;
+  color: #666;
+  margin: 4px 0;
+}
+
+.bomba-descripcion {
+  font-size: 0.8rem;
+  color: #888;
+  font-style: italic;
+}
+
+.bomba-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.bomba-edit-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.bomba-fecha {
+  display: block;
+  text-align: center;
+  margin-top: 8px;
+  color: #888;
+}
+
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* Responsive Dashboard */
+@media (max-width: 1024px) {
+  .estado-granja-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .contable-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .dashboard-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .estado-granja-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   GRÁFICAS Y DASHBOARD PROFESIONAL
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.graficas-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.grafica-section {
+  min-height: 320px;
+}
+
+.grafica-section.grafica-full {
+  grid-column: 1 / -1;
+}
+
+.grafica-container {
+  margin-top: 16px;
+}
+
+.grafica-pie {
+  display: flex;
+  flex-direction: column;
+}
+
+.pie-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.pie-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: #555;
+}
+
+.pie-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+/* Iconos con colores */
+.icono-verde {
+  color: #2d6a4f;
+}
+
+.icono-gris {
+  color: #999;
+}
+
+.icono-rojo {
+  color: #ef4444;
+}
+
+/* Dashboard mejorado */
+.dashboard-section {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.dashboard-section h3 {
+  margin: 0 0 16px;
+  color: #1b4332;
+  font-size: 1.1rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dashboard-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+/* Estado de la Granja */
+.estado-granja-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.estado-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f8faf9 0%, #e8f5e9 100%);
+  border-radius: 12px;
+  border-left: 4px solid #2d6a4f;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.estado-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.estado-icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.estado-numero {
+  display: block;
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #1b4332;
+}
+
+.estado-label {
+  display: block;
+  font-size: 0.85rem;
+  color: #666;
+}
+
+/* Contable Dashboard */
+.contable-dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.contable-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+  border-radius: 12px;
+  background: #f8faf9;
+  transition: transform 0.2s;
+}
+
+.contable-card:hover {
+  transform: translateY(-2px);
+}
+
+.contable-card.ingresos {
+  background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+  border-left: 4px solid #10b981;
+}
+
+.contable-card.ingresos .contable-icon {
+  color: #059669;
+}
+
+.contable-card.gastos {
+  background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+  border-left: 4px solid #ef4444;
+}
+
+.contable-card.gastos .contable-icon {
+  color: #dc2626;
+}
+
+.contable-card.balance.positivo {
+  background: linear-gradient(135deg, #d1fae5 0%, #6ee7b7 100%);
+  border-left: 4px solid #059669;
+}
+
+.contable-card.balance.positivo .contable-icon {
+  color: #059669;
+}
+
+.contable-card.balance.negativo {
+  background: linear-gradient(135deg, #fee2e2 0%, #f87171 100%);
+  border-left: 4px solid #dc2626;
+}
+
+.contable-card.balance.negativo .contable-icon {
+  color: #dc2626;
+}
+
+.contable-valor {
+  display: block;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: #1b4332;
+}
+
+.contable-label {
+  display: block;
+  font-size: 0.85rem;
+  color: #555;
+}
+
+/* Lotes mini mejorados */
+.lote-card-mini {
+  background: #f8faf9;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 12px;
+  border-left: 4px solid #2d6a4f;
+}
+
+.lote-mini-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.lote-mini-header h4 {
+  margin: 0;
+  color: #1b4332;
+  font-size: 1rem;
+}
+
+.lote-info {
+  display: flex;
+  gap: 16px;
+  font-size: 0.85rem;
+  color: #555;
+  margin-bottom: 12px;
+}
+
+.lote-info span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lote-progreso {
+  padding-top: 10px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.progreso-label {
+  font-size: 0.75rem;
+  color: #888;
+  margin-bottom: 6px;
+}
+
+.progreso-barra {
+  height: 8px;
+  background: #e0e0e0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progreso-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #2d6a4f, #40916c);
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.progreso-valores {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: #888;
+  margin-top: 4px;
+}
+
+/* Sin alertas */
+.sin-alertas {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.sin-alertas p {
+  margin: 12px 0 4px;
+  font-weight: 600;
+  color: #2d6a4f;
+}
+
+.sin-alertas small {
+  color: #888;
+}
+
+/* Alertas lista */
+.alertas-lista {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.alerta-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8f8f8;
+}
+
+.alerta-item.critico {
+  background: #fee2e2;
+  border-left: 3px solid #ef4444;
+}
+
+.alerta-item.critico .alerta-icono {
+  color: #ef4444;
+}
+
+.alerta-item.alerta {
+  background: #fef3c7;
+  border-left: 3px solid #f59e0b;
+}
+
+.alerta-item.alerta .alerta-icono {
+  color: #f59e0b;
+}
+
+.alerta-item.info {
+  background: #e0f2fe;
+  border-left: 3px solid #0ea5e9;
+}
+
+.alerta-contenido p {
+  margin: 0 0 4px;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.alerta-contenido small {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #888;
+  font-size: 0.75rem;
+}
+
+/* Actividad reciente */
+.actividad-lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+
+.actividad-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: #f8faf9;
+  border-radius: 8px;
+  border-left: 3px solid #2d6a4f;
+}
+
+.actividad-icono {
+  color: #2d6a4f;
+  flex-shrink: 0;
+}
+
+.actividad-icono.ingreso {
+  color: #10b981;
+}
+
+.actividad-icono.gasto {
+  color: #ef4444;
+}
+
+.actividad-info span {
+  display: block;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.actividad-info small {
+  color: #888;
+  font-size: 0.75rem;
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+  .graficas-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .grafica-section.grafica-full {
+    grid-column: 1;
+  }
+}
+
+@media (max-width: 1024px) {
+  .estado-granja-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .contable-dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .dashboard-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .estado-granja-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .actividad-lista {
+    grid-template-columns: 1fr;
+  }
+}

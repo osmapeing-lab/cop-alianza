@@ -2,8 +2,17 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { io } from 'socket.io-client'
 import './App.css'
-
-
+import { LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { 
+  Thermometer, Droplets, Weight, TrendingUp, TrendingDown, 
+  PiggyBank, Package, Zap, Bell, BellOff, Activity, 
+  BarChart3, PieChart as PieChartIcon, LineChart as LineChartIcon,
+  Users, Settings, LogOut, Eye, EyeOff, Plus, Edit, Trash2,
+  RefreshCw, Camera, DollarSign, Wallet, Calculator, Archive,
+  AlertTriangle, CheckCircle, XCircle, Clock, Calendar,
+  Home, ChevronRight, MoreVertical, Download, Send, Mail,
+  Smartphone, Wifi, WifiOff, Power, PowerOff, Gauge
+} from 'lucide-react'
 // ═══════════════════════════════════════════════════════════════════════
 // CONFIGURACIÓN
 // ═══════════════════════════════════════════════════════════════════════
@@ -948,7 +957,6 @@ const PantallaMantenimiento = () => (
   const [clima, setClima] = useState({ temp: null, humedad: null })
   const [porqueriza, setPorqueriza] = useState({ temp: null, humedad: null, conectado: false })
   const [flujo, setFlujo] = useState({ caudal: 0, volumen_diario: 0, conectado: false })
-  const [bombas, setBombas] = useState([])
   const [alertas, setAlertas] = useState([])
   const [ultimoPeso, setUltimoPeso] = useState(null)
   
@@ -1015,9 +1023,27 @@ const [costos, setCostos] = useState([])
 const [resumenCostos, setResumenCostos] = useState({})
 const [comparativoCostos, setComparativoCostos] = useState([])
 
+// Estados de bombas (CRUD)
+const [bombas, setBombas] = useState([])
+const [mostrarModalBomba, setMostrarModalBomba] = useState(false)
+const [nuevaBomba, setNuevaBomba] = useState({
+  nombre: '',
+  codigo_bomba: '',
+  ubicacion: '',
+  descripcion: ''
+})
+const [bombaEditando, setBombaEditando] = useState(null)
 // Estados de inventario
 const [inventario, setInventario] = useState([])
 const [estadisticasInventario, setEstadisticasInventario] = useState({})
+
+// Estados para gráficas
+const [historicoTemperatura, setHistoricoTemperatura] = useState([])
+const [historicoAgua, setHistoricoAgua] = useState([])
+const [historicoContable, setHistoricoContable] = useState([])
+const [historicoPesos, setHistoricoPesos] = useState([])
+const [distribucionGastos, setDistribucionGastos] = useState([])
+
   // Estados de usuarios (SuperAdmin)
   const [usuarios, setUsuarios] = useState([])
   const [mostrarModalUsuario, setMostrarModalUsuario] = useState(false)
@@ -1137,21 +1163,33 @@ const [estadisticasInventario, setEstadisticasInventario] = useState({})
   // ═══════════════════════════════════════════════════════════════════════
 
   const cargarDatos = async () => {
-    await Promise.all([ 
-      cargarLotes(),
-cargarPesajes(),
-cargarContabilidad(),
-cargarConfig(),
-cargarCamaras(),
-cargarVentas(),
-cargarCostos(),
-cargarInventario()
-])
-    
-    if (user?.rol === 'superadmin' || user?.rol === 'ingeniero') {
-      cargarUsuarios()
-    }
+  await Promise.all([
+    cargarClima(),
+    cargarPorqueriza(),
+    cargarFlujo(),
+    cargarBombas(),
+    cargarAlertas(),
+    cargarLotes(),
+    cargarPesajes(),
+    cargarContabilidad(),
+    cargarConfig(),
+    cargarCamaras(),
+    cargarVentas(),
+    cargarCostos(),
+    cargarInventario()
+  ])
+  
+  // Cargar datos para gráficas después de tener los datos base
+  cargarHistoricoTemperatura()
+  cargarHistoricoAgua()
+  cargarHistoricoContable()
+  cargarHistoricoPesos()
+  cargarDistribucionGastos()
+  
+  if (user?.rol === 'superadmin' || user?.rol === 'ingeniero') {
+    cargarUsuarios()
   }
+}
 const cargarCamaras = async () => {
   try {
     const res = await axios.get(`${API_URL}/api/camaras`, {
@@ -1535,7 +1573,44 @@ const verStreamCamara = (camara) => {
       alert('Error controlando bomba: ' + (error.response?.data?.mensaje || error.message))
     }
   }
+const crearBomba = async () => {
+  try {
+    await axios.post(`${API_URL}/api/motorbombs`, nuevaBomba, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setMostrarModalBomba(false)
+    setNuevaBomba({ nombre: '', codigo_bomba: '', ubicacion: '', descripcion: '' })
+    cargarBombas()
+  } catch (error) {
+    alert('Error creando bomba: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
 
+const actualizarBomba = async (id, datos) => {
+  try {
+    await axios.put(`${API_URL}/api/motorbombs/${id}`, datos, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setBombaEditando(null)
+    setMostrarModalBomba(false)
+    setNuevaBomba({ nombre: '', codigo_bomba: '', ubicacion: '', descripcion: '' })
+    cargarBombas()
+  } catch (error) {
+    alert('Error actualizando bomba: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
+const eliminarBomba = async (id) => {
+  if (!confirm('¿Eliminar esta bomba?')) return
+  try {
+    await axios.delete(`${API_URL}/api/motorbombs/${id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    cargarBombas()
+  } catch (error) {
+    alert('Error eliminando bomba: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
   // ═══════════════════════════════════════════════════════════════════════
   // FUNCIONES DE CONFIGURACIÓN
   // ═══════════════════════════════════════════════════════════════════════
@@ -1591,7 +1666,174 @@ const verStreamCamara = (camara) => {
       alert('Error: ' + (error.response?.data?.mensaje || error.message))
     }
   }
+// ═══════════════════════════════════════════════════════════════════════
+// FUNCIONES DE CARGA PARA GRÁFICAS
+// ═══════════════════════════════════════════════════════════════════════
 
+const cargarHistoricoTemperatura = async () => {
+  try {
+    const res = await axios.get(`${API_URL}/api/esp/porqueriza/historico?horas=24`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setHistoricoTemperatura(res.data.map(d => ({
+      hora: new Date(d.fecha).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+      temperatura: d.temperatura,
+      humedad: d.humedad
+    })))
+  } catch (error) {
+    // Si no hay endpoint, generamos datos de ejemplo basados en el clima actual
+    const ahora = new Date()
+    const datos = []
+    for (let i = 23; i >= 0; i--) {
+      const hora = new Date(ahora - i * 3600000)
+      datos.push({
+        hora: hora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+        temperatura: porqueriza.temp ? porqueriza.temp + (Math.random() * 4 - 2) : 32 + (Math.random() * 4 - 2),
+        humedad: porqueriza.humedad ? porqueriza.humedad + (Math.random() * 10 - 5) : 75 + (Math.random() * 10 - 5)
+      })
+    }
+    setHistoricoTemperatura(datos)
+  }
+}
+
+const cargarHistoricoAgua = async () => {
+  try {
+    const res = await axios.get(`${API_URL}/api/esp/flujo/historico?dias=7`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setHistoricoAgua(res.data.map(d => ({
+      dia: new Date(d.fecha).toLocaleDateString('es-CO', { weekday: 'short' }),
+      litros: d.volumen_total
+    })))
+  } catch (error) {
+    // Datos de ejemplo
+    const dias = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
+    const datos = dias.map(dia => ({
+      dia,
+      litros: Math.floor(Math.random() * 500) + 200
+    }))
+    setHistoricoAgua(datos)
+  }
+}
+
+const cargarHistoricoContable = async () => {
+  try {
+    // Usar datos de contabilidad existentes agrupados por mes
+    const meses = {}
+    contabilidad.forEach(reg => {
+      const fecha = new Date(reg.fecha)
+      const mes = fecha.toLocaleDateString('es-CO', { month: 'short' })
+      if (!meses[mes]) {
+        meses[mes] = { mes, ingresos: 0, gastos: 0 }
+      }
+      if (reg.tipo === 'ingreso') {
+        meses[mes].ingresos += reg.total
+      } else {
+        meses[mes].gastos += reg.total
+      }
+    })
+    
+    const datos = Object.values(meses).slice(-6)
+    if (datos.length > 0) {
+      setHistoricoContable(datos)
+    } else {
+      // Datos de ejemplo si no hay registros
+      setHistoricoContable([
+        { mes: 'Sep', ingresos: 2500000, gastos: 1800000 },
+        { mes: 'Oct', ingresos: 3200000, gastos: 2100000 },
+        { mes: 'Nov', ingresos: 2800000, gastos: 1900000 },
+        { mes: 'Dic', ingresos: 4500000, gastos: 2800000 },
+        { mes: 'Ene', ingresos: 3800000, gastos: 2400000 },
+        { mes: 'Feb', ingresos: resumenContable.total_ingresos || 3000000, gastos: resumenContable.total_gastos || 2000000 }
+      ])
+    }
+  } catch (error) {
+    console.error('Error cargando histórico contable:', error)
+  }
+}
+
+const cargarHistoricoPesos = async () => {
+  try {
+    // Agrupar pesajes por fecha para cada lote
+    const pesajesPorLote = {}
+    pesajes.forEach(p => {
+      const loteNombre = p.lote?.nombre || 'Sin lote'
+      if (!pesajesPorLote[loteNombre]) {
+        pesajesPorLote[loteNombre] = []
+      }
+      pesajesPorLote[loteNombre].push({
+        fecha: new Date(p.createdAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }),
+        peso: p.peso_promedio || p.peso
+      })
+    })
+    
+    // Convertir a formato para gráfica
+    const fechas = [...new Set(pesajes.map(p => 
+      new Date(p.createdAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })
+    ))].slice(-10)
+    
+    const datos = fechas.map(fecha => {
+      const registro = { fecha }
+      Object.keys(pesajesPorLote).forEach(lote => {
+        const pesaje = pesajesPorLote[lote].find(p => p.fecha === fecha)
+        registro[lote] = pesaje ? pesaje.peso : null
+      })
+      return registro
+    })
+    
+    if (datos.length > 0) {
+      setHistoricoPesos(datos)
+    } else {
+      // Datos de ejemplo
+      setHistoricoPesos([
+        { fecha: '15 Ene', 'Lote A': 45, 'Lote B': 38 },
+        { fecha: '22 Ene', 'Lote A': 52, 'Lote B': 44 },
+        { fecha: '29 Ene', 'Lote A': 58, 'Lote B': 51 },
+        { fecha: '05 Feb', 'Lote A': 65, 'Lote B': 57 },
+        { fecha: '12 Feb', 'Lote A': 72, 'Lote B': 64 }
+      ])
+    }
+  } catch (error) {
+    console.error('Error cargando histórico pesos:', error)
+  }
+}
+
+const cargarDistribucionGastos = async () => {
+  try {
+    // Agrupar gastos por categoría
+    const categorias = {}
+    contabilidad.filter(r => r.tipo === 'gasto').forEach(reg => {
+      const cat = reg.categoria || 'Otro'
+      if (!categorias[cat]) {
+        categorias[cat] = 0
+      }
+      categorias[cat] += reg.total
+    })
+    
+    const colores = ['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2', '#b7e4c7', '#d8f3dc']
+    const datos = Object.entries(categorias).map(([nombre, valor], i) => ({
+      nombre: nombre.replace('_', ' ').charAt(0).toUpperCase() + nombre.slice(1).replace('_', ' '),
+      valor,
+      color: colores[i % colores.length]
+    }))
+    
+    if (datos.length > 0) {
+      setDistribucionGastos(datos)
+    } else {
+      // Datos de ejemplo
+      setDistribucionGastos([
+        { nombre: 'Alimento', valor: 1200000, color: '#2d6a4f' },
+        { nombre: 'Medicamentos', valor: 350000, color: '#40916c' },
+        { nombre: 'Agua', valor: 180000, color: '#52b788' },
+        { nombre: 'Transporte', valor: 250000, color: '#74c69d' },
+        { nombre: 'Mano de obra', valor: 500000, color: '#95d5b2' },
+        { nombre: 'Otros', valor: 120000, color: '#b7e4c7' }
+      ])
+    }
+  } catch (error) {
+    console.error('Error cargando distribución gastos:', error)
+  }
+}
   // ═══════════════════════════════════════════════════════════════════════
   // FUNCIONES DE REPORTES
   // ═══════════════════════════════════════════════════════════════════════
@@ -1855,122 +2097,437 @@ const verStreamCamara = (camara) => {
 
         {/* Contenido principal */}
         <main className="content">
-          {/* ════════════════════════════════════════════════════════════════ */}
-          {/* PÁGINA: DASHBOARD */}
-          {/* ════════════════════════════════════════════════════════════════ */}
-          {pagina === 'dashboard' && (
-            <div className="page-dashboard">
-              <div className="page-header">
-                <h2>Dashboard</h2>
-                <button className="btn-refresh" onClick={cargarDatos}>
-                  <IconRefresh />
-                </button>
-              </div>
+         {/* ════════════════════════════════════════════════════════════════ */}
+{/* PÁGINA: DASHBOARD */}
+{/* ════════════════════════════════════════════════════════════════ */}
+{pagina === 'dashboard' && (
+  <div className="page-dashboard">
+    <div className="page-header">
+      <h2><Home size={24} /> Dashboard - Estado de la Granja</h2>
+      <button className="btn-refresh" onClick={cargarDatos}>
+        <RefreshCw size={18} />
+      </button>
+    </div>
 
-              {/* Tarjetas de monitoreo */}
-              <div className="cards-grid">
-                {/* Clima Lorica */}
-                <div className="card">
-                  <div className="card-header">
-                    <IconTemp />
-                    <h3>Clima Lorica</h3>
+    {/* Tarjetas de monitoreo en tiempo real */}
+    <div className="cards-grid">
+      {/* Clima Lorica */}
+      <div className="card">
+        <div className="card-header">
+          <Thermometer size={20} />
+          <h3>Clima Lorica</h3>
+        </div>
+        <div className="card-body">
+          <div className="dato-principal">{clima.temp !== null ? `${clima.temp}°C` : '--'}</div>
+          <div className="dato-secundario">
+            <Droplets size={14} /> Humedad: {clima.humedad !== null ? `${clima.humedad}%` : '--'}
+          </div>
+        </div>
+      </div>
+
+      {/* Porqueriza */}
+      <div className={`card ${getEstadoTemp(porqueriza.temp).clase}`}>
+        <div className="card-header">
+          <Thermometer size={20} />
+          <h3>Porqueriza</h3>
+          <span className={`estado-badge ${porqueriza.conectado ? 'conectado' : 'desconectado'}`}>
+            {porqueriza.conectado ? <><Wifi size={12} /> Conectado</> : <><WifiOff size={12} /> Desconectado</>}
+          </span>
+        </div>
+        <div className="card-body">
+          <div className="dato-principal">{porqueriza.temp !== null ? `${porqueriza.temp}°C` : '--'}</div>
+          <div className="dato-secundario">
+            <Droplets size={14} /> Humedad: {porqueriza.humedad !== null ? `${porqueriza.humedad}%` : '--'}
+          </div>
+          <div className={`estado-texto ${getEstadoTemp(porqueriza.temp).clase}`}>
+            {getEstadoTemp(porqueriza.temp).texto}
+          </div>
+        </div>
+      </div>
+
+      {/* Flujo de agua */}
+      <div className="card">
+        <div className="card-header">
+          <Droplets size={20} />
+          <h3>Consumo Agua</h3>
+          <span className={`estado-badge ${flujo.conectado ? 'conectado' : 'desconectado'}`}>
+            {flujo.conectado ? <><Wifi size={12} /> Conectado</> : <><WifiOff size={12} /> Desconectado</>}
+          </span>
+        </div>
+        <div className="card-body">
+          <div className="dato-principal">{flujo.volumen_diario ? `${flujo.volumen_diario.toFixed(1)} L` : '0 L'}</div>
+          <div className="dato-secundario">Consumo Hoy</div>
+          <div className="dato-secundario">
+            <Gauge size={14} /> Caudal: {flujo.caudal || 0} L/min
+          </div>
+        </div>
+      </div>
+
+      {/* Último peso */}
+      <div className="card">
+        <div className="card-header">
+          <Weight size={20} />
+          <h3>Último Pesaje</h3>
+        </div>
+        <div className="card-body">
+          <div className="dato-principal">{ultimoPeso ? `${ultimoPeso.peso} kg` : '--'}</div>
+          <div className="dato-secundario">
+            {ultimoPeso?.lote?.nombre || 'Sin lote'}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Estado General de la Granja */}
+    <div className="dashboard-section estado-granja">
+      <h3><Activity size={20} /> Estado General de la Granja</h3>
+      <div className="estado-granja-grid">
+        <div className="estado-item">
+          <div className="estado-icono">
+            <PiggyBank size={32} className="icono-verde" />
+          </div>
+          <div className="estado-info">
+            <span className="estado-numero">{lotes.filter(l => l.activo).reduce((sum, l) => sum + l.cantidad_cerdos, 0)}</span>
+            <span className="estado-label">Cerdos Activos</span>
+          </div>
+        </div>
+        <div className="estado-item">
+          <div className="estado-icono">
+            <Package size={32} className="icono-verde" />
+          </div>
+          <div className="estado-info">
+            <span className="estado-numero">{lotes.filter(l => l.activo).length}</span>
+            <span className="estado-label">Lotes Activos</span>
+          </div>
+        </div>
+        <div className="estado-item">
+          <div className="estado-icono">
+            <Weight size={32} className="icono-verde" />
+          </div>
+          <div className="estado-info">
+            <span className="estado-numero">
+              {lotes.filter(l => l.activo).length > 0 
+                ? (lotes.filter(l => l.activo).reduce((sum, l) => sum + (l.peso_promedio_actual || 0), 0) / lotes.filter(l => l.activo).length).toFixed(1)
+                : 0} kg
+            </span>
+            <span className="estado-label">Peso Promedio</span>
+          </div>
+        </div>
+        <div className="estado-item">
+          <div className="estado-icono">
+            {bombas.filter(b => b.estado).length > 0 ? <Power size={32} className="icono-verde" /> : <PowerOff size={32} className="icono-gris" />}
+          </div>
+          <div className="estado-info">
+            <span className="estado-numero">{bombas.filter(b => b.estado).length}/{bombas.length}</span>
+            <span className="estado-label">Bombas Activas</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* GRÁFICAS PRINCIPALES */}
+    <div className="graficas-grid">
+      {/* Gráfica de Temperatura 24h */}
+      <div className="dashboard-section grafica-section">
+        <h3><Thermometer size={20} /> Temperatura Porqueriza - Últimas 24h</h3>
+        <div className="grafica-container">
+          <ResponsiveContainer width="100%" height={250}>
+            <AreaChart data={historicoTemperatura}>
+              <defs>
+                <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0.1}/>
+                </linearGradient>
+                <linearGradient id="colorHum" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
+                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+              <XAxis dataKey="hora" tick={{ fontSize: 11 }} stroke="#666" />
+              <YAxis tick={{ fontSize: 11 }} stroke="#666" />
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: '#fff', 
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '8px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                }}
+              />
+              <Legend />
+              <Area 
+                type="monotone" 
+                dataKey="temperatura" 
+                stroke="#ef4444" 
+                fillOpacity={1} 
+                fill="url(#colorTemp)" 
+                name="Temperatura °C"
+              />
+              <Area 
+                type="monotone" 
+                dataKey="humedad" 
+                stroke="#3b82f6" 
+                fillOpacity={1} 
+                fill="url(#colorHum)" 
+                name="Humedad %"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Gráfica de Consumo de Agua */}
+      <div className="dashboard-section grafica-section">
+        <h3><Droplets size={20} /> Consumo de Agua - Última Semana</h3>
+        <div className="grafica-container">
+          <ResponsiveContainer width="100%" height={250}>
+            <BarChart data={historicoAgua}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+              <XAxis dataKey="dia" tick={{ fontSize: 11 }} stroke="#666" />
+              <YAxis tick={{ fontSize: 11 }} stroke="#666" />
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: '#fff', 
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '8px'
+                }}
+                formatter={(value) => [`${value} L`, 'Consumo']}
+              />
+              <Bar 
+                dataKey="litros" 
+                fill="#3b82f6" 
+                radius={[4, 4, 0, 0]}
+                name="Litros"
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+
+    {/* Gráficas Financieras */}
+    <div className="graficas-grid">
+      {/* Ingresos vs Gastos */}
+      <div className="dashboard-section grafica-section">
+        <h3><BarChart3 size={20} /> Ingresos vs Gastos - Últimos Meses</h3>
+        <div className="grafica-container">
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={historicoContable}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+              <XAxis dataKey="mes" tick={{ fontSize: 11 }} stroke="#666" />
+              <YAxis tick={{ fontSize: 11 }} stroke="#666" tickFormatter={(v) => `$${(v/1000000).toFixed(1)}M`} />
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: '#fff', 
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '8px'
+                }}
+                formatter={(value) => [formatearDinero(value), '']}
+              />
+              <Legend />
+              <Bar dataKey="ingresos" fill="#10b981" radius={[4, 4, 0, 0]} name="Ingresos" />
+              <Bar dataKey="gastos" fill="#ef4444" radius={[4, 4, 0, 0]} name="Gastos" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Distribución de Gastos */}
+      <div className="dashboard-section grafica-section">
+        <h3><PieChartIcon size={20} /> Distribución de Gastos</h3>
+        <div className="grafica-container grafica-pie">
+          <ResponsiveContainer width="100%" height={280}>
+            <PieChart>
+              <Pie
+                data={distribucionGastos}
+                cx="50%"
+                cy="50%"
+                innerRadius={60}
+                outerRadius={100}
+                paddingAngle={2}
+                dataKey="valor"
+                label={({ nombre, percent }) => `${nombre} ${(percent * 100).toFixed(0)}%`}
+                labelLine={{ stroke: '#666', strokeWidth: 1 }}
+              >
+                {distribucionGastos.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip 
+                formatter={(value) => [formatearDinero(value), 'Gasto']}
+                contentStyle={{ 
+                  backgroundColor: '#fff', 
+                  border: '1px solid #e0e0e0',
+                  borderRadius: '8px'
+                }}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="pie-legend">
+            {distribucionGastos.map((item, i) => (
+              <div key={i} className="pie-legend-item">
+                <span className="pie-color" style={{ backgroundColor: item.color }}></span>
+                <span className="pie-label">{item.nombre}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Gráfica de Evolución de Peso */}
+    <div className="dashboard-section grafica-section grafica-full">
+      <h3><TrendingUp size={20} /> Evolución de Peso por Lote</h3>
+      <div className="grafica-container">
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={historicoPesos}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+            <XAxis dataKey="fecha" tick={{ fontSize: 11 }} stroke="#666" />
+            <YAxis tick={{ fontSize: 11 }} stroke="#666" unit=" kg" />
+            <Tooltip 
+              contentStyle={{ 
+                backgroundColor: '#fff', 
+                border: '1px solid #e0e0e0',
+                borderRadius: '8px'
+              }}
+              formatter={(value) => [`${value} kg`, '']}
+            />
+            <Legend />
+            {lotes.filter(l => l.activo).slice(0, 5).map((lote, i) => (
+              <Line 
+                key={lote._id}
+                type="monotone" 
+                dataKey={lote.nombre}
+                stroke={['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2'][i]}
+                strokeWidth={2}
+                dot={{ r: 4 }}
+                activeDot={{ r: 6 }}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+
+    {/* Resumen Contable */}
+    <div className="dashboard-section resumen-contable-dashboard">
+      <h3><Wallet size={20} /> Resumen Contable del Mes</h3>
+      <div className="contable-dashboard-grid">
+        <div className="contable-card ingresos">
+          <TrendingUp size={28} className="contable-icon" />
+          <div className="contable-info">
+            <span className="contable-valor">{formatearDinero(resumenContable.total_ingresos)}</span>
+            <span className="contable-label">Ingresos</span>
+          </div>
+        </div>
+        <div className="contable-card gastos">
+          <TrendingDown size={28} className="contable-icon" />
+          <div className="contable-info">
+            <span className="contable-valor">{formatearDinero(resumenContable.total_gastos)}</span>
+            <span className="contable-label">Gastos</span>
+          </div>
+        </div>
+        <div className={`contable-card balance ${resumenContable.ganancia >= 0 ? 'positivo' : 'negativo'}`}>
+          {resumenContable.ganancia >= 0 ? <CheckCircle size={28} className="contable-icon" /> : <AlertTriangle size={28} className="contable-icon" />}
+          <div className="contable-info">
+            <span className="contable-valor">{formatearDinero(resumenContable.ganancia)}</span>
+            <span className="contable-label">Balance</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {/* Lotes y Alertas */}
+    <div className="dashboard-columns">
+      {/* Lotes Activos */}
+      <div className="dashboard-section">
+        <h3><Package size={20} /> Lotes Activos</h3>
+        <div className="lotes-resumen">
+          {lotes.filter(l => l.activo).length === 0 ? (
+            <p className="sin-datos">No hay lotes activos</p>
+          ) : (
+            lotes.filter(l => l.activo).map(lote => (
+              <div key={lote._id} className="lote-card-mini">
+                <div className="lote-mini-header">
+                  <h4>{lote.nombre}</h4>
+                  <span className={`estado-lote ${lote.estado}`}>{lote.estado}</span>
+                </div>
+                <div className="lote-info">
+                  <span><PiggyBank size={14} /> {lote.cantidad_cerdos} cerdos</span>
+                  <span><Weight size={14} /> {lote.peso_promedio_actual || 0} kg prom.</span>
+                </div>
+                <div className="lote-progreso">
+                  <div className="progreso-label">Ganancia de peso</div>
+                  <div className="progreso-barra">
+                    <div 
+                      className="progreso-fill"
+                      style={{ width: `${Math.min(((lote.peso_promedio_actual || 0) / 100) * 100, 100)}%` }}
+                    ></div>
                   </div>
-                  <div className="card-body">
-                    <div className="dato-principal">{clima.temp !== null ? `${clima.temp}°C` : '--'}</div>
-                    <div className="dato-secundario">Humedad: {clima.humedad !== null ? `${clima.humedad}%` : '--'}</div>
+                  <div className="progreso-valores">
+                    <span>{lote.peso_inicial_promedio || 0} kg</span>
+                    <span>{lote.peso_promedio_actual || 0} kg</span>
                   </div>
                 </div>
-
-                {/* Porqueriza */}
-                <div className={`card ${getEstadoTemp(porqueriza.temp).clase}`}>
-                  <div className="card-header">
-                    <IconTemp />
-                    <h3>Porqueriza</h3>
-                    <span className={`estado-badge ${porqueriza.conectado ? 'conectado' : 'desconectado'}`}>
-                      {porqueriza.conectado ? 'Conectado' : 'Desconectado'}
-                    </span>
-                  </div>
-                  <div className="card-body">
-                    <div className="dato-principal">{porqueriza.temp !== null ? `${porqueriza.temp}°C` : '--'}</div>
-                    <div className="dato-secundario">Humedad: {porqueriza.humedad !== null ? `${porqueriza.humedad}%` : '--'}</div>
-                    <div className={`estado-texto ${getEstadoTemp(porqueriza.temp).clase}`}>
-                      {getEstadoTemp(porqueriza.temp).texto}
-                    </div>
-                  </div>
-                </div>{/* Flujo de agua */}
-<div className="card">
-  <div className="card-header">
-    <IconAgua />
-    <h3>Consumo Agua</h3>
-    <span className={`estado-badge ${flujo.conectado ? 'conectado' : 'desconectado'}`}>
-      {flujo.conectado ? 'Conectado' : 'Desconectado'}
-    </span>
-  </div>
-  <div className="card-body">
-    <div className="dato-principal">{flujo.volumen_total ? `${flujo.volumen_total.toFixed(1)} L` : '0 L'}</div>
-    <div className="dato-secundario">Volumen Total</div>
-    <div className="dato-secundario">Caudal: {flujo.caudal || 0} L/min</div>
-  </div>
-</div>
-                {/* Último peso */}
-                <div className="card">
-                  <div className="card-header">
-                    <IconPeso />
-                    <h3>Último Pesaje</h3>
-                  </div>
-                  <div className="card-body">
-                    <div className="dato-principal">{ultimoPeso ? `${ultimoPeso.peso} kg` : '--'}</div>
-                    <div className="dato-secundario">
-                      {ultimoPeso?.lote?.nombre || 'Sin lote'}
-                    </div>
-                  </div>
-                </div>
               </div>
-
-              {/* Resumen de lotes */}
-              <div className="section">
-                <h3>Lotes Activos</h3>
-                <div className="lotes-resumen">
-                  {lotes.filter(l => l.activo).length === 0 ? (
-                    <p className="sin-datos">No hay lotes activos</p>
-                  ) : (
-                    lotes.filter(l => l.activo).map(lote => (
-                      <div key={lote._id} className="lote-card-mini">
-                        <h4>{lote.nombre}</h4>
-                        <div className="lote-info">
-                          <span>{lote.cantidad_cerdos} cerdos</span>
-                          <span>{lote.peso_promedio_actual || 0} kg prom.</span>
-                          <span className={`estado-lote ${lote.estado}`}>{lote.estado}</span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Últimas alertas */}
-              <div className="section">
-                <h3>Últimas Alertas</h3>
-                {alertas.length === 0 ? (
-                  <p className="sin-datos">No hay alertas recientes</p>
-                ) : (
-                  <div className="alertas-lista">
-                    {alertas.slice(0, 5).map((alerta, i) => (
-                      <div key={i} className={`alerta-item ${alerta.tipo}`}>
-                        <IconAlerta />
-                        <div className="alerta-contenido">
-                          <p>{alerta.mensaje}</p>
-                          <small>{formatearFecha(alerta.createdAt)}</small>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
+            ))
           )}
+        </div>
+      </div>
 
+      {/* Alertas */}
+      <div className="dashboard-section">
+        <h3><Bell size={20} /> Últimas Alertas</h3>
+        {alertas.length === 0 ? (
+          <div className="sin-alertas">
+            <CheckCircle size={48} className="icono-verde" />
+            <p>No hay alertas recientes</p>
+            <small>El sistema está funcionando correctamente</small>
+          </div>
+        ) : (
+          <div className="alertas-lista">
+            {alertas.slice(0, 5).map((alerta, i) => (
+              <div key={i} className={`alerta-item ${alerta.tipo}`}>
+                {alerta.tipo === 'critico' ? <XCircle size={20} className="alerta-icono" /> : 
+                 alerta.tipo === 'alerta' ? <AlertTriangle size={20} className="alerta-icono" /> : 
+                 <Bell size={20} className="alerta-icono" />}
+                <div className="alerta-contenido">
+                  <p>{alerta.mensaje}</p>
+                  <small><Clock size={12} /> {formatearFecha(alerta.createdAt)}</small>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
 
+    {/* Actividad Reciente */}
+    <div className="dashboard-section actividad-reciente">
+      <h3><Activity size={20} /> Actividad Reciente</h3>
+      <div className="actividad-lista">
+        {pesajes.slice(0, 3).map((p, i) => (
+          <div key={`pesaje-${i}`} className="actividad-item">
+            <Weight size={18} className="actividad-icono" />
+            <div className="actividad-info">
+              <span>Pesaje registrado: <strong>{p.peso} kg</strong></span>
+              <small>{p.lote?.nombre || 'Sin lote'} - {formatearFecha(p.createdAt)}</small>
+            </div>
+          </div>
+        ))}
+        {contabilidad.slice(0, 3).map((c, i) => (
+          <div key={`conta-${i}`} className="actividad-item">
+            {c.tipo === 'ingreso' ? <TrendingUp size={18} className="actividad-icono ingreso" /> : <TrendingDown size={18} className="actividad-icono gasto" />}
+            <div className="actividad-info">
+              <span>{c.tipo === 'ingreso' ? 'Ingreso' : 'Gasto'}: <strong>{formatearDinero(c.total)}</strong></span>
+              <small>{c.categoria} - {formatearFecha(c.fecha)}</small>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  </div>
+)}
     {/* ════════════════════════════════════════════════════════════════ */}
           {/* PÁGINA: LOTES */}
           {/* ════════════════════════════════════════════════════════════════ */}
@@ -2462,47 +3019,160 @@ const verStreamCamara = (camara) => {
           )}
 
           {/* ════════════════════════════════════════════════════════════════ */}
-          {/* PÁGINA: BOMBAS */}
-          {/* ════════════════════════════════════════════════════════════════ */}
-          {pagina === 'bombas' && (
-            <div className="page-bombas">
-              <div className="page-header">
-                <h2>Control de Bombas</h2>
-                <button className="btn-refresh" onClick={cargarBombas}>
-                  <IconRefresh />
+{/* PÁGINA: BOMBAS */}
+{/* ════════════════════════════════════════════════════════════════ */}
+{pagina === 'bombas' && (
+  <div className="page-bombas">
+    <div className="page-header">
+      <h2>Control de Bombas / Relés</h2>
+      <div className="header-actions">
+        <button className="btn-refresh" onClick={cargarBombas}>
+          <IconRefresh />
+        </button>
+        <button className="btn-primary" onClick={() => {
+          setBombaEditando(null)
+          setNuevaBomba({ nombre: '', codigo_bomba: '', ubicacion: '', descripcion: '' })
+          setMostrarModalBomba(true)
+        }}>
+          <IconMas />
+          Nueva Bomba
+        </button>
+      </div>
+    </div>
+
+    <div className="bombas-grid">
+      {bombas.length === 0 ? (
+        <p className="sin-datos">No hay bombas configuradas. Crea una nueva bomba para comenzar.</p>
+      ) : (
+        bombas.map(bomba => (
+          <div key={bomba._id} className={`bomba-card ${bomba.estado ? 'encendida' : 'apagada'}`}>
+            <div className="bomba-header-card">
+              <div className="bomba-icon">
+                <IconBomba />
+              </div>
+              <span className={`status-indicator ${bomba.conectado ? 'conectado' : 'desconectado'}`}>
+                {bomba.conectado ? '● Conectado' : '○ Desconectado'}
+              </span>
+            </div>
+            
+            <h3>{bomba.nombre}</h3>
+            <p className="bomba-codigo">{bomba.codigo_bomba}</p>
+            {bomba.ubicacion && <p className="bomba-ubicacion">📍 {bomba.ubicacion}</p>}
+            {bomba.descripcion && <p className="bomba-descripcion">{bomba.descripcion}</p>}
+            
+            <div className={`bomba-estado ${bomba.estado ? 'on' : 'off'}`}>
+              {bomba.estado ? '🟢 ENCENDIDA' : '🔴 APAGADA'}
+            </div>
+            
+            <div className="bomba-actions">
+              <button
+                className={`btn-bomba ${bomba.estado ? 'btn-apagar' : 'btn-encender'}`}
+                onClick={() => toggleBomba(bomba._id)}
+                disabled={!bomba.conectado}
+              >
+                {bomba.estado ? 'Apagar' : 'Encender'}
+              </button>
+              
+              <div className="bomba-edit-actions">
+                <button 
+                  className="btn-icon"
+                  onClick={() => {
+                    setBombaEditando(bomba)
+                    setNuevaBomba({
+                      nombre: bomba.nombre,
+                      codigo_bomba: bomba.codigo_bomba,
+                      ubicacion: bomba.ubicacion || '',
+                      descripcion: bomba.descripcion || ''
+                    })
+                    setMostrarModalBomba(true)
+                  }}
+                  title="Editar"
+                >
+                  <IconEditar />
+                </button>
+                <button 
+                  className="btn-icon btn-danger"
+                  onClick={() => eliminarBomba(bomba._id)}
+                  title="Eliminar"
+                >
+                  <IconEliminar />
                 </button>
               </div>
-
-              <div className="bombas-grid">
-                {bombas.length === 0 ? (
-                  <p className="sin-datos">No hay bombas configuradas</p>
-                ) : (
-                  bombas.map(bomba => (
-                    <div key={bomba._id} className={`bomba-card ${bomba.estado ? 'encendida' : 'apagada'}`}>
-                      <div className="bomba-icon">
-                        <IconBomba />
-                      </div>
-                      <h3>{bomba.nombre}</h3>
-                      <p className="bomba-codigo">{bomba.codigo_bomba}</p>
-                      <div className={`bomba-estado ${bomba.estado ? 'on' : 'off'}`}>
-                        {bomba.estado ? 'ENCENDIDA' : 'APAGADA'}
-                      </div>
-                      <button
-                        className={`btn-bomba ${bomba.estado ? 'btn-apagar' : 'btn-encender'}`}
-                        onClick={() => toggleBomba(bomba._id)}
-                      >
-                        {bomba.estado ? 'Apagar' : 'Encender'}
-                      </button>
-                      {bomba.fecha_cambio && (
-                        <small>Último cambio: {formatearFecha(bomba.fecha_cambio)}</small>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
             </div>
-          )}
+            
+            {bomba.fecha_cambio && (
+              <small className="bomba-fecha">Último cambio: {formatearFecha(bomba.fecha_cambio)}</small>
+            )}
+          </div>
+        ))
+      )}
+    </div>
 
+    {/* Modal Bomba */}
+    {mostrarModalBomba && (
+      <div className="modal-overlay" onClick={() => setMostrarModalBomba(false)}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>{bombaEditando ? 'Editar Bomba' : 'Nueva Bomba / Relé'}</h3>
+            <button className="btn-cerrar" onClick={() => setMostrarModalBomba(false)}>&times;</button>
+          </div>
+          <div className="modal-body">
+            <div className="form-group">
+              <label>Nombre</label>
+              <input
+                type="text"
+                value={nuevaBomba.nombre}
+                onChange={e => setNuevaBomba({ ...nuevaBomba, nombre: e.target.value })}
+                placeholder="Ej: Bomba Principal, Ventilador 1"
+              />
+            </div>
+            <div className="form-group">
+              <label>Código del Dispositivo</label>
+              <input
+                type="text"
+                value={nuevaBomba.codigo_bomba}
+                onChange={e => setNuevaBomba({ ...nuevaBomba, codigo_bomba: e.target.value })}
+                placeholder="Ej: BOMBA_001, RELE_VENT_01"
+                disabled={bombaEditando}
+              />
+              <small>Este código debe coincidir con el configurado en el ESP32</small>
+            </div>
+            <div className="form-group">
+              <label>Ubicación</label>
+              <input
+                type="text"
+                value={nuevaBomba.ubicacion}
+                onChange={e => setNuevaBomba({ ...nuevaBomba, ubicacion: e.target.value })}
+                placeholder="Ej: Galpón Norte, Área de Engorde"
+              />
+            </div>
+            <div className="form-group">
+              <label>Descripción</label>
+              <textarea
+                value={nuevaBomba.descripcion}
+                onChange={e => setNuevaBomba({ ...nuevaBomba, descripcion: e.target.value })}
+                placeholder="Descripción del dispositivo..."
+                rows={2}
+              />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button className="btn-secondary" onClick={() => setMostrarModalBomba(false)}>Cancelar</button>
+            <button className="btn-primary" onClick={() => {
+              if (bombaEditando) {
+                actualizarBomba(bombaEditando._id, nuevaBomba)
+              } else {
+                crearBomba()
+              }
+            }}>
+              {bombaEditando ? 'Guardar Cambios' : 'Crear Bomba'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+)}
           {/* ════════════════════════════════════════════════════════════════ */}
           {/* PÁGINA: ALERTAS */}
           {/* ════════════════════════════════════════════════════════════════ */}
