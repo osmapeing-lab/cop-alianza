@@ -27,6 +27,69 @@ const IconTemp = () => (
   </svg>
 )
 
+  // ═══════════════════════════════════════════════════════════════════════
+// ICONOS NUEVOS
+// ═══════════════════════════════════════════════════════════════════════
+
+const IconCamara = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+    <circle cx="12" cy="13" r="4"/>
+  </svg>
+)
+
+const IconVenta = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="12" y1="1" x2="12" y2="23"/>
+    <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+  </svg>
+)
+
+const IconContabilidad = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="18" y1="20" x2="18" y2="10"/>
+    <line x1="12" y1="20" x2="12" y2="4"/>
+    <line x1="6" y1="20" x2="6" y2="14"/>
+    <line x1="2" y1="20" x2="22" y2="20"/>
+  </svg>
+)
+
+const IconInventario = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+    <line x1="12" y1="22.08" x2="12" y2="12"/>
+  </svg>
+)
+
+const IconCerdo = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <ellipse cx="12" cy="14" rx="8" ry="6"/>
+    <circle cx="6" cy="12" r="3"/>
+    <ellipse cx="4" cy="13" rx="1.5" ry="1" fill="#2d6a4f"/>
+    <circle cx="5" cy="11.5" r="0.8" fill="#1b4332"/>
+    <path d="M3 9 L2 6 L5 8" fill="currentColor"/>
+    <line x1="6" y1="18" x2="6" y2="21" stroke="currentColor" strokeWidth="1.5"/>
+    <line x1="10" y1="19" x2="10" y2="22" stroke="currentColor" strokeWidth="1.5"/>
+    <line x1="14" y1="19" x2="14" y2="22" stroke="currentColor" strokeWidth="1.5"/>
+    <line x1="18" y1="18" x2="18" y2="21" stroke="currentColor" strokeWidth="1.5"/>
+    <path d="M20 13 Q22 12 21 10" stroke="currentColor" strokeWidth="1.5" fill="none"/>
+  </svg>
+)
+
+const IconPlay = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+    <polygon points="5 3 19 12 5 21 5 3"/>
+  </svg>
+)
+
+const IconFoto = ({ size = 24 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+    <circle cx="8.5" cy="8.5" r="1.5"/>
+    <polyline points="21 15 16 10 5 21"/>
+  </svg>
+)
 const IconHumedad = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
     <path d="M12 2C6.5 8 4 12 4 15.5C4 19.64 7.58 23 12 23S20 19.64 20 15.5C20 12 17.5 8 12 2ZM12 21C8.69 21 6 18.54 6 15.5C6 13.06 7.81 9.98 12 5.34C16.19 9.98 18 13.06 18 15.5C18 18.54 15.31 21 12 21Z"/>
@@ -139,6 +202,687 @@ const IconRefresh = () => (
 // COMPONENTE PRINCIPAL
 // ═══════════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════════════════════════════════
+// COMPONENTE: PANEL DE CAMARAS
+// ═══════════════════════════════════════════════════════════════════════
+
+const PanelCamaras = ({ camaras, grabaciones, onCapturar, onVerStream }) => {
+  const [camaraSeleccionada, setCamaraSeleccionada] = useState(null)
+  
+  return (
+    <div className="panel-camaras">
+      <div className="section-header">
+        <h2><IconCamara size={20} /> Cámaras de Seguridad</h2>
+        <span className="badge-count">{camaras.length} cámaras</span>
+      </div>
+      
+      <div className="camaras-grid">
+        {camaras.map(cam => (
+          <div key={cam._id} className={`camara-card ${cam.estado}`}>
+            <div className="camara-preview">
+              {cam.estado === 'activa' ? (
+                <div className="stream-placeholder" onClick={() => onVerStream(cam)}>
+                  <IconPlay size={32} />
+                  <span>Ver stream</span>
+                </div>
+              ) : (
+                <div className="stream-offline">
+                  <span>Sin conexión</span>
+                </div>
+              )}
+            </div>
+            <div className="camara-info">
+              <h4>{cam.nombre}</h4>
+              <p>{cam.ubicacion}</p>
+              <div className="camara-actions">
+                <button onClick={() => onCapturar(cam.codigo)} className="btn-sm btn-capturar">
+                  <IconFoto size={14} /> Capturar
+                </button>
+                <span className={`status-dot ${cam.estado}`}></span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      
+      {grabaciones.length > 0 && (
+        <div className="grabaciones-recientes">
+          <h3>Últimas capturas</h3>
+          <div className="grabaciones-lista">
+            {grabaciones.slice(0, 6).map(g => (
+              <div key={g._id} className="grabacion-item">
+                <IconFoto size={16} />
+                <span>{g.archivo_nombre}</span>
+                <small>{new Date(g.fecha_inicio).toLocaleString()}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// COMPONENTE: PANEL DE VENTAS
+// ═══════════════════════════════════════════════════════════════════════
+
+const PanelVentas = ({ ventas, estadisticas, onNuevaVenta, onRegistrarPago }) => {
+  const [modalVenta, setModalVenta] = useState(false)
+  const [nuevaVenta, setNuevaVenta] = useState({
+    tipo_venta: 'en_pie',
+    comprador: { nombre: '', telefono: '' },
+    cantidad: 1,
+    peso_total_kg: 0,
+    precio_kg: 8000
+  })
+  
+  const tiposVenta = [
+    { value: 'en_pie', label: 'Cerdos en Pie', precio: 8000 },
+    { value: 'carne', label: 'Carne de Cerdo', precio: 14000 },
+    { value: 'lechon', label: 'Lechones', precio: 180000 }
+  ]
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    await onNuevaVenta(nuevaVenta)
+    setModalVenta(false)
+    setNuevaVenta({
+      tipo_venta: 'en_pie',
+      comprador: { nombre: '', telefono: '' },
+      cantidad: 1,
+      peso_total_kg: 0,
+      precio_kg: 8000
+    })
+  }
+  
+  return (
+    <div className="panel-ventas">
+      <div className="section-header">
+        <h2><IconVenta size={20} /> Sistema de Ventas</h2>
+        <button onClick={() => setModalVenta(true)} className="btn-primary btn-sm">
+          + Nueva Venta
+        </button>
+      </div>
+      
+      {/* Resumen de estadísticas */}
+      <div className="ventas-stats">
+        <div className="stat-card ingresos">
+          <span className="stat-label">Ingresos del Mes</span>
+          <span className="stat-value">${(estadisticas?.totales?.ingresos_totales || 0).toLocaleString()}</span>
+        </div>
+        <div className="stat-card cobrado">
+          <span className="stat-label">Cobrado</span>
+          <span className="stat-value">${(estadisticas?.totales?.cobrado || 0).toLocaleString()}</span>
+        </div>
+        <div className="stat-card pendiente">
+          <span className="stat-label">Por Cobrar</span>
+          <span className="stat-value">${(estadisticas?.totales?.pendiente || 0).toLocaleString()}</span>
+        </div>
+        <div className="stat-card ventas">
+          <span className="stat-label">Total Ventas</span>
+          <span className="stat-value">{estadisticas?.totales?.total_ventas || 0}</span>
+        </div>
+      </div>
+      
+      {/* Tabla de ventas recientes */}
+      <div className="tabla-container">
+        <table className="tabla-ventas">
+          <thead>
+            <tr>
+              <th>Factura</th>
+              <th>Comprador</th>
+              <th>Tipo</th>
+              <th>Cant.</th>
+              <th>Total</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ventas.length === 0 ? (
+              <tr><td colSpan="7" className="empty-row">No hay ventas registradas</td></tr>
+            ) : (
+              ventas.slice(0, 10).map(v => (
+                <tr key={v._id}>
+                  <td><strong>{v.numero_factura}</strong></td>
+                  <td>{v.comprador?.nombre}</td>
+                  <td>
+                    <span className={`tipo-badge ${v.tipo_venta}`}>
+                      {v.tipo_venta === 'en_pie' ? 'En Pie' : v.tipo_venta === 'carne' ? 'Carne' : 'Lechón'}
+                    </span>
+                  </td>
+                  <td>{v.cantidad}</td>
+                  <td>${v.total?.toLocaleString()}</td>
+                  <td>
+                    <span className={`estado-pago ${v.estado_pago}`}>
+                      {v.estado_pago === 'pagado' ? '✓ Pagado' : v.estado_pago === 'parcial' ? 'Parcial' : 'Pendiente'}
+                    </span>
+                  </td>
+                  <td>
+                    {v.estado_pago !== 'pagado' && (
+                      <button onClick={() => onRegistrarPago(v._id)} className="btn-xs">
+                        Pago
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      
+      {/* Modal Nueva Venta */}
+      {modalVenta && (
+        <div className="modal-overlay">
+          <div className="modal-content modal-venta">
+            <div className="modal-header">
+              <h3>Nueva Venta</h3>
+              <button onClick={() => setModalVenta(false)} className="btn-close">×</button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="form-group">
+                <label>Tipo de Venta</label>
+                <select 
+                  value={nuevaVenta.tipo_venta}
+                  onChange={(e) => {
+                    const tipo = tiposVenta.find(t => t.value === e.target.value)
+                    setNuevaVenta({
+                      ...nuevaVenta, 
+                      tipo_venta: e.target.value,
+                      precio_kg: tipo.precio
+                    })
+                  }}
+                >
+                  {tiposVenta.map(t => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="form-group">
+                <label>Nombre del Comprador</label>
+                <input 
+                  type="text"
+                  value={nuevaVenta.comprador.nombre}
+                  onChange={(e) => setNuevaVenta({
+                    ...nuevaVenta,
+                    comprador: { ...nuevaVenta.comprador, nombre: e.target.value }
+                  })}
+                  required
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Teléfono</label>
+                <input 
+                  type="tel"
+                  value={nuevaVenta.comprador.telefono}
+                  onChange={(e) => setNuevaVenta({
+                    ...nuevaVenta,
+                    comprador: { ...nuevaVenta.comprador, telefono: e.target.value }
+                  })}
+                />
+              </div>
+              
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Cantidad</label>
+                  <input 
+                    type="number"
+                    min="1"
+                    value={nuevaVenta.cantidad}
+                    onChange={(e) => setNuevaVenta({...nuevaVenta, cantidad: parseInt(e.target.value)})}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Peso Total (kg)</label>
+                  <input 
+                    type="number"
+                    step="0.1"
+                    value={nuevaVenta.peso_total_kg}
+                    onChange={(e) => setNuevaVenta({...nuevaVenta, peso_total_kg: parseFloat(e.target.value)})}
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Precio por Kg</label>
+                  <input 
+                    type="number"
+                    value={nuevaVenta.precio_kg}
+                    onChange={(e) => setNuevaVenta({...nuevaVenta, precio_kg: parseInt(e.target.value)})}
+                    required
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Total Estimado</label>
+                  <input 
+                    type="text"
+                    value={`$${(nuevaVenta.peso_total_kg * nuevaVenta.precio_kg).toLocaleString()}`}
+                    disabled
+                  />
+                </div>
+              </div>
+              
+              <div className="modal-actions">
+                <button type="button" onClick={() => setModalVenta(false)} className="btn-cancelar">
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary">
+                  Registrar Venta
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// COMPONENTE: PANEL DE CONTABILIDAD
+// ═══════════════════════════════════════════════════════════════════════
+
+const PanelContabilidad = ({ resumen, comparativo, onNuevoCosto }) => {
+  const [modalCosto, setModalCosto] = useState(false)
+  const [nuevoCosto, setNuevoCosto] = useState({
+    tipo_costo: 'directo',
+    categoria: 'alimento_concentrado',
+    descripcion: '',
+    cantidad: 1,
+    unidad: 'kg',
+    precio_unitario: 0
+  })
+  
+  const categorias = {
+    directo: [
+      { value: 'alimento_concentrado', label: 'Alimento Concentrado' },
+      { value: 'medicamentos', label: 'Medicamentos' },
+      { value: 'vacunas', label: 'Vacunas' },
+      { value: 'vitaminas', label: 'Vitaminas' }
+    ],
+    indirecto: [
+      { value: 'agua', label: 'Agua' },
+      { value: 'electricidad', label: 'Electricidad' },
+      { value: 'transporte', label: 'Transporte' },
+      { value: 'mantenimiento_equipos', label: 'Mantenimiento' }
+    ],
+    fijo: [
+      { value: 'arriendo', label: 'Arriendo' },
+      { value: 'administracion', label: 'Administración' },
+      { value: 'seguros', label: 'Seguros' }
+    ]
+  }
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    await onNuevoCosto(nuevoCosto)
+    setModalCosto(false)
+  }
+  
+  return (
+    <div className="panel-contabilidad">
+      <div className="section-header">
+        <h2><IconContabilidad size={20} /> Contabilidad</h2>
+        <button onClick={() => setModalCosto(true)} className="btn-primary btn-sm">
+          + Registrar Costo
+        </button>
+      </div>
+      
+      {/* Estado de Resultados */}
+      <div className="contabilidad-resumen">
+        <div className="resumen-card ingresos">
+          <div className="resumen-icon">📈</div>
+          <div className="resumen-info">
+            <span className="resumen-label">Ingresos</span>
+            <span className="resumen-valor">${(resumen?.ingresos?.total || 0).toLocaleString()}</span>
+          </div>
+        </div>
+        
+        <div className="resumen-card costos">
+          <div className="resumen-icon">📉</div>
+          <div className="resumen-info">
+            <span className="resumen-label">Costos</span>
+            <span className="resumen-valor">${(resumen?.costos?.total || 0).toLocaleString()}</span>
+          </div>
+        </div>
+        
+        <div className={`resumen-card utilidad ${resumen?.resultado?.estado || 'ganancia'}`}>
+          <div className="resumen-icon">{resumen?.resultado?.estado === 'ganancia' ? '✓' : '!'}</div>
+          <div className="resumen-info">
+            <span className="resumen-label">Utilidad</span>
+            <span className="resumen-valor">${(resumen?.resultado?.utilidad_bruta || 0).toLocaleString()}</span>
+            <span className="resumen-porcentaje">{resumen?.resultado?.margen_porcentaje || 0}%</span>
+          </div>
+        </div>
+      </div>
+      
+      {/* Desglose de Costos */}
+      <div className="costos-desglose">
+        <h3>Desglose de Costos - {resumen?.periodo?.nombre_mes}</h3>
+        <div className="costos-categorias">
+          {resumen?.costos?.por_categoria?.map(cat => (
+            <div key={cat._id} className="categoria-item">
+              <span className="cat-nombre">{cat._id.replace('_', ' ')}</span>
+              <span className="cat-valor">${cat.total.toLocaleString()}</span>
+              <div className="cat-barra">
+                <div 
+                  className="cat-progreso"
+                  style={{ width: `${Math.min((cat.total / (resumen?.costos?.total || 1)) * 100, 100)}%` }}
+                ></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* Gráfico Comparativo */}
+      {comparativo && comparativo.length > 0 && (
+        <div className="comparativo-mensual">
+          <h3>Comparativo Últimos Meses</h3>
+          <div className="grafico-barras">
+            {comparativo.map(mes => (
+              <div key={`${mes.mes}-${mes.año}`} className="barra-grupo">
+                <div className="barras">
+                  <div 
+                    className="barra ingresos" 
+                    style={{ height: `${Math.min((mes.ingresos / Math.max(...comparativo.map(m => m.ingresos || 1))) * 100, 100)}%` }}
+                    title={`Ingresos: $${mes.ingresos.toLocaleString()}`}
+                  ></div>
+                  <div 
+                    className="barra costos"
+                    style={{ height: `${Math.min((mes.costos / Math.max(...comparativo.map(m => m.ingresos || 1))) * 100, 100)}%` }}
+                    title={`Costos: $${mes.costos.toLocaleString()}`}
+                  ></div>
+                </div>
+                <span className="mes-label">{mes.nombre}</span>
+              </div>
+            ))}
+          </div>
+          <div className="grafico-leyenda">
+            <span><span className="dot ingresos"></span> Ingresos</span>
+            <span><span className="dot costos"></span> Costos</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Modal Nuevo Costo */}
+      {modalCosto && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Registrar Costo</h3>
+              <button onClick={() => setModalCosto(false)} className="btn-close">×</button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="form-group">
+                <label>Tipo de Costo</label>
+                <select 
+                  value={nuevoCosto.tipo_costo}
+                  onChange={(e) => setNuevoCosto({
+                    ...nuevoCosto, 
+                    tipo_costo: e.target.value,
+                    categoria: categorias[e.target.value][0].value
+                  })}
+                >
+                  <option value="directo">Costo Directo</option>
+                  <option value="indirecto">Costo Indirecto</option>
+                  <option value="fijo">Costo Fijo</option>
+                </select>
+              </div>
+              
+              <div className="form-group">
+                <label>Categoría</label>
+                <select 
+                  value={nuevoCosto.categoria}
+                  onChange={(e) => setNuevoCosto({...nuevoCosto, categoria: e.target.value})}
+                >
+                  {categorias[nuevoCosto.tipo_costo].map(c => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              
+              <div className="form-group">
+                <label>Descripción</label>
+                <input 
+                  type="text"
+                  value={nuevoCosto.descripcion}
+                  onChange={(e) => setNuevoCosto({...nuevoCosto, descripcion: e.target.value})}
+                  placeholder="Ej: Bulto concentrado 40kg"
+                  required
+                />
+              </div>
+              
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Cantidad</label>
+                  <input 
+                    type="number"
+                    min="1"
+                    value={nuevoCosto.cantidad}
+                    onChange={(e) => setNuevoCosto({...nuevoCosto, cantidad: parseInt(e.target.value)})}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Precio Unitario</label>
+                  <input 
+                    type="number"
+                    value={nuevoCosto.precio_unitario}
+                    onChange={(e) => setNuevoCosto({...nuevoCosto, precio_unitario: parseInt(e.target.value)})}
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div className="form-group">
+                <label>Total</label>
+                <input 
+                  type="text"
+                  value={`$${(nuevoCosto.cantidad * nuevoCosto.precio_unitario).toLocaleString()}`}
+                  disabled
+                />
+              </div>
+              
+              <div className="modal-actions">
+                <button type="button" onClick={() => setModalCosto(false)} className="btn-cancelar">
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary">
+                  Registrar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// COMPONENTE: PANEL DE INVENTARIO
+// ═══════════════════════════════════════════════════════════════════════
+
+const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo }) => {
+  const [modalCerdo, setModalCerdo] = useState(false)
+  const [nuevoCerdo, setNuevoCerdo] = useState({
+    tipo: 'engorde',
+    sexo: 'macho',
+    peso_actual: 0,
+    corral: '',
+    origen: 'nacido_granja'
+  })
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    await onNuevoCerdo(nuevoCerdo)
+    setModalCerdo(false)
+  }
+  
+  return (
+    <div className="panel-inventario">
+      <div className="section-header">
+        <h2><IconInventario size={20} /> Inventario de Cerdos</h2>
+        <button onClick={() => setModalCerdo(true)} className="btn-primary btn-sm">
+          + Nuevo Cerdo
+        </button>
+      </div>
+      
+      {/* Estadísticas */}
+      <div className="inventario-stats">
+        <div className="stat-box">
+          <IconCerdo size={24} />
+          <div>
+            <span className="stat-numero">{estadisticas?.total_activos || 0}</span>
+            <span className="stat-label">Total Activos</span>
+          </div>
+        </div>
+        <div className="stat-box">
+          <span className="stat-numero">{estadisticas?.peso_total_kg?.toLocaleString() || 0}</span>
+          <span className="stat-label">Kg Totales</span>
+        </div>
+      </div>
+      
+      {/* Por Tipo */}
+      <div className="inventario-tipos">
+        <h3>Por Categoría</h3>
+        <div className="tipos-grid">
+          {estadisticas?.por_tipo?.map(t => (
+            <div key={t._id} className="tipo-card">
+              <span className="tipo-nombre">{t._id}</span>
+              <span className="tipo-cantidad">{t.cantidad}</span>
+              <span className="tipo-peso">~{t.peso_promedio?.toFixed(1) || 0} kg</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      
+      {/* Tabla de inventario */}
+      <div className="tabla-container">
+        <table className="tabla-inventario">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Tipo</th>
+              <th>Sexo</th>
+              <th>Peso</th>
+              <th>Corral</th>
+              <th>Salud</th>
+            </tr>
+          </thead>
+          <tbody>
+            {inventario.length === 0 ? (
+              <tr><td colSpan="6" className="empty-row">No hay cerdos registrados</td></tr>
+            ) : (
+              inventario.slice(0, 15).map(c => (
+                <tr key={c._id}>
+                  <td><strong>{c.codigo}</strong></td>
+                  <td>{c.tipo}</td>
+                  <td>{c.sexo === 'macho' ? '♂' : '♀'}</td>
+                  <td>{c.peso_actual} kg</td>
+                  <td>{c.corral || '-'}</td>
+                  <td>
+                    <span className={`salud-badge ${c.estado_salud}`}>
+                      {c.estado_salud}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+      
+      {/* Modal Nuevo Cerdo */}
+      {modalCerdo && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h3>Registrar Cerdo</h3>
+              <button onClick={() => setModalCerdo(false)} className="btn-close">×</button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Tipo</label>
+                  <select 
+                    value={nuevoCerdo.tipo}
+                    onChange={(e) => setNuevoCerdo({...nuevoCerdo, tipo: e.target.value})}
+                  >
+                    <option value="lechon">Lechón</option>
+                    <option value="levante">Levante</option>
+                    <option value="engorde">Engorde</option>
+                    <option value="cerda_gestante">Cerda Gestante</option>
+                    <option value="cerda_lactante">Cerda Lactante</option>
+                    <option value="reproductor">Reproductor</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Sexo</label>
+                  <select 
+                    value={nuevoCerdo.sexo}
+                    onChange={(e) => setNuevoCerdo({...nuevoCerdo, sexo: e.target.value})}
+                  >
+                    <option value="macho">Macho ♂</option>
+                    <option value="hembra">Hembra ♀</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Peso Actual (kg)</label>
+                  <input 
+                    type="number"
+                    step="0.1"
+                    value={nuevoCerdo.peso_actual}
+                    onChange={(e) => setNuevoCerdo({...nuevoCerdo, peso_actual: parseFloat(e.target.value)})}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Corral</label>
+                  <input 
+                    type="text"
+                    value={nuevoCerdo.corral}
+                    onChange={(e) => setNuevoCerdo({...nuevoCerdo, corral: e.target.value})}
+                    placeholder="Ej: Corral 1"
+                  />
+                </div>
+              </div>
+              
+              <div className="form-group">
+                <label>Origen</label>
+                <select 
+                  value={nuevoCerdo.origen}
+                  onChange={(e) => setNuevoCerdo({...nuevoCerdo, origen: e.target.value})}
+                >
+                  <option value="nacido_granja">Nacido en Granja</option>
+                  <option value="comprado">Comprado</option>
+                </select>
+              </div>
+              
+              <div className="modal-actions">
+                <button type="button" onClick={() => setModalCerdo(false)} className="btn-cancelar">
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary">
+                  Registrar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 function App() {
 
   // ... (tus imports de arriba se mantienen igual)
@@ -176,7 +920,7 @@ const PantallaMantenimiento = () => (
   // ═══════════════════════════════════════════════════════════════════════
   // INTERRUPTOR DE MANTENIMIENTO
   // ═══════════════════════════════════════════════════════════════════════
-  const [enMantenimiento, setEnMantenimiento] = useState(true); // <--- CAMBIA A false PARA ACTIVAR LA WEB
+  const [enMantenimiento, setEnMantenimiento] = useState(false); // <--- CAMBIA A false PARA ACTIVAR LA WEB
 
   // Si el mantenimiento está activo, mostramos la pantalla y cortamos la ejecución aquí
   if (enMantenimiento) {
@@ -257,7 +1001,23 @@ const PantallaMantenimiento = () => (
     umbral_temp_critico: 40
   })
   const [mostrarConfig, setMostrarConfig] = useState(false)
-  
+  //Estado camaras 
+  // Estados de cámaras
+const [camaras, setCamaras] = useState([])
+const [grabaciones, setGrabaciones] = useState([])
+
+// Estados de ventas
+const [ventas, setVentas] = useState([])
+const [estadisticasVentas, setEstadisticasVentas] = useState({})
+
+// Estados de costos
+const [costos, setCostos] = useState([])
+const [resumenCostos, setResumenCostos] = useState({})
+const [comparativoCostos, setComparativoCostos] = useState([])
+
+// Estados de inventario
+const [inventario, setInventario] = useState([])
+const [estadisticasInventario, setEstadisticasInventario] = useState({})
   // Estados de usuarios (SuperAdmin)
   const [usuarios, setUsuarios] = useState([])
   const [mostrarModalUsuario, setMostrarModalUsuario] = useState(false)
@@ -267,6 +1027,7 @@ const PantallaMantenimiento = () => (
     password: '',
     rol: 'cliente'
   })
+
 
   // ═══════════════════════════════════════════════════════════════════════
   // EFECTOS
@@ -376,23 +1137,156 @@ const PantallaMantenimiento = () => (
   // ═══════════════════════════════════════════════════════════════════════
 
   const cargarDatos = async () => {
-    await Promise.all([
-      cargarClima(),
-      cargarPorqueriza(),
-      cargarFlujo(),
-      cargarBombas(),
-      cargarAlertas(),
+    await Promise.all([ 
       cargarLotes(),
-      cargarPesajes(),
-      cargarContabilidad(),
-      cargarConfig()
-    ])
+cargarPesajes(),
+cargarContabilidad(),
+cargarConfig(),
+cargarCamaras(),
+cargarVentas(),
+cargarCostos(),
+cargarInventario()
+])
     
     if (user?.rol === 'superadmin' || user?.rol === 'ingeniero') {
       cargarUsuarios()
     }
   }
+const cargarCamaras = async () => {
+  try {
+    const res = await axios.get(`${API_URL}/api/camaras`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setCamaras(res.data)
+    
+    const grabRes = await axios.get(`${API_URL}/api/grabaciones?limite=10`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setGrabaciones(grabRes.data)
+  } catch (error) {
+    console.error('Error cargando cámaras:', error)
+  }
+}
 
+const cargarVentas = async () => {
+  try {
+    const res = await axios.get(`${API_URL}/api/ventas`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setVentas(res.data)
+    
+    const statsRes = await axios.get(`${API_URL}/api/ventas/estadisticas`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setEstadisticasVentas(statsRes.data)
+  } catch (error) {
+    console.error('Error cargando ventas:', error)
+  }
+}
+
+const cargarCostos = async () => {
+  try {
+    const res = await axios.get(`${API_URL}/api/costos`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setCostos(res.data)
+    
+    const resumenRes = await axios.get(`${API_URL}/api/costos/resumen`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setResumenCostos(resumenRes.data)
+    
+    const compRes = await axios.get(`${API_URL}/api/costos/comparativo`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setComparativoCostos(compRes.data)
+  } catch (error) {
+    console.error('Error cargando costos:', error)
+  }
+}
+
+const cargarInventario = async () => {
+  try {
+    const res = await axios.get(`${API_URL}/api/inventario`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setInventario(res.data)
+    
+    const statsRes = await axios.get(`${API_URL}/api/inventario/estadisticas`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setEstadisticasInventario(statsRes.data)
+  } catch (error) {
+    console.error('Error cargando inventario:', error)
+  }
+}
+
+// Funciones para acciones
+const crearVenta = async (datos) => {
+  try {
+    await axios.post(`${API_URL}/api/ventas`, datos, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    cargarVentas()
+  } catch (error) {
+    alert('Error creando venta: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
+const registrarPagoVenta = async (id) => {
+  const monto = prompt('Monto del pago:')
+  if (!monto) return
+  try {
+    await axios.post(`${API_URL}/api/ventas/${id}/pago`, { monto: parseFloat(monto) }, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    cargarVentas()
+  } catch (error) {
+    alert('Error registrando pago: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
+const crearCosto = async (datos) => {
+  try {
+    await axios.post(`${API_URL}/api/costos`, datos, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    cargarCostos()
+  } catch (error) {
+    alert('Error creando costo: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
+const crearCerdo = async (datos) => {
+  try {
+    await axios.post(`${API_URL}/api/inventario`, datos, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    cargarInventario()
+  } catch (error) {
+    alert('Error registrando cerdo: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
+const capturarFotoCamara = async (codigo) => {
+  try {
+    await axios.post(`${API_URL}/api/grabaciones/foto`, { camara_codigo: codigo }, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    cargarCamaras()
+    alert('Foto capturada')
+  } catch (error) {
+    alert('Error capturando foto: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
+const verStreamCamara = (camara) => {
+  if (camara.url_stream) {
+    window.open(camara.url_stream, '_blank')
+  } else {
+    alert('Cámara sin URL de stream configurada')
+  }
+}
   const cargarClima = async () => {
     try {
       const res = await axios.get(
@@ -883,7 +1777,37 @@ const PantallaMantenimiento = () => (
               <IconAlerta />
               <span>Alertas</span>
             </button>
-            
+            <button 
+  className={`nav-item ${pagina === 'camaras' ? 'activo' : ''}`}
+  onClick={() => { setPagina('camaras'); setMenuAbierto(false) }}
+>
+  <IconCamara />
+  <span>Cámaras</span>
+</button>
+
+<button 
+  className={`nav-item ${pagina === 'ventas' ? 'activo' : ''}`}
+  onClick={() => { setPagina('ventas'); setMenuAbierto(false) }}
+>
+  <IconVenta />
+  <span>Ventas</span>
+</button>
+
+<button 
+  className={`nav-item ${pagina === 'costos' ? 'activo' : ''}`}
+  onClick={() => { setPagina('costos'); setMenuAbierto(false) }}
+>
+  <IconContabilidad />
+  <span>Costos</span>
+</button>
+
+<button 
+  className={`nav-item ${pagina === 'inventario' ? 'activo' : ''}`}
+  onClick={() => { setPagina('inventario'); setMenuAbierto(false) }}
+>
+  <IconInventario />
+  <span>Inventario</span>
+</button>
             <button 
               className={`nav-item ${pagina === 'reportes' ? 'activo' : ''}`}
               onClick={() => { setPagina('reportes'); setMenuAbierto(false) }}
@@ -1834,6 +2758,60 @@ const PantallaMantenimiento = () => (
             </div>
           )}
 
+
+{/* ════════════════════════════════════════════════════════════════ */}
+{/* PÁGINA: CÁMARAS */}
+{/* ════════════════════════════════════════════════════════════════ */}
+{pagina === 'camaras' && (
+  <div className="page-camaras">
+    <PanelCamaras 
+      camaras={camaras}
+      grabaciones={grabaciones}
+      onCapturar={capturarFotoCamara}
+      onVerStream={verStreamCamara}
+    />
+  </div>
+)}
+
+{/* ════════════════════════════════════════════════════════════════ */}
+{/* PÁGINA: VENTAS */}
+{/* ════════════════════════════════════════════════════════════════ */}
+{pagina === 'ventas' && (
+  <div className="page-ventas">
+    <PanelVentas 
+      ventas={ventas}
+      estadisticas={estadisticasVentas}
+      onNuevaVenta={crearVenta}
+      onRegistrarPago={registrarPagoVenta}
+    />
+  </div>
+)}
+
+{/* ════════════════════════════════════════════════════════════════ */}
+{/* PÁGINA: COSTOS */}
+{/* ════════════════════════════════════════════════════════════════ */}
+{pagina === 'costos' && (
+  <div className="page-costos">
+    <PanelContabilidad 
+      resumen={resumenCostos}
+      comparativo={comparativoCostos}
+      onNuevoCosto={crearCosto}
+    />
+  </div>
+)}
+
+{/* ════════════════════════════════════════════════════════════════ */}
+{/* PÁGINA: INVENTARIO */}
+{/* ════════════════════════════════════════════════════════════════ */}
+{pagina === 'inventario' && (
+  <div className="page-inventario">
+    <PanelInventario 
+      inventario={inventario}
+      estadisticas={estadisticasInventario}
+      onNuevoCerdo={crearCerdo}
+    />
+  </div>
+)}
           {/* ════════════════════════════════════════════════════════════════ */}
           {/* PÁGINA: CONFIGURACIÓN */}
           {/* ════════════════════════════════════════════════════════════════ */}
@@ -1913,6 +2891,7 @@ const PantallaMantenimiento = () => (
       </div>
     </div>
   )
+
 
 }
 export default App      

@@ -22,6 +22,12 @@ const Session = require('./models/Session');
 const loteRoutes = require('./routes/lotes');
 const contabilidadRoutes = require('./routes/contabilidad');
 const pesajeRoutes = require('./routes/pesajes');
+const camarasRoutes = require('./routes/camaras');
+const grabacionesRoutes = require('./routes/grabaciones');
+const ventasRoutes = require('./routes/ventas');
+const costosRoutes = require('./routes/costos');
+const inventarioRoutes = require('./routes/inventario');
+
 
 const app = express();
 const server = http.createServer(app);
@@ -55,7 +61,11 @@ app.use('/api/idtolu', idtoluRoutes);
 app.use('/api/lotes', loteRoutes);
 app.use('/api/contabilidad', contabilidadRoutes);
 app.use('/api/pesajes', pesajeRoutes);
-
+app.use('/api/camaras', camarasRoutes);
+app.use('/api/grabaciones', grabacionesRoutes);
+app.use('/api/ventas', ventasRoutes);
+app.use('/api/costos', costosRoutes);
+app.use('/api/inventario', inventarioRoutes);
 
 app.get('/', (req, res) => {
   res.json({ 
