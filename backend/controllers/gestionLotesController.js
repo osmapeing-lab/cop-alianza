@@ -1,5 +1,5 @@
 const Lote = require('../models/lote');
-const Weighing = require('../models/Weighing');
+const Weighing = require('../models/pesaje');
 const Contabilidad = require('../models/contabilidad');
 
 // Obtener todos los lotes

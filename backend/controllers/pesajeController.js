@@ -1,4 +1,4 @@
-const Weighing = require('../models/Weighing');
+const Weighing = require('../models/pesaje');
 const Lote = require('../models/lote');
 
 // Obtener todos los pesajes

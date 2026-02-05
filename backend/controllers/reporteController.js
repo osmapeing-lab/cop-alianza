@@ -6,7 +6,7 @@
 
 const ExcelJS = require('exceljs');
 const Reading = require('../models/Reading');
-const Weighing = require('../models/Weighing');
+const Weighing = require('../models/pesaje');
 const Lote = require('../models/lote');
 const Contabilidad = require('../models/contabilidad');
 const WaterConsumption = require('../models/WaterConsumption');
