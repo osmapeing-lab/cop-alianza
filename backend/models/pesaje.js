@@ -50,11 +50,13 @@ const pesajeSchema = new mongoose.Schema({
 // ═══════════════════════════════════════════════════════════════════════
 // MIDDLEWARE 1: Calcular peso promedio ANTES de guardar
 // ═══════════════════════════════════════════════════════════════════════
-pesajeSchema.pre('save', function(next) {
+pesajeSchema.pre('save', function() {
   if (this.cantidad_cerdos_pesados > 0) {
     this.peso_promedio = this.peso / this.cantidad_cerdos_pesados;
+  } else {
+    this.peso_promedio = this.peso;
   }
-  next();
+  // NO llamar next() porque no lo recibe como parámetro
 });
 
 // ═══════════════════════════════════════════════════════════════════════
