@@ -94,7 +94,9 @@ const ventaSchema = new mongoose.Schema({
   
   // Facturación
   numero_factura: {
-    type: String
+    type: String,
+    unique: true,
+    sparse: true  // ← AGREGADO: Permite múltiples null sin conflicto
   },
   
   fecha_venta: {
@@ -133,37 +135,75 @@ const ventaSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Calcular totales antes de guardar
+// ═══════════════════════════════════════════════════════════════════════
+// MIDDLEWARE 1: Calcular totales antes de guardar
+// ═══════════════════════════════════════════════════════════════════════
 ventaSchema.pre('save', function(next) {
+  // Calcular subtotal
   this.subtotal = this.peso_total_kg * this.precio_kg;
+  
+  // Calcular total con descuento
   this.total = this.subtotal - (this.descuento || 0);
+  
+  // Calcular saldo pendiente
   this.saldo_pendiente = this.total - (this.monto_pagado || 0);
   
-  // Actualizar estado de pago
+  // Actualizar estado de pago automáticamente
   if (this.monto_pagado >= this.total) {
     this.estado_pago = 'pagado';
     this.saldo_pendiente = 0;
   } else if (this.monto_pagado > 0) {
     this.estado_pago = 'parcial';
+  } else {
+    this.estado_pago = 'pendiente';
   }
   
   next();
 });
 
-// Generar número de factura automático
-ventaSchema.pre('save', async function(next) {
+// ═══════════════════════════════════════════════════════════════════════
+// MIDDLEWARE 2: Generar número de factura automático
+// ═══════════════════════════════════════════════════════════════════════
+// ✅ CORRECCIÓN: Quitamos "next" porque es función async
+ventaSchema.pre('save', async function() {
   if (!this.numero_factura) {
     const count = await mongoose.model('Venta').countDocuments();
     const year = new Date().getFullYear();
     this.numero_factura = `COO-${year}-${String(count + 1).padStart(5, '0')}`;
   }
-  next();
+  // ✅ NO llamamos next() porque la función es async
 });
 
-// Índices
+// ═══════════════════════════════════════════════════════════════════════
+// MÉTODO: Registrar pago parcial
+// ═══════════════════════════════════════════════════════════════════════
+ventaSchema.methods.registrarPago = async function(monto, metodo = 'efectivo', referencia = '', notas = '') {
+  // Agregar pago al array
+  this.pagos.push({
+    monto,
+    metodo,
+    referencia,
+    notas,
+    fecha: new Date()
+  });
+  
+  // Actualizar monto pagado
+  this.monto_pagado += monto;
+  
+  // Guardar (los middlewares calcularán el resto automáticamente)
+  await this.save();
+  
+  return this;
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// ÍNDICES para optimizar consultas
+// ═══════════════════════════════════════════════════════════════════════
 ventaSchema.index({ fecha_venta: -1 });
 ventaSchema.index({ tipo_venta: 1 });
 ventaSchema.index({ estado_pago: 1 });
 ventaSchema.index({ 'comprador.nombre': 'text' });
+ventaSchema.index({ numero_factura: 1 });
+ventaSchema.index({ activa: 1, fecha_venta: -1 });
 
 module.exports = mongoose.model('Venta', ventaSchema);

@@ -5,5 +5,7 @@ const { getAllMotorbombs, toggleMotorbomb, createMotorbomb } = require('../contr
 router.get('/', getAllMotorbombs);
 router.post('/', createMotorbomb);
 router.put('/:id/toggle', toggleMotorbomb);
+router.get('/status', getMotorbombStatus);
+
 
 module.exports = router;

@@ -31,3 +31,19 @@ exports.createMotorbomb = async (req, res) => {
     res.status(400).json({ mensaje: error.message });
   }
 };
+exports.getMotorbombStatus = async (req, res) => {
+  try {
+    const motorbombs = await Motorbomb.find();
+
+    const status = {};
+
+    motorbombs.forEach(bomba => {
+      status[bomba.codigo_bomba] = bomba.estado;
+    });
+
+    res.json(status);
+
+  } catch (error) {
+    res.status(500).json({ mensaje: error.message });
+  }
+};
