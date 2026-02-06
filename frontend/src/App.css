@@ -3306,3 +3306,26 @@ table td.sin-datos {
     grid-template-columns: 1fr;
   }
 }
+/* BÁSCULA TIEMPO REAL */
+.bascula-tiempo-real { margin-bottom: 20px; }
+.bascula-card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.bascula-header-section { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.bascula-header-section h3 { margin: 0; color: #1b4332; display: flex; align-items: center; gap: 8px; }
+.conexion-badge { padding: 4px 12px; border-radius: 20px; font-size: 0.85rem; }
+.conexion-badge.conectado { background: #d8f3dc; color: #1b4332; }
+.conexion-badge.desconectado { background: #fce4e4; color: #c0392b; }
+.bascula-display { background: linear-gradient(135deg, #1b4332, #2d6a4f); border-radius: 10px; padding: 30px; text-align: center; margin-bottom: 15px; }
+.bascula-display.inestable { animation: pulse 1s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.85; } }
+.peso-grande { font-size: 4rem; font-weight: bold; color: white; font-family: 'Courier New', monospace; }
+.peso-unidad { font-size: 1.5rem; margin-left: 8px; opacity: 0.9; }
+.estado-peso { color: #b7e4c7; margin-top: 10px; padding: 5px 15px; border-radius: 20px; display: inline-block; background: rgba(255,255,255,0.1); }
+.estado-peso.estable { background: #52b788; color: white; }
+.bascula-controles { margin-bottom: 15px; }
+.btn-tarar { padding: 10px 20px; border: 2px solid #2d6a4f; background: white; color: #2d6a4f; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+.btn-tarar:hover:not(:disabled) { background: #2d6a4f; color: white; }
+.btn-tarar:disabled { opacity: 0.5; cursor: not-allowed; }
+.bascula-guardar .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+.btn-guardar-peso { width: 100%; padding: 15px; background: #6c757d; color: white; border: none; border-radius: 8px; font-size: 1.1rem; font-weight: bold; cursor: pointer; margin-top: 15px; }
+.btn-guardar-peso.listo { background: linear-gradient(135deg, #2d6a4f, #40916c); }
+.btn-guardar-peso:disabled { background: #adb5bd; cursor: not-allowed; }

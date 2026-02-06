@@ -981,7 +981,9 @@ const PantallaMantenimiento = () => (
     cantidad_cerdos_pesados: 1,
     notas: ''
   })
-  
+  // Estados de báscula en tiempo real
+const [pesoLive, setPesoLive] = useState({ peso: 0, estable: false, conectado: false })
+const [pesajeLive, setPesajeLive] = useState({ lote: '', cantidad: 1, notas: '' })
   // Estados de contabilidad
   const [contabilidad, setContabilidad] = useState([])
   const [resumenContable, setResumenContable] = useState({
@@ -1090,7 +1092,13 @@ const [distribucionGastos, setDistribucionGastos] = useState([])
       setUltimoPeso(data)
       cargarPesajes()
     })
-
+socket.on('peso_live', (data) => {
+      setPesoLive({
+        peso: data.peso,
+        estable: data.estable,
+        conectado: true
+      })
+    })
     socket.on('bomba_actualizada', (data) => {
       cargarBombas()
     })
@@ -1099,6 +1107,7 @@ const [distribucionGastos, setDistribucionGastos] = useState([])
       socket.off('lectura_actualizada')
       socket.off('nuevo_peso')
       socket.off('bomba_actualizada')
+      socket.off('peso_live')
     }
   }, [])
 
@@ -2689,8 +2698,7 @@ const cargarDistribucionGastos = async () => {
               )}
             </div>
           )}
-
-          {/* ════════════════════════════════════════════════════════════════ */}
+{/* ════════════════════════════════════════════════════════════════ */}
           {/* PÁGINA: PESAJES */}
           {/* ════════════════════════════════════════════════════════════════ */}
           {pagina === 'pesajes' && (
@@ -2699,8 +2707,122 @@ const cargarDistribucionGastos = async () => {
                 <h2>Registro de Pesajes</h2>
                 <button className="btn-primary" onClick={() => setMostrarModalPesaje(true)}>
                   <IconMas />
-                  Nuevo Pesaje
+                  Pesaje Manual
                 </button>
+              </div>
+
+              {/* ══════════════════════════════════════════════════════════════ */}
+              {/* BÁSCULA EN TIEMPO REAL */}
+              {/* ══════════════════════════════════════════════════════════════ */}
+              <div className="bascula-tiempo-real">
+                <div className="bascula-card">
+                  <div className="bascula-header-section">
+                    <h3><IconPeso /> Báscula en Tiempo Real</h3>
+                    <span className={`conexion-badge ${pesoLive.conectado ? 'conectado' : 'desconectado'}`}>
+                      {pesoLive.conectado ? '● Conectada' : '○ Desconectada'}
+                    </span>
+                  </div>
+                  
+                  <div className={`bascula-display ${pesoLive.estable ? 'estable' : 'inestable'}`}>
+                    <div className="peso-grande">
+                      {pesoLive.peso.toFixed(1)}
+                      <span className="peso-unidad">kg</span>
+                    </div>
+                    <div className={`estado-peso ${pesoLive.estable ? 'estable' : ''}`}>
+                      {pesoLive.estable ? '✓ Peso Estable' : '~ Estabilizando...'}
+                    </div>
+                  </div>
+
+                  <div className="bascula-controles">
+                    <button 
+                      className="btn-tarar" 
+                      onClick={async () => {
+                        try {
+                          await axios.post(`${API_URL}/api/esp/peso/tarar`, {}, {
+                            headers: { Authorization: `Bearer ${token}` }
+                          })
+                          alert('Báscula tarada correctamente')
+                        } catch (error) {
+                          alert('Error al tarar')
+                        }
+                      }}
+                      disabled={!pesoLive.conectado}
+                    >
+                      <IconRefresh /> Tarar
+                    </button>
+                  </div>
+
+                  <div className="bascula-guardar">
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Lote</label>
+                        <select
+                          value={pesajeLive.lote}
+                          onChange={e => setPesajeLive({...pesajeLive, lote: e.target.value})}
+                        >
+                          <option value="">Seleccionar lote...</option>
+                          {lotes.filter(l => l.activo).map(lote => (
+                            <option key={lote._id} value={lote._id}>{lote.nombre}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-group">
+                        <label>Cerdos pesados</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={pesajeLive.cantidad}
+                          onChange={e => setPesajeLive({...pesajeLive, cantidad: parseInt(e.target.value) || 1})}
+                        />
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label>Peso promedio: <strong>{(pesoLive.peso / (pesajeLive.cantidad || 1)).toFixed(2)} kg</strong></label>
+                    </div>
+                    <div className="form-group">
+                      <label>Notas (opcional)</label>
+                      <input
+                        type="text"
+                        value={pesajeLive.notas}
+                        onChange={e => setPesajeLive({...pesajeLive, notas: e.target.value})}
+                        placeholder="Observaciones..."
+                      />
+                    </div>
+                    <button 
+                      className={`btn-guardar-peso ${pesoLive.estable ? 'listo' : ''}`}
+                      onClick={async () => {
+                        if (pesoLive.peso <= 0) {
+                          alert('El peso debe ser mayor a 0')
+                          return
+                        }
+                        if (!pesajeLive.lote) {
+                          alert('Selecciona un lote')
+                          return
+                        }
+                        try {
+                          await axios.post(`${API_URL}/api/esp/peso`, {
+                            peso: pesoLive.peso,
+                            unidad: 'kg',
+                            lote_id: pesajeLive.lote,
+                            cantidad_cerdos: pesajeLive.cantidad,
+                            notas: pesajeLive.notas,
+                            sensor_id: 'bascula_hx711'
+                          }, {
+                            headers: { Authorization: `Bearer ${token}` }
+                          })
+                          alert(`✓ Pesaje guardado: ${pesoLive.peso} kg`)
+                          setPesajeLive({lote: '', cantidad: 1, notas: ''})
+                          cargarPesajes()
+                        } catch (error) {
+                          alert('Error al guardar: ' + (error.response?.data?.mensaje || error.message))
+                        }
+                      }}
+                      disabled={pesoLive.peso <= 0}
+                    >
+                      ✓ GUARDAR PESAJE
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Estadísticas */}
@@ -2763,12 +2885,12 @@ const cargarDistribucionGastos = async () => {
                 </table>
               </div>
 
-              {/* Modal Pesaje */}
+              {/* Modal Pesaje Manual */}
               {mostrarModalPesaje && (
                 <div className="modal-overlay" onClick={() => setMostrarModalPesaje(false)}>
                   <div className="modal" onClick={e => e.stopPropagation()}>
                     <div className="modal-header">
-                      <h3>Nuevo Pesaje</h3>
+                      <h3>Pesaje Manual</h3>
                       <button className="btn-cerrar" onClick={() => setMostrarModalPesaje(false)}>&times;</button>
                     </div>
                     <div className="modal-body">
@@ -2828,7 +2950,6 @@ const cargarDistribucionGastos = async () => {
               )}
             </div>
           )}
-
           {/* ════════════════════════════════════════════════════════════════ */}
           {/* PÁGINA: CONTABILIDAD */}
           {/* ════════════════════════════════════════════════════════════════ */}
