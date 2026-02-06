@@ -8,11 +8,13 @@
  * Endpoints:
  *   POST /api/esp/riego                      -> Temperatura/humedad porqueriza
  *   GET  /api/esp/porqueriza                 -> Obtener ultimos datos temp
- *   GET  /api/esp/porqueriza/historico       -> Historial 24 horas temperatura ✅ NUEVO
+ *   GET  /api/esp/porqueriza/historico       -> Historial 24 horas temperatura
  *   POST /api/esp/flujo                      -> Datos de flujo de agua
  *   GET  /api/esp/flujo                      -> Obtener ultimos datos flujo
- *   GET  /api/esp/flujo/historico            -> Historial 7 días agua ✅ NUEVO
- *   POST /api/esp/peso                       -> Datos de bascula
+ *   GET  /api/esp/flujo/historico            -> Historial 7 días agua
+ *   POST /api/esp/peso                       -> Guardar peso en BD
+ *   POST /api/esp/peso/live                  -> Peso en tiempo real (NO guarda)
+ *   GET  /api/esp/peso/actual                -> Obtener peso actual en memoria
  *   GET  /api/esp/pesos                      -> Historial de pesos
  *   GET  /api/esp/bombas                     -> Estado de bombas
  *   POST /api/esp/heartbeat                  -> Heartbeat dispositivos
@@ -23,12 +25,15 @@
 const Reading = require('../models/Reading');
 const Alert = require('../models/Alert');
 const Motorbomb = require('../models/Motorbomb');
-const Pesaje = require('../models/pesaje');  // ✅ CORREGIDO: Era Weighing
-const Lote = require('../models/lote');      // ✅ CORREGIDO: Era lote (minúscula)
+const Pesaje = require('../models/pesaje');
+const Lote = require('../models/lote');
 const WaterConsumption = require('../models/WaterConsumption');
 const Config = require('../models/Config');
 
-// Ultimos datos para consulta rapida
+// ═══════════════════════════════════════════════════════════════════════
+// CACHE EN MEMORIA PARA DATOS EN TIEMPO REAL
+// ═══════════════════════════════════════════════════════════════════════
+
 let ultimosDatosPorqueriza = {
   temperatura: null,
   humedad: null,
@@ -44,6 +49,17 @@ let ultimosDatosFlujo = {
   sensor_id: null,
   fecha: null,
   conectado: false
+};
+
+// ✅ NUEVO: Cache para peso en tiempo real
+let pesoEnTiempoReal = {
+  peso: 0,
+  unidad: 'kg',
+  estable: false,
+  sensor_id: null,
+  fecha: null,
+  conectado: false,
+  historial: []  // Últimos 10 valores para detectar estabilidad
 };
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -172,7 +188,7 @@ exports.obtenerDatosPorqueriza = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// ✅ NUEVO: OBTENER HISTÓRICO DE TEMPERATURA (24 HORAS)
+// OBTENER HISTÓRICO DE TEMPERATURA (24 HORAS)
 // GET /api/esp/porqueriza/historico?horas=24
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -344,7 +360,7 @@ exports.obtenerDatosFlujo = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// ✅ NUEVO: OBTENER HISTÓRICO DE AGUA (7 DÍAS)
+// OBTENER HISTÓRICO DE AGUA (7 DÍAS)
 // GET /api/esp/flujo/historico?dias=7
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -407,31 +423,143 @@ exports.obtenerHistoricoAgua = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// RECIBIR DATOS DE PESO (HX711)
+// ✅ NUEVO: RECIBIR PESO EN TIEMPO REAL (NO GUARDA EN BD)
+// POST /api/esp/peso/live
+// 
+// El ESP envía cada 500ms, este endpoint solo actualiza la memoria
+// y emite por WebSocket. NO guarda en MongoDB.
+// ═══════════════════════════════════════════════════════════════════════
+
+exports.recibirPesoLive = async (req, res) => {
+  try {
+    const { sensor_id, peso, unidad } = req.body;
+    
+    // Validar peso
+    const pesoNumerico = parseFloat(peso) || 0;
+    
+    // Agregar al historial para detectar estabilidad
+    pesoEnTiempoReal.historial.push(pesoNumerico);
+    if (pesoEnTiempoReal.historial.length > 10) {
+      pesoEnTiempoReal.historial.shift(); // Mantener solo últimos 10
+    }
+    
+    // Detectar si el peso está estable (variación < 0.5kg en últimos 10 valores)
+    let estable = false;
+    if (pesoEnTiempoReal.historial.length >= 5) {
+      const min = Math.min(...pesoEnTiempoReal.historial);
+      const max = Math.max(...pesoEnTiempoReal.historial);
+      estable = (max - min) < 0.5; // Menos de 500g de variación = estable
+    }
+    
+    // Actualizar cache
+    pesoEnTiempoReal = {
+      peso: pesoNumerico,
+      unidad: unidad || 'kg',
+      estable,
+      sensor_id: sensor_id || 'bascula',
+      fecha: new Date(),
+      conectado: true,
+      historial: pesoEnTiempoReal.historial
+    };
+    
+    // Emitir por WebSocket en tiempo real
+    if (req.io) {
+      req.io.emit('peso_live', {
+        peso: pesoNumerico,
+        unidad: unidad || 'kg',
+        estable,
+        timestamp: Date.now()
+      });
+    }
+    
+    // Respuesta mínima para el ESP (rápida)
+    res.status(200).json({ ok: true });
+    
+  } catch (error) {
+    console.error('[ESP32] Error peso live:', error);
+    res.status(400).json({ mensaje: error.message });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// ✅ NUEVO: OBTENER PESO ACTUAL EN MEMORIA
+// GET /api/esp/peso/actual
+// 
+// Para que el frontend pueda consultar el peso actual sin WebSocket
+// ═══════════════════════════════════════════════════════════════════════
+
+exports.obtenerPesoActual = (req, res) => {
+  const conectado = pesoEnTiempoReal.fecha && 
+    (new Date() - pesoEnTiempoReal.fecha) < 5000; // 5 segundos timeout
+  
+  res.json({
+    peso: pesoEnTiempoReal.peso,
+    unidad: pesoEnTiempoReal.unidad,
+    estable: pesoEnTiempoReal.estable,
+    conectado,
+    fecha: pesoEnTiempoReal.fecha
+  });
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// ✅ NUEVO: TARAR BÁSCULA (Reset a cero)
+// POST /api/esp/peso/tarar
+// ═══════════════════════════════════════════════════════════════════════
+
+exports.tararBascula = (req, res) => {
+  // Resetear historial
+  pesoEnTiempoReal.historial = [];
+  pesoEnTiempoReal.peso = 0;
+  pesoEnTiempoReal.estable = false;
+  
+  // Emitir comando de tara al ESP por WebSocket
+  if (req.io) {
+    req.io.emit('comando_bascula', { accion: 'tarar' });
+  }
+  
+  console.log('[BASCULA] Tara solicitada');
+  
+  res.json({ 
+    ok: true, 
+    mensaje: 'Comando de tara enviado' 
+  });
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// RECIBIR DATOS DE PESO Y GUARDAR EN BD (HX711)
 // POST /api/esp/peso
+// 
+// Este endpoint SÍ guarda en la base de datos.
+// Se usa cuando el usuario confirma el pesaje.
 // ═══════════════════════════════════════════════════════════════════════
 
 exports.recibirPeso = async (req, res) => {
   try {
-    const { sensor_id, peso, unidad } = req.body;
+    const { sensor_id, peso, unidad, lote_id, cantidad_cerdos, notas } = req.body;
     
-    console.log('[ESP32] Peso recibido:', peso, unidad || 'kg');
+    console.log('[ESP32] Peso para GUARDAR:', peso, unidad || 'kg');
     
-    // Buscar lote activo para asociar el pesaje
-    const loteActivo = await Lote.findOne({ activo: true }).sort({ createdAt: -1 });
+    // Buscar lote: usar el proporcionado o el activo
+    let loteAsociado = null;
+    if (lote_id) {
+      loteAsociado = await Lote.findById(lote_id);
+    } else {
+      loteAsociado = await Lote.findOne({ activo: true }).sort({ createdAt: -1 });
+    }
     
-    const pesaje = new Pesaje({  // ✅ CORREGIDO: Era Weighing
-      lote: loteActivo ? loteActivo._id : null,
-      peso,
+    const pesaje = new Pesaje({
+      lote: loteAsociado ? loteAsociado._id : null,
+      peso: parseFloat(peso),
       unidad: unidad || 'kg',
       sensor_id: sensor_id || 'bascula',
-      cantidad_cerdos_pesados: 1
+      cantidad_cerdos_pesados: cantidad_cerdos || 1,
+      notas: notas || ''
     });
     await pesaje.save();
     
     // Actualizar peso promedio del lote si existe (el middleware lo hace automáticamente)
-    if (loteActivo) {
-      console.log('[ESP32] Peso asociado a lote:', loteActivo.nombre);
+    if (loteAsociado) {
+      console.log('[ESP32] Peso guardado y asociado a lote:', loteAsociado.nombre);
     }
     
     // Guardar lectura
@@ -443,23 +571,25 @@ exports.recibirPeso = async (req, res) => {
     });
     await lectura.save();
     
-    // WebSocket
+    // WebSocket - notificar nuevo pesaje guardado
     if (req.io) {
       req.io.emit('nuevo_peso', { 
         peso, 
         unidad: unidad || 'kg',
-        lote: loteActivo ? loteActivo.nombre : null
+        lote: loteAsociado ? loteAsociado.nombre : null,
+        pesaje_id: pesaje._id
       });
     }
     
     res.status(201).json({ 
-      mensaje: 'Peso registrado', 
+      mensaje: 'Peso guardado correctamente', 
       peso,
-      lote: loteActivo ? loteActivo.nombre : 'Sin lote activo'
+      pesaje_id: pesaje._id,
+      lote: loteAsociado ? loteAsociado.nombre : 'Sin lote activo'
     });
     
   } catch (error) {
-    console.error('[ESP32] Error peso:', error);
+    console.error('[ESP32] Error guardando peso:', error);
     res.status(400).json({ mensaje: error.message });
   }
 };
@@ -472,7 +602,7 @@ exports.recibirPeso = async (req, res) => {
 exports.obtenerHistorialPeso = async (req, res) => {
   try {
     const limite = parseInt(req.query.limite) || 20;
-    const pesajes = await Pesaje.find()  // ✅ CORREGIDO: Era Weighing
+    const pesajes = await Pesaje.find()
       .populate('lote', 'nombre')
       .sort({ createdAt: -1 })
       .limit(limite);

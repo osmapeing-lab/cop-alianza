@@ -10,11 +10,14 @@ const router = express.Router();
 const { 
   recibirRiego,
   obtenerDatosPorqueriza,
-  obtenerHistoricoTemperatura,  // ✅ NUEVO
+  obtenerHistoricoTemperatura,
   recibirFlujo,
   obtenerDatosFlujo,
-  obtenerHistoricoAgua,          // ✅ NUEVO
-  recibirPeso, 
+  obtenerHistoricoAgua,
+  recibirPeso,
+  recibirPesoLive,        // ✅ NUEVO: Peso en tiempo real
+  obtenerPesoActual,      // ✅ NUEVO: Consultar peso actual
+  tararBascula,           // ✅ NUEVO: Tarar báscula
   obtenerHistorialPeso,
   obtenerEstadoBombas,
   heartbeat
@@ -25,19 +28,22 @@ const {
 // ═══════════════════════════════════════════════════════════════════════
 router.post('/riego', recibirRiego);
 router.get('/porqueriza', obtenerDatosPorqueriza);
-router.get('/porqueriza/historico', obtenerHistoricoTemperatura);  // ✅ NUEVO
+router.get('/porqueriza/historico', obtenerHistoricoTemperatura);
 
 // ═══════════════════════════════════════════════════════════════════════
 // FLUJO DE AGUA
 // ═══════════════════════════════════════════════════════════════════════
 router.post('/flujo', recibirFlujo);
 router.get('/flujo', obtenerDatosFlujo);
-router.get('/flujo/historico', obtenerHistoricoAgua);  // ✅ NUEVO
+router.get('/flujo/historico', obtenerHistoricoAgua);
 
 // ═══════════════════════════════════════════════════════════════════════
-// BÁSCULA
+// BÁSCULA - PESO EN TIEMPO REAL
 // ═══════════════════════════════════════════════════════════════════════
-router.post('/peso', recibirPeso);
+router.post('/peso/live', recibirPesoLive);   // ✅ ESP envía cada 500ms (NO guarda)
+router.get('/peso/actual', obtenerPesoActual); // ✅ Frontend consulta peso actual
+router.post('/peso/tarar', tararBascula);      // ✅ Tarar/resetear báscula
+router.post('/peso', recibirPeso);             // Guardar pesaje en BD
 router.get('/pesos', obtenerHistorialPeso);
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -56,18 +62,21 @@ router.post('/heartbeat', heartbeat);
 router.get('/test', (req, res) => {
   res.json({ 
     mensaje: 'API ESP funcionando',
-    version: '2.5.0',
+    version: '3.0.0',
     endpoints: [
-      'POST /api/esp/riego',
-      'GET  /api/esp/porqueriza',
-      'GET  /api/esp/porqueriza/historico?horas=24  ← NUEVO',
-      'POST /api/esp/flujo',
-      'GET  /api/esp/flujo',
-      'GET  /api/esp/flujo/historico?dias=7  ← NUEVO',
-      'POST /api/esp/peso',
-      'GET  /api/esp/pesos',
-      'GET  /api/esp/bombas',
-      'POST /api/esp/heartbeat'
+      'POST /api/esp/riego                    -> Temp/Humedad DHT22',
+      'GET  /api/esp/porqueriza               -> Datos actuales porqueriza',
+      'GET  /api/esp/porqueriza/historico     -> Histórico 24h temperatura',
+      'POST /api/esp/flujo                    -> Datos flujo YF-S201',
+      'GET  /api/esp/flujo                    -> Datos actuales flujo',
+      'GET  /api/esp/flujo/historico          -> Histórico 7 días agua',
+      'POST /api/esp/peso/live                -> ✅ Peso tiempo real (NO guarda)',
+      'GET  /api/esp/peso/actual              -> ✅ Consultar peso actual',
+      'POST /api/esp/peso/tarar               -> ✅ Tarar báscula',
+      'POST /api/esp/peso                     -> Guardar pesaje en BD',
+      'GET  /api/esp/pesos                    -> Historial pesajes',
+      'GET  /api/esp/bombas                   -> Estado bombas',
+      'POST /api/esp/heartbeat                -> Heartbeat dispositivos'
     ],
     timestamp: new Date()
   });
