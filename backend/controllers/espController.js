@@ -23,8 +23,8 @@
 const Reading = require('../models/Reading');
 const Alert = require('../models/Alert');
 const Motorbomb = require('../models/Motorbomb');
-const Pesaje = require('../models/Pesaje');  // ✅ CORREGIDO: Era Weighing
-const Lote = require('../models/Lote');      // ✅ CORREGIDO: Era lote (minúscula)
+const Pesaje = require('../models/pesaje');  // ✅ CORREGIDO: Era Weighing
+const Lote = require('../models/lote');      // ✅ CORREGIDO: Era lote (minúscula)
 const WaterConsumption = require('../models/WaterConsumption');
 const Config = require('../models/Config');
 
