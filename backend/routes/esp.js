@@ -53,5 +53,43 @@ router.get('/test', (req, res) => {
     timestamp: new Date()
   });
 });
+// ═══════════════════════════════════════════════════════════════════════════
+// HEARTBEAT ESP8266/ESP32
+// POST /api/esp/heartbeat
+// ═══════════════════════════════════════════════════════════════════════════
+router.post('/heartbeat', (req, res) => {
+  const { deviceId, deviceType, status, rssi, ip, MB001, MB002 } = req.body;
+  
+  console.log('════════════════════════════════════════════');
+  console.log('[ESP] Heartbeat recibido');
+  console.log('  Device ID:', deviceId || 'No especificado');
+  console.log('  Tipo:', deviceType || 'ESP');
+  console.log('  Estado:', status || 'online');
+  console.log('  RSSI:', rssi || 'N/A', 'dBm');
+  console.log('  IP:', ip || 'N/A');
+  console.log('  MB001:', MB001 !== undefined ? MB001 : 'N/A');
+  console.log('  MB002:', MB002 !== undefined ? MB002 : 'N/A');
+  console.log('  Hora:', new Date().toISOString());
+  console.log('════════════════════════════════════════════');
+  
+  // Emitir al frontend por Socket.IO
+  if (req.io) {
+    req.io.emit('esp_status', {
+      deviceId: deviceId || 'ESP-001',
+      deviceType: deviceType || 'ESP8266',
+      status: status || 'online',
+      rssi: rssi,
+      ip: ip,
+      bombas: { MB001, MB002 },
+      timestamp: Date.now()
+    });
+  }
+  
+  res.json({ 
+    ok: true, 
+    mensaje: 'Heartbeat recibido',
+    timestamp: Date.now()
+  });
+});
 
 module.exports = router;
