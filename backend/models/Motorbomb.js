@@ -14,6 +14,18 @@ const motorbombSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  conectado: {
+    type: Boolean,
+    default: true
+  },
+  ubicacion: {
+    type: String,
+    default: ''
+  },
+  descripcion: {
+    type: String,
+    default: ''
+  },
   fecha_cambio: {
     type: Date,
     default: Date.now
