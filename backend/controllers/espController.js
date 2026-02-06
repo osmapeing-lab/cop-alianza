@@ -6,12 +6,16 @@
  * Controlador para recibir datos de sensores ESP32
  * 
  * Endpoints:
- *   POST /api/esp/riego      -> Temperatura/humedad porqueriza
- *   GET  /api/esp/porqueriza -> Obtener ultimos datos temp
- *   POST /api/esp/flujo      -> Datos de flujo de agua
- *   GET  /api/esp/flujo      -> Obtener ultimos datos flujo
- *   POST /api/esp/peso       -> Datos de bascula
- *   GET  /api/esp/bombas     -> Estado de bombas
+ *   POST /api/esp/riego                      -> Temperatura/humedad porqueriza
+ *   GET  /api/esp/porqueriza                 -> Obtener ultimos datos temp
+ *   GET  /api/esp/porqueriza/historico       -> Historial 24 horas temperatura ✅ NUEVO
+ *   POST /api/esp/flujo                      -> Datos de flujo de agua
+ *   GET  /api/esp/flujo                      -> Obtener ultimos datos flujo
+ *   GET  /api/esp/flujo/historico            -> Historial 7 días agua ✅ NUEVO
+ *   POST /api/esp/peso                       -> Datos de bascula
+ *   GET  /api/esp/pesos                      -> Historial de pesos
+ *   GET  /api/esp/bombas                     -> Estado de bombas
+ *   POST /api/esp/heartbeat                  -> Heartbeat dispositivos
  * 
  * ═══════════════════════════════════════════════════════════════════════
  */
@@ -19,8 +23,8 @@
 const Reading = require('../models/Reading');
 const Alert = require('../models/Alert');
 const Motorbomb = require('../models/Motorbomb');
-const Weighing = require('../models/pesaje');
-const Lote = require('../models/lote');
+const Pesaje = require('../models/Pesaje');  // ✅ CORREGIDO: Era Weighing
+const Lote = require('../models/Lote');      // ✅ CORREGIDO: Era lote (minúscula)
 const WaterConsumption = require('../models/WaterConsumption');
 const Config = require('../models/Config');
 
@@ -76,7 +80,7 @@ exports.recibirRiego = async (req, res) => {
       if (temperatura >= config.umbral_temp_critico) {
         const alerta = new Alert({
           tipo: 'critico',
-          mensaje: 'CRITICO: Temperatura ' + temperatura + 'C - Riesgo de estres termico',
+          mensaje: `CRITICO: Temperatura ${temperatura}°C - Riesgo de estrés térmico`,
           valor: temperatura
         });
         await alerta.save();
@@ -89,7 +93,7 @@ exports.recibirRiego = async (req, res) => {
       } else if (temperatura >= config.umbral_temp_max) {
         const alerta = new Alert({
           tipo: 'alerta',
-          mensaje: 'ALERTA: Temperatura ' + temperatura + 'C - Por encima del umbral',
+          mensaje: `ALERTA: Temperatura ${temperatura}°C - Por encima del umbral`,
           valor: temperatura
         });
         await alerta.save();
@@ -119,8 +123,8 @@ exports.recibirRiego = async (req, res) => {
     };
     
     // WebSocket
-    if (global.io) {
-      global.io.emit('lectura_actualizada', {
+    if (req.io) {
+      req.io.emit('lectura_actualizada', {
         temperatura,
         humedad,
         sensor_id,
@@ -163,6 +167,49 @@ exports.obtenerDatosPorqueriza = async (req, res) => {
       conectado
     });
   } catch (error) {
+    res.status(500).json({ mensaje: error.message });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// ✅ NUEVO: OBTENER HISTÓRICO DE TEMPERATURA (24 HORAS)
+// GET /api/esp/porqueriza/historico?horas=24
+// ═══════════════════════════════════════════════════════════════════════
+
+exports.obtenerHistoricoTemperatura = async (req, res) => {
+  try {
+    const horas = parseInt(req.query.horas) || 24;
+    const fechaLimite = new Date();
+    fechaLimite.setHours(fechaLimite.getHours() - horas);
+    
+    // Obtener lecturas de temperatura
+    const temperaturas = await Reading.find({
+      tipo: 'temp_porqueriza',
+      createdAt: { $gte: fechaLimite }
+    })
+    .sort({ createdAt: 1 })
+    .select('valor createdAt')
+    .lean();
+    
+    // Obtener lecturas de humedad
+    const humedades = await Reading.find({
+      tipo: 'humedad_porqueriza',
+      createdAt: { $gte: fechaLimite }
+    })
+    .sort({ createdAt: 1 })
+    .select('valor createdAt')
+    .lean();
+    
+    // Combinar por timestamp (aproximado)
+    const historico = temperaturas.map((temp, index) => ({
+      fecha: temp.createdAt,
+      temperatura: temp.valor,
+      humedad: humedades[index]?.valor || null
+    }));
+    
+    res.json(historico);
+  } catch (error) {
+    console.error('Error obteniendo histórico temperatura:', error);
     res.status(500).json({ mensaje: error.message });
   }
 };
@@ -243,8 +290,8 @@ exports.recibirFlujo = async (req, res) => {
     };
     
     // WebSocket
-    if (global.io) {
-      global.io.emit('lectura_actualizada', {
+    if (req.io) {
+      req.io.emit('lectura_actualizada', {
         caudal_l_min,
         volumen_l,
         volumen_diario_l,
@@ -297,6 +344,69 @@ exports.obtenerDatosFlujo = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
+// ✅ NUEVO: OBTENER HISTÓRICO DE AGUA (7 DÍAS)
+// GET /api/esp/flujo/historico?dias=7
+// ═══════════════════════════════════════════════════════════════════════
+
+exports.obtenerHistoricoAgua = async (req, res) => {
+  try {
+    const dias = parseInt(req.query.dias) || 7;
+    const fechaLimite = new Date();
+    fechaLimite.setDate(fechaLimite.getDate() - dias);
+    
+    // Obtener consumos diarios desde WaterConsumption
+    const consumos = await WaterConsumption.find({
+      fecha: { $gte: fechaLimite },
+      tipo: 'diario'
+    })
+    .sort({ fecha: 1 })
+    .select('fecha litros')
+    .lean();
+    
+    // Si no hay datos en WaterConsumption, agrupar desde Reading
+    if (consumos.length === 0) {
+      const lecturas = await Reading.aggregate([
+        {
+          $match: {
+            tipo: 'volumen_diario',
+            createdAt: { $gte: fechaLimite }
+          }
+        },
+        {
+          $group: {
+            _id: {
+              $dateToString: { format: '%Y-%m-%d', date: '$createdAt' }
+            },
+            volumen_total: { $max: '$valor' }
+          }
+        },
+        {
+          $sort: { _id: 1 }
+        }
+      ]);
+      
+      const historico = lecturas.map(item => ({
+        fecha: item._id,
+        volumen_total: item.volumen_total
+      }));
+      
+      return res.json(historico);
+    }
+    
+    // Formatear respuesta
+    const historico = consumos.map(c => ({
+      fecha: c.fecha.toISOString().split('T')[0],
+      volumen_total: c.litros
+    }));
+    
+    res.json(historico);
+  } catch (error) {
+    console.error('Error obteniendo histórico agua:', error);
+    res.status(500).json({ mensaje: error.message });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
 // RECIBIR DATOS DE PESO (HX711)
 // POST /api/esp/peso
 // ═══════════════════════════════════════════════════════════════════════
@@ -310,7 +420,7 @@ exports.recibirPeso = async (req, res) => {
     // Buscar lote activo para asociar el pesaje
     const loteActivo = await Lote.findOne({ activo: true }).sort({ createdAt: -1 });
     
-    const pesaje = new Weighing({
+    const pesaje = new Pesaje({  // ✅ CORREGIDO: Era Weighing
       lote: loteActivo ? loteActivo._id : null,
       peso,
       unidad: unidad || 'kg',
@@ -319,16 +429,8 @@ exports.recibirPeso = async (req, res) => {
     });
     await pesaje.save();
     
-    // Actualizar peso promedio del lote si existe
+    // Actualizar peso promedio del lote si existe (el middleware lo hace automáticamente)
     if (loteActivo) {
-      const pesajesLote = await Weighing.find({ lote: loteActivo._id });
-      const totalPeso = pesajesLote.reduce((sum, p) => sum + (p.peso_promedio || p.peso), 0);
-      const pesoPromedio = totalPeso / pesajesLote.length;
-      
-      await Lote.findByIdAndUpdate(loteActivo._id, {
-        peso_promedio_actual: Math.round(pesoPromedio * 100) / 100
-      });
-      
       console.log('[ESP32] Peso asociado a lote:', loteActivo.nombre);
     }
     
@@ -342,8 +444,8 @@ exports.recibirPeso = async (req, res) => {
     await lectura.save();
     
     // WebSocket
-    if (global.io) {
-      global.io.emit('nuevo_peso', { 
+    if (req.io) {
+      req.io.emit('nuevo_peso', { 
         peso, 
         unidad: unidad || 'kg',
         lote: loteActivo ? loteActivo.nombre : null
@@ -370,7 +472,7 @@ exports.recibirPeso = async (req, res) => {
 exports.obtenerHistorialPeso = async (req, res) => {
   try {
     const limite = parseInt(req.query.limite) || 20;
-    const pesajes = await Weighing.find()
+    const pesajes = await Pesaje.find()  // ✅ CORREGIDO: Era Weighing
       .populate('lote', 'nombre')
       .sort({ createdAt: -1 })
       .limit(limite);
@@ -401,10 +503,37 @@ exports.obtenerEstadoBombas = async (req, res) => {
 
 exports.heartbeat = async (req, res) => {
   try {
-    const { dispositivo_id, tipo, rssi } = req.body;
-    console.log('[HEARTBEAT]', tipo, '-', dispositivo_id, '- RSSI:', rssi);
-    res.json({ mensaje: 'OK', timestamp: new Date() });
+    const { dispositivo_id, deviceId, tipo, deviceType, status, rssi, ip, MB001, MB002 } = req.body;
+    
+    console.log('════════════════════════════════════════════');
+    console.log('[HEARTBEAT]', tipo || deviceType, '-', dispositivo_id || deviceId);
+    console.log('  Estado:', status || 'online');
+    console.log('  RSSI:', rssi, 'dBm');
+    console.log('  IP:', ip || 'N/A');
+    if (MB001 !== undefined) console.log('  MB001:', MB001);
+    if (MB002 !== undefined) console.log('  MB002:', MB002);
+    console.log('════════════════════════════════════════════');
+    
+    // Emitir al frontend por Socket.IO
+    if (req.io) {
+      req.io.emit('esp_status', {
+        deviceId: dispositivo_id || deviceId || 'ESP-001',
+        deviceType: tipo || deviceType || 'ESP32',
+        status: status || 'online',
+        rssi,
+        ip,
+        bombas: { MB001, MB002 },
+        timestamp: Date.now()
+      });
+    }
+    
+    res.json({ 
+      ok: true,
+      mensaje: 'Heartbeat recibido',
+      timestamp: new Date()
+    });
   } catch (error) {
+    console.error('[HEARTBEAT] Error:', error);
     res.status(400).json({ mensaje: error.message });
   }
 };

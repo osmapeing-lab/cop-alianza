@@ -10,85 +10,66 @@ const router = express.Router();
 const { 
   recibirRiego,
   obtenerDatosPorqueriza,
+  obtenerHistoricoTemperatura,  // ✅ NUEVO
   recibirFlujo,
   obtenerDatosFlujo,
+  obtenerHistoricoAgua,          // ✅ NUEVO
   recibirPeso, 
   obtenerHistorialPeso,
   obtenerEstadoBombas,
   heartbeat
 } = require('../controllers/espController');
 
-// Temperatura y humedad
+// ═══════════════════════════════════════════════════════════════════════
+// TEMPERATURA Y HUMEDAD
+// ═══════════════════════════════════════════════════════════════════════
 router.post('/riego', recibirRiego);
 router.get('/porqueriza', obtenerDatosPorqueriza);
+router.get('/porqueriza/historico', obtenerHistoricoTemperatura);  // ✅ NUEVO
 
-// Flujo de agua
+// ═══════════════════════════════════════════════════════════════════════
+// FLUJO DE AGUA
+// ═══════════════════════════════════════════════════════════════════════
 router.post('/flujo', recibirFlujo);
 router.get('/flujo', obtenerDatosFlujo);
+router.get('/flujo/historico', obtenerHistoricoAgua);  // ✅ NUEVO
 
-// Bascula
+// ═══════════════════════════════════════════════════════════════════════
+// BÁSCULA
+// ═══════════════════════════════════════════════════════════════════════
 router.post('/peso', recibirPeso);
 router.get('/pesos', obtenerHistorialPeso);
 
-// Bombas
+// ═══════════════════════════════════════════════════════════════════════
+// BOMBAS
+// ═══════════════════════════════════════════════════════════════════════
 router.get('/bombas', obtenerEstadoBombas);
 
-// Heartbeat
+// ═══════════════════════════════════════════════════════════════════════
+// HEARTBEAT
+// ═══════════════════════════════════════════════════════════════════════
 router.post('/heartbeat', heartbeat);
 
-// Test
+// ═══════════════════════════════════════════════════════════════════════
+// TEST
+// ═══════════════════════════════════════════════════════════════════════
 router.get('/test', (req, res) => {
   res.json({ 
     mensaje: 'API ESP funcionando',
+    version: '2.5.0',
     endpoints: [
       'POST /api/esp/riego',
-      'GET /api/esp/porqueriza',
+      'GET  /api/esp/porqueriza',
+      'GET  /api/esp/porqueriza/historico?horas=24  ← NUEVO',
       'POST /api/esp/flujo',
-      'GET /api/esp/flujo',
+      'GET  /api/esp/flujo',
+      'GET  /api/esp/flujo/historico?dias=7  ← NUEVO',
       'POST /api/esp/peso',
-      'GET /api/esp/pesos',
-      'GET /api/esp/bombas',
+      'GET  /api/esp/pesos',
+      'GET  /api/esp/bombas',
       'POST /api/esp/heartbeat'
     ],
     timestamp: new Date()
-  });
-});
-// ═══════════════════════════════════════════════════════════════════════════
-// HEARTBEAT ESP8266/ESP32
-// POST /api/esp/heartbeat
-// ═══════════════════════════════════════════════════════════════════════════
-router.post('/heartbeat', (req, res) => {
-  const { deviceId, deviceType, status, rssi, ip, MB001, MB002 } = req.body;
-  
-  console.log('════════════════════════════════════════════');
-  console.log('[ESP] Heartbeat recibido');
-  console.log('  Device ID:', deviceId || 'No especificado');
-  console.log('  Tipo:', deviceType || 'ESP');
-  console.log('  Estado:', status || 'online');
-  console.log('  RSSI:', rssi || 'N/A', 'dBm');
-  console.log('  IP:', ip || 'N/A');
-  console.log('  MB001:', MB001 !== undefined ? MB001 : 'N/A');
-  console.log('  MB002:', MB002 !== undefined ? MB002 : 'N/A');
-  console.log('  Hora:', new Date().toISOString());
-  console.log('════════════════════════════════════════════');
-  
-  // Emitir al frontend por Socket.IO
-  if (req.io) {
-    req.io.emit('esp_status', {
-      deviceId: deviceId || 'ESP-001',
-      deviceType: deviceType || 'ESP8266',
-      status: status || 'online',
-      rssi: rssi,
-      ip: ip,
-      bombas: { MB001, MB002 },
-      timestamp: Date.now()
-    });
-  }
-  
-  res.json({ 
-    ok: true, 
-    mensaje: 'Heartbeat recibido',
-    timestamp: Date.now()
   });
 });
 
