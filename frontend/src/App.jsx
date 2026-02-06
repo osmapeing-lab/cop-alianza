@@ -3068,7 +3068,7 @@ const cargarDistribucionGastos = async () => {
               <button
                 className={`btn-bomba ${bomba.estado ? 'btn-apagar' : 'btn-encender'}`}
                 onClick={() => toggleBomba(bomba._id)}
-                disabled={!bomba.conectado}
+                disabled={false}
               >
                 {bomba.estado ? 'Apagar' : 'Encender'}
               </button>
