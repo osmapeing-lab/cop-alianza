@@ -46,12 +46,13 @@ let ultimosDatosFlujo = {
   caudal: 0,
   volumen_total: 0,
   volumen_diario: 0,
+  volumen_inicio_dia: 0,
+  fecha_inicio_dia: null,
   sensor_id: null,
   fecha: null,
   conectado: false
 };
 
-// ✅ NUEVO: Cache para peso en tiempo real
 let pesoEnTiempoReal = {
   peso: 0,
   unidad: 'kg',
@@ -59,8 +60,23 @@ let pesoEnTiempoReal = {
   sensor_id: null,
   fecha: null,
   conectado: false,
-  historial: []  // Últimos 10 valores para detectar estabilidad
+  historial: []
 };
+
+// ═══════════════════════════════════════════════════════════════════════
+// FUNCIÓN AUXILIAR: Verificar si es un nuevo día
+// ═══════════════════════════════════════════════════════════════════════
+
+function esNuevoDia(fechaAnterior) {
+  if (!fechaAnterior) return true;
+  
+  const ahora = new Date();
+  const anterior = new Date(fechaAnterior);
+  
+  return ahora.getFullYear() !== anterior.getFullYear() ||
+         ahora.getMonth() !== anterior.getMonth() ||
+         ahora.getDate() !== anterior.getDate();
+}
 
 // ═══════════════════════════════════════════════════════════════════════
 // RECIBIR DATOS DE TEMPERATURA Y HUMEDAD (DHT22)
@@ -79,7 +95,6 @@ exports.recibirRiego = async (req, res) => {
     console.log('  RSSI:', rssi, 'dBm');
     console.log('========================================');
     
-    // Obtener configuracion de umbrales
     const config = await Config.findOne() || { umbral_temp_max: 37, umbral_temp_critico: 40 };
     
     const lecturas = [];
@@ -92,7 +107,6 @@ exports.recibirRiego = async (req, res) => {
         unidad: 'C'
       });
       
-      // Alertas de temperatura usando config
       if (temperatura >= config.umbral_temp_critico) {
         const alerta = new Alert({
           tipo: 'critico',
@@ -101,7 +115,6 @@ exports.recibirRiego = async (req, res) => {
         });
         await alerta.save();
         
-        // Activar bombas automaticamente si esta habilitado
         if (config.bomba_automatica) {
           await Motorbomb.updateMany({ conectada: true }, { estado: true });
           console.log('[ALERTA] Temperatura critica - Bombas activadas');
@@ -129,7 +142,6 @@ exports.recibirRiego = async (req, res) => {
       await Reading.insertMany(lecturas);
     }
     
-    // Actualizar cache
     ultimosDatosPorqueriza = {
       temperatura,
       humedad,
@@ -138,7 +150,6 @@ exports.recibirRiego = async (req, res) => {
       conectado: true
     };
     
-    // WebSocket
     if (req.io) {
       req.io.emit('lectura_actualizada', {
         temperatura,
@@ -198,7 +209,6 @@ exports.obtenerHistoricoTemperatura = async (req, res) => {
     const fechaLimite = new Date();
     fechaLimite.setHours(fechaLimite.getHours() - horas);
     
-    // Obtener lecturas de temperatura
     const temperaturas = await Reading.find({
       tipo: 'temp_porqueriza',
       createdAt: { $gte: fechaLimite }
@@ -207,7 +217,6 @@ exports.obtenerHistoricoTemperatura = async (req, res) => {
     .select('valor createdAt')
     .lean();
     
-    // Obtener lecturas de humedad
     const humedades = await Reading.find({
       tipo: 'humedad_porqueriza',
       createdAt: { $gte: fechaLimite }
@@ -216,7 +225,6 @@ exports.obtenerHistoricoTemperatura = async (req, res) => {
     .select('valor createdAt')
     .lean();
     
-    // Combinar por timestamp (aproximado)
     const historico = temperaturas.map((temp, index) => ({
       fecha: temp.createdAt,
       temperatura: temp.valor,
@@ -239,12 +247,38 @@ exports.recibirFlujo = async (req, res) => {
   try {
     const { sensor_id, caudal_l_min, volumen_l, volumen_diario_l, rssi } = req.body;
     
+    // ═══════════════════════════════════════════════════════════════════
+    // ✅ CÁLCULO AUTOMÁTICO DE VOLUMEN DIARIO
+    // ═══════════════════════════════════════════════════════════════════
+    
+    let volumenDiarioCalculado = volumen_diario_l;
+    
+    if (volumenDiarioCalculado === undefined && volumen_l !== undefined) {
+      
+      if (esNuevoDia(ultimosDatosFlujo.fecha_inicio_dia)) {
+        ultimosDatosFlujo.volumen_inicio_dia = volumen_l;
+        ultimosDatosFlujo.fecha_inicio_dia = new Date();
+        volumenDiarioCalculado = 0;
+        
+        console.log('[FLUJO] Nuevo día detectado. Volumen inicial:', volumen_l, 'L');
+      } else {
+        volumenDiarioCalculado = volumen_l - ultimosDatosFlujo.volumen_inicio_dia;
+        
+        if (volumenDiarioCalculado < 0) {
+          ultimosDatosFlujo.volumen_inicio_dia = volumen_l;
+          volumenDiarioCalculado = 0;
+        }
+      }
+    }
+    
+    volumenDiarioCalculado = Math.round((volumenDiarioCalculado || 0) * 100) / 100;
+    
     console.log('========================================');
     console.log('[ESP32] Datos flujo de agua recibidos');
     console.log('  Sensor:', sensor_id);
     console.log('  Caudal:', caudal_l_min, 'L/min');
     console.log('  Volumen total:', volumen_l, 'L');
-    console.log('  Volumen diario:', volumen_diario_l, 'L');
+    console.log('  Volumen diario (calculado):', volumenDiarioCalculado, 'L');
     console.log('  RSSI:', rssi, 'dBm');
     console.log('========================================');
     
@@ -268,22 +302,21 @@ exports.recibirFlujo = async (req, res) => {
       });
     }
     
-    if (volumen_diario_l !== undefined) {
+    if (volumenDiarioCalculado !== undefined) {
       lecturas.push({
         sensor: sensor_id || 'esp_flujo',
         tipo: 'volumen_diario',
-        valor: volumen_diario_l,
+        valor: volumenDiarioCalculado,
         unidad: 'L'
       });
       
-      // Guardar consumo diario en WaterConsumption
       const hoy = new Date();
       hoy.setHours(0, 0, 0, 0);
       
       await WaterConsumption.findOneAndUpdate(
         { fecha: { $gte: hoy }, tipo: 'diario' },
         { 
-          litros: volumen_diario_l,
+          litros: volumenDiarioCalculado,
           tipo: 'diario',
           fecha: new Date()
         },
@@ -295,22 +328,21 @@ exports.recibirFlujo = async (req, res) => {
       await Reading.insertMany(lecturas);
     }
     
-    // Actualizar cache
     ultimosDatosFlujo = {
-      caudal: caudal_l_min,
-      volumen_total: volumen_l,
-      volumen_diario: volumen_diario_l,
+      ...ultimosDatosFlujo,
+      caudal: caudal_l_min || 0,
+      volumen_total: volumen_l || 0,
+      volumen_diario: volumenDiarioCalculado,
       sensor_id,
       fecha: new Date(),
       conectado: true
     };
     
-    // WebSocket
     if (req.io) {
       req.io.emit('lectura_actualizada', {
         caudal_l_min,
         volumen_l,
-        volumen_diario_l,
+        volumen_diario_l: volumenDiarioCalculado,
         sensor_id,
         timestamp: new Date()
       });
@@ -319,7 +351,8 @@ exports.recibirFlujo = async (req, res) => {
     res.status(201).json({ 
       mensaje: 'Datos de flujo registrados',
       caudal: caudal_l_min,
-      volumen: volumen_l
+      volumen: volumen_l,
+      volumen_diario: volumenDiarioCalculado
     });
     
   } catch (error) {
@@ -348,9 +381,9 @@ exports.obtenerDatosFlujo = async (req, res) => {
       (new Date() - ultimosDatosFlujo.fecha) < 120000;
     
     res.json({
-      caudal: ultimoCaudal?.valor || ultimosDatosFlujo.caudal,
-      volumen_total: ultimoVolumen?.valor || ultimosDatosFlujo.volumen_total,
-      volumen_diario: ultimoVolumenDiario?.valor || ultimosDatosFlujo.volumen_diario,
+      caudal: ultimoCaudal?.valor || ultimosDatosFlujo.caudal || 0,
+      volumen_total: ultimoVolumen?.valor || ultimosDatosFlujo.volumen_total || 0,
+      volumen_diario: ultimoVolumenDiario?.valor || ultimosDatosFlujo.volumen_diario || 0,
       fecha: ultimoCaudal?.createdAt || ultimosDatosFlujo.fecha,
       conectado
     });
@@ -370,7 +403,6 @@ exports.obtenerHistoricoAgua = async (req, res) => {
     const fechaLimite = new Date();
     fechaLimite.setDate(fechaLimite.getDate() - dias);
     
-    // Obtener consumos diarios desde WaterConsumption
     const consumos = await WaterConsumption.find({
       fecha: { $gte: fechaLimite },
       tipo: 'diario'
@@ -379,7 +411,6 @@ exports.obtenerHistoricoAgua = async (req, res) => {
     .select('fecha litros')
     .lean();
     
-    // Si no hay datos en WaterConsumption, agrupar desde Reading
     if (consumos.length === 0) {
       const lecturas = await Reading.aggregate([
         {
@@ -409,7 +440,6 @@ exports.obtenerHistoricoAgua = async (req, res) => {
       return res.json(historico);
     }
     
-    // Formatear respuesta
     const historico = consumos.map(c => ({
       fecha: c.fecha.toISOString().split('T')[0],
       volumen_total: c.litros
@@ -423,35 +453,28 @@ exports.obtenerHistoricoAgua = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// ✅ NUEVO: RECIBIR PESO EN TIEMPO REAL (NO GUARDA EN BD)
+// RECIBIR PESO EN TIEMPO REAL (NO GUARDA EN BD)
 // POST /api/esp/peso/live
-// 
-// El ESP envía cada 500ms, este endpoint solo actualiza la memoria
-// y emite por WebSocket. NO guarda en MongoDB.
 // ═══════════════════════════════════════════════════════════════════════
 
 exports.recibirPesoLive = async (req, res) => {
   try {
     const { sensor_id, peso, unidad } = req.body;
     
-    // Validar peso
     const pesoNumerico = parseFloat(peso) || 0;
     
-    // Agregar al historial para detectar estabilidad
     pesoEnTiempoReal.historial.push(pesoNumerico);
     if (pesoEnTiempoReal.historial.length > 10) {
-      pesoEnTiempoReal.historial.shift(); // Mantener solo últimos 10
+      pesoEnTiempoReal.historial.shift();
     }
     
-    // Detectar si el peso está estable (variación < 0.5kg en últimos 10 valores)
     let estable = false;
     if (pesoEnTiempoReal.historial.length >= 5) {
       const min = Math.min(...pesoEnTiempoReal.historial);
       const max = Math.max(...pesoEnTiempoReal.historial);
-      estable = (max - min) < 0.5; // Menos de 500g de variación = estable
+      estable = (max - min) < 0.5;
     }
     
-    // Actualizar cache
     pesoEnTiempoReal = {
       peso: pesoNumerico,
       unidad: unidad || 'kg',
@@ -462,7 +485,6 @@ exports.recibirPesoLive = async (req, res) => {
       historial: pesoEnTiempoReal.historial
     };
     
-    // Emitir por WebSocket en tiempo real
     if (req.io) {
       req.io.emit('peso_live', {
         peso: pesoNumerico,
@@ -472,7 +494,6 @@ exports.recibirPesoLive = async (req, res) => {
       });
     }
     
-    // Respuesta mínima para el ESP (rápida)
     res.status(200).json({ ok: true });
     
   } catch (error) {
@@ -482,15 +503,13 @@ exports.recibirPesoLive = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// ✅ NUEVO: OBTENER PESO ACTUAL EN MEMORIA
+// OBTENER PESO ACTUAL EN MEMORIA
 // GET /api/esp/peso/actual
-// 
-// Para que el frontend pueda consultar el peso actual sin WebSocket
 // ═══════════════════════════════════════════════════════════════════════
 
 exports.obtenerPesoActual = (req, res) => {
   const conectado = pesoEnTiempoReal.fecha && 
-    (new Date() - pesoEnTiempoReal.fecha) < 5000; // 5 segundos timeout
+    (new Date() - pesoEnTiempoReal.fecha) < 5000;
   
   res.json({
     peso: pesoEnTiempoReal.peso,
@@ -502,17 +521,15 @@ exports.obtenerPesoActual = (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// ✅ NUEVO: TARAR BÁSCULA (Reset a cero)
+// TARAR BÁSCULA (Reset a cero)
 // POST /api/esp/peso/tarar
 // ═══════════════════════════════════════════════════════════════════════
 
 exports.tararBascula = (req, res) => {
-  // Resetear historial
   pesoEnTiempoReal.historial = [];
   pesoEnTiempoReal.peso = 0;
   pesoEnTiempoReal.estable = false;
   
-  // Emitir comando de tara al ESP por WebSocket
   if (req.io) {
     req.io.emit('comando_bascula', { accion: 'tarar' });
   }
@@ -528,9 +545,6 @@ exports.tararBascula = (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 // RECIBIR DATOS DE PESO Y GUARDAR EN BD (HX711)
 // POST /api/esp/peso
-// 
-// Este endpoint SÍ guarda en la base de datos.
-// Se usa cuando el usuario confirma el pesaje.
 // ═══════════════════════════════════════════════════════════════════════
 
 exports.recibirPeso = async (req, res) => {
@@ -539,7 +553,6 @@ exports.recibirPeso = async (req, res) => {
     
     console.log('[ESP32] Peso para GUARDAR:', peso, unidad || 'kg');
     
-    // Buscar lote: usar el proporcionado o el activo
     let loteAsociado = null;
     if (lote_id) {
       loteAsociado = await Lote.findById(lote_id);
@@ -557,12 +570,10 @@ exports.recibirPeso = async (req, res) => {
     });
     await pesaje.save();
     
-    // Actualizar peso promedio del lote si existe (el middleware lo hace automáticamente)
     if (loteAsociado) {
       console.log('[ESP32] Peso guardado y asociado a lote:', loteAsociado.nombre);
     }
     
-    // Guardar lectura
     const lectura = new Reading({
       sensor: sensor_id || 'bascula',
       tipo: 'peso',
@@ -571,7 +582,6 @@ exports.recibirPeso = async (req, res) => {
     });
     await lectura.save();
     
-    // WebSocket - notificar nuevo pesaje guardado
     if (req.io) {
       req.io.emit('nuevo_peso', { 
         peso, 
@@ -644,7 +654,6 @@ exports.heartbeat = async (req, res) => {
     if (MB002 !== undefined) console.log('  MB002:', MB002);
     console.log('════════════════════════════════════════════');
     
-    // Emitir al frontend por Socket.IO
     if (req.io) {
       req.io.emit('esp_status', {
         deviceId: dispositivo_id || deviceId || 'ESP-001',
