@@ -41,13 +41,13 @@ const verificarToken = async (req, res, next) => {
     await session.save();
 
     // 6️⃣ Pasar datos al request
-    req.usuario = decoded;
+    // ✅ CAMBIO AQUÍ: req.usuario → req.user
+    req.user = decoded;  // ← CAMBIAR ESTA LÍNEA
     req.session = session;
 
     next();
 
   } catch (error) {
-    // 🔥 LOG REAL PARA RENDER
     console.error('ERROR EN verificarToken:', error);
 
     if (error.name === 'JsonWebTokenError') {
@@ -67,7 +67,8 @@ const verificarToken = async (req, res, next) => {
 
 const verificarAdmin = (req, res, next) => {
   try {
-    if (!req.usuario || req.usuario.rol !== 'superadmin') {
+    // ✅ CAMBIO AQUÍ: req.usuario → req.user
+    if (!req.user || req.user.rol !== 'superadmin') {
       return res.status(403).json({ mensaje: 'Acceso denegado' });
     }
     next();
