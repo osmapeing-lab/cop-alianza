@@ -3128,8 +3128,7 @@ const cargarDistribucionGastos = async () => {
                 </div>
               )}
             </div>
-          )}
-{/* ════════════════════════════════════════════════════════════════ */}
+          )}{/* ════════════════════════════════════════════════════════════════ */}
 {/* PÁGINA: BOMBAS */}
 {/* ════════════════════════════════════════════════════════════════ */}
 {pagina === 'bombas' && (
@@ -3156,7 +3155,7 @@ const cargarDistribucionGastos = async () => {
         <p className="sin-datos">No hay bombas configuradas. Crea una nueva bomba para comenzar.</p>
       ) : (
         bombas.map(bomba => (
-          <div key={bomba._id} className={`bomba-card ${bomba.estado ? 'encendida' : 'apagada'}`}>
+          <div key={bomba._id} className={`bomba-card ${!bomba.estado ? 'encendida' : 'apagada'}`}>
             <div className="bomba-header-card">
               <div className="bomba-icon">
                 <IconBomba />
@@ -3171,19 +3170,19 @@ const cargarDistribucionGastos = async () => {
             {bomba.ubicacion && <p className="bomba-ubicacion">📍 {bomba.ubicacion}</p>}
             {bomba.descripcion && <p className="bomba-descripcion">{bomba.descripcion}</p>}
             
-           {/* ✅ CORRECCIÓN: Cambiar la lógica invertida */}
-           <div className={`bomba-estado ${bomba.estado ? 'on' : 'off'}`}>
-             {bomba.estado ? '🟢 ENCENDIDA' : '🔴 APAGADA'}
+           {/* ✅ INVERSIÓN VISUAL: false = ENCENDIDA, true = APAGADA */}
+           <div className={`bomba-estado ${!bomba.estado ? 'on' : 'off'}`}>
+             {!bomba.estado ? '🟢 ENCENDIDA' : '🔴 APAGADA'}
            </div>
             
             <div className="bomba-actions">
-              {/* ✅ CORRECCIÓN: Cambiar la lógica del botón */}
+              {/* ✅ INVERSIÓN VISUAL: Si está "apagada" (true) mostrar "Encender" */}
               <button
-                className={`btn-bomba ${bomba.estado ? 'btn-apagar' : 'btn-encender'}`}
+                className={`btn-bomba ${!bomba.estado ? 'btn-apagar' : 'btn-encender'}`}
                 onClick={() => toggleBomba(bomba._id)}
                 disabled={false}
               >
-                {bomba.estado ? 'Apagar' : 'Encender'}
+                {!bomba.estado ? 'Apagar' : 'Encender'}
               </button>
               
               <div className="bomba-edit-actions">
