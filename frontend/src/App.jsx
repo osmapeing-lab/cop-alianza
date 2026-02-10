@@ -3172,18 +3172,18 @@ const cargarDistribucionGastos = async () => {
             {bomba.ubicacion && <p className="bomba-ubicacion">📍 {bomba.ubicacion}</p>}
             {bomba.descripcion && <p className="bomba-descripcion">{bomba.descripcion}</p>}
             
-            <div className={`bomba-estado ${bomba.estado ? 'on' : 'off'}`}>
-              {bomba.estado ? '🟢 ENCENDIDA' : '🔴 APAGADA'}
-            </div>
+           <div className={`bomba-estado ${!bomba.estado ? 'on' : 'off'}`}>
+  {!bomba.estado ? '🟢 ENCENDIDA' : '🔴 APAGADA'}
+</div>
             
             <div className="bomba-actions">
               <button
-                className={`btn-bomba ${bomba.estado ? 'btn-apagar' : 'btn-encender'}`}
-                onClick={() => toggleBomba(bomba._id)}
-                disabled={false}
-              >
-                {bomba.estado ? 'Apagar' : 'Encender'}
-              </button>
+  className={`btn-bomba ${!bomba.estado ? 'btn-apagar' : 'btn-encender'}`}
+  onClick={() => toggleBomba(bomba._id)}
+  disabled={false}
+>
+  {!bomba.estado ? 'Apagar' : 'Encender'}
+</button>
               
               <div className="bomba-edit-actions">
                 <button 
