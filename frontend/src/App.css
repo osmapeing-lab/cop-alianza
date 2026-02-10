@@ -3329,3 +3329,4 @@ table td.sin-datos {
 .btn-guardar-peso { width: 100%; padding: 15px; background: #6c757d; color: white; border: none; border-radius: 8px; font-size: 1.1rem; font-weight: bold; cursor: pointer; margin-top: 15px; }
 .btn-guardar-peso.listo { background: linear-gradient(135deg, #2d6a4f, #40916c); }
 .btn-guardar-peso:disabled { background: #adb5bd; cursor: not-allowed; }
+

@@ -472,7 +472,7 @@ exports.recibirPesoLive = async (req, res) => {
     if (pesoEnTiempoReal.historial.length >= 5) {
       const min = Math.min(...pesoEnTiempoReal.historial);
       const max = Math.max(...pesoEnTiempoReal.historial);
-      estable = (max - min) < 0.5;
+      estable = (max - min) < 1.0;
     }
     
     pesoEnTiempoReal = {

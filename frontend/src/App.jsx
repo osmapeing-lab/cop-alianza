@@ -1684,163 +1684,111 @@ const cargarHistoricoTemperatura = async () => {
     const res = await axios.get(`${API_URL}/api/esp/porqueriza/historico?horas=24`, {
       headers: { Authorization: `Bearer ${token}` }
     })
-    setHistoricoTemperatura(res.data.map(d => ({
-      hora: new Date(d.fecha).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
-      temperatura: d.temperatura,
-      humedad: d.humedad
-    })))
-  } catch (error) {
-    // Si no hay endpoint, generamos datos de ejemplo basados en el clima actual
-    const ahora = new Date()
-    const datos = []
-    for (let i = 23; i >= 0; i--) {
-      const hora = new Date(ahora - i * 3600000)
-      datos.push({
-        hora: hora.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
-        temperatura: porqueriza.temp ? porqueriza.temp + (Math.random() * 4 - 2) : 32 + (Math.random() * 4 - 2),
-        humedad: porqueriza.humedad ? porqueriza.humedad + (Math.random() * 10 - 5) : 75 + (Math.random() * 10 - 5)
-      })
+    
+    if (res.data && res.data.length > 0) {
+      setHistoricoTemperatura(res.data.map(d => ({
+        hora: new Date(d.fecha).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+        temperatura: d.temperatura,
+        humedad: d.humedad
+      })))
+    } else {
+      // Sin datos reales - mostrar vacío
+      setHistoricoTemperatura([])
     }
-    setHistoricoTemperatura(datos)
+  } catch (error) {
+    console.error('Error cargando histórico temperatura:', error)
+    setHistoricoTemperatura([])
   }
 }
-
 const cargarHistoricoAgua = async () => {
   try {
     const res = await axios.get(`${API_URL}/api/esp/flujo/historico?dias=7`, {
       headers: { Authorization: `Bearer ${token}` }
     })
-    setHistoricoAgua(res.data.map(d => ({
-      dia: new Date(d.fecha).toLocaleDateString('es-CO', { weekday: 'short' }),
-      litros: d.volumen_total
-    })))
+    
+    if (res.data && res.data.length > 0) {
+      setHistoricoAgua(res.data.map(d => ({
+        dia: new Date(d.fecha).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric' }),
+        litros: d.volumen_total
+      })))
+    } else {
+      setHistoricoAgua([])
+    }
   } catch (error) {
-    // Datos de ejemplo
-    const dias = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
-    const datos = dias.map(dia => ({
-      dia,
-      litros: Math.floor(Math.random() * 500) + 200
-    }))
-    setHistoricoAgua(datos)
+    console.error('Error cargando histórico agua:', error)
+    setHistoricoAgua([])
   }
 }
 
 const cargarHistoricoContable = async () => {
   try {
-    // Usar datos de contabilidad existentes agrupados por mes
-    const meses = {}
-    contabilidad.forEach(reg => {
-      const fecha = new Date(reg.fecha)
-      const mes = fecha.toLocaleDateString('es-CO', { month: 'short' })
-      if (!meses[mes]) {
-        meses[mes] = { mes, ingresos: 0, gastos: 0 }
-      }
-      if (reg.tipo === 'ingreso') {
-        meses[mes].ingresos += reg.total
-      } else {
-        meses[mes].gastos += reg.total
-      }
+    const res = await axios.get(`${API_URL}/api/costos/comparativo?meses=6`, {
+      headers: { Authorization: `Bearer ${token}` }
     })
     
-    const datos = Object.values(meses).slice(-6)
-    if (datos.length > 0) {
-      setHistoricoContable(datos)
+    if (res.data && res.data.length > 0) {
+      setHistoricoContable(res.data.map(m => ({
+        mes: m.nombre,
+        ingresos: m.ingresos,
+        gastos: m.costos
+      })))
     } else {
-      // Datos de ejemplo si no hay registros
-      setHistoricoContable([
-        { mes: 'Sep', ingresos: 2500000, gastos: 1800000 },
-        { mes: 'Oct', ingresos: 3200000, gastos: 2100000 },
-        { mes: 'Nov', ingresos: 2800000, gastos: 1900000 },
-        { mes: 'Dic', ingresos: 4500000, gastos: 2800000 },
-        { mes: 'Ene', ingresos: 3800000, gastos: 2400000 },
-        { mes: 'Feb', ingresos: resumenContable.total_ingresos || 3000000, gastos: resumenContable.total_gastos || 2000000 }
-      ])
+      setHistoricoContable([])
     }
   } catch (error) {
     console.error('Error cargando histórico contable:', error)
+    setHistoricoContable([])
   }
 }
 
 const cargarHistoricoPesos = async () => {
   try {
-    // Agrupar pesajes por fecha para cada lote
-    const pesajesPorLote = {}
-    pesajes.forEach(p => {
-      const loteNombre = p.lote?.nombre || 'Sin lote'
-      if (!pesajesPorLote[loteNombre]) {
-        pesajesPorLote[loteNombre] = []
-      }
-      pesajesPorLote[loteNombre].push({
-        fecha: new Date(p.createdAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }),
-        peso: p.peso_promedio || p.peso
+    // Usar pesajes ya cargados
+    if (pesajes.length > 0) {
+      const pesajesPorFecha = {}
+      
+      pesajes.forEach(p => {
+        const fecha = new Date(p.createdAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })
+        const loteNombre = p.lote?.nombre || 'Sin lote'
+        
+        if (!pesajesPorFecha[fecha]) {
+          pesajesPorFecha[fecha] = { fecha }
+        }
+        pesajesPorFecha[fecha][loteNombre] = p.peso_promedio || p.peso
       })
-    })
-    
-    // Convertir a formato para gráfica
-    const fechas = [...new Set(pesajes.map(p => 
-      new Date(p.createdAt).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })
-    ))].slice(-10)
-    
-    const datos = fechas.map(fecha => {
-      const registro = { fecha }
-      Object.keys(pesajesPorLote).forEach(lote => {
-        const pesaje = pesajesPorLote[lote].find(p => p.fecha === fecha)
-        registro[lote] = pesaje ? pesaje.peso : null
-      })
-      return registro
-    })
-    
-    if (datos.length > 0) {
+      
+      const datos = Object.values(pesajesPorFecha).slice(-10)
       setHistoricoPesos(datos)
     } else {
-      // Datos de ejemplo
-      setHistoricoPesos([
-        { fecha: '15 Ene', 'Lote A': 45, 'Lote B': 38 },
-        { fecha: '22 Ene', 'Lote A': 52, 'Lote B': 44 },
-        { fecha: '29 Ene', 'Lote A': 58, 'Lote B': 51 },
-        { fecha: '05 Feb', 'Lote A': 65, 'Lote B': 57 },
-        { fecha: '12 Feb', 'Lote A': 72, 'Lote B': 64 }
-      ])
+      setHistoricoPesos([])
     }
   } catch (error) {
     console.error('Error cargando histórico pesos:', error)
+    setHistoricoPesos([])
   }
 }
 
 const cargarDistribucionGastos = async () => {
   try {
-    // Agrupar gastos por categoría
-    const categorias = {}
-    contabilidad.filter(r => r.tipo === 'gasto').forEach(reg => {
-      const cat = reg.categoria || 'Otro'
-      if (!categorias[cat]) {
-        categorias[cat] = 0
-      }
-      categorias[cat] += reg.total
+    const res = await axios.get(`${API_URL}/api/costos/resumen`, {
+      headers: { Authorization: `Bearer ${token}` }
     })
     
     const colores = ['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2', '#b7e4c7', '#d8f3dc']
-    const datos = Object.entries(categorias).map(([nombre, valor], i) => ({
-      nombre: nombre.replace('_', ' ').charAt(0).toUpperCase() + nombre.slice(1).replace('_', ' '),
-      valor,
-      color: colores[i % colores.length]
-    }))
     
-    if (datos.length > 0) {
+    if (res.data?.costos?.por_categoria && res.data.costos.por_categoria.length > 0) {
+      const datos = res.data.costos.por_categoria.map((cat, i) => ({
+        nombre: cat._id.replace(/_/g, ' ').charAt(0).toUpperCase() + cat._id.slice(1).replace(/_/g, ' '),
+        valor: cat.total,
+        color: colores[i % colores.length]
+      }))
       setDistribucionGastos(datos)
     } else {
-      // Datos de ejemplo
-      setDistribucionGastos([
-        { nombre: 'Alimento', valor: 1200000, color: '#2d6a4f' },
-        { nombre: 'Medicamentos', valor: 350000, color: '#40916c' },
-        { nombre: 'Agua', valor: 180000, color: '#52b788' },
-        { nombre: 'Transporte', valor: 250000, color: '#74c69d' },
-        { nombre: 'Mano de obra', valor: 500000, color: '#95d5b2' },
-        { nombre: 'Otros', valor: 120000, color: '#b7e4c7' }
-      ])
+      setDistribucionGastos([])
     }
   } catch (error) {
     console.error('Error cargando distribución gastos:', error)
+    setDistribucionGastos([])
   }
 }
   // ═══════════════════════════════════════════════════════════════════════
@@ -2821,6 +2769,49 @@ const cargarDistribucionGastos = async () => {
                     >
                       ✓ GUARDAR PESAJE
                     </button>
+                    {/* Botón Guardar Forzado cuando no estabiliza */}
+{!pesoLive.estable && pesoLive.peso > 0 && (
+  <button 
+    className="btn-guardar-forzado"
+    onClick={async () => {
+      if (!pesajeLive.lote) {
+        alert('Selecciona un lote')
+        return
+      }
+      if (!confirm(`¿Guardar peso inestable de ${pesoLive.peso.toFixed(1)} kg?`)) return
+      try {
+        await axios.post(`${API_URL}/api/esp/peso`, {
+          peso: pesoLive.peso,
+          unidad: 'kg',
+          lote_id: pesajeLive.lote,
+          cantidad_cerdos: pesajeLive.cantidad,
+          notas: `[FORZADO] ${pesajeLive.notas}`,
+          sensor_id: 'bascula_hx711'
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        alert(`✓ Pesaje FORZADO guardado: ${pesoLive.peso} kg`)
+        setPesajeLive({lote: '', cantidad: 1, notas: ''})
+        cargarPesajes()
+      } catch (error) {
+        alert('Error: ' + (error.response?.data?.mensaje || error.message))
+      }
+    }}
+    style={{
+      width: '100%',
+      padding: '12px',
+      marginTop: '8px',
+      background: '#f59e0b',
+      color: 'white',
+      border: 'none',
+      borderRadius: '8px',
+      fontWeight: 'bold',
+      cursor: 'pointer'
+    }}
+  >
+    ⚠️ GUARDAR FORZADO
+  </button>
+)}
                   </div>
                 </div>
               </div>
