@@ -3173,7 +3173,7 @@ const cargarDistribucionGastos = async () => {
             {bomba.descripcion && <p className="bomba-descripcion">{bomba.descripcion}</p>}
             
             <div className={`bomba-estado ${bomba.estado ? 'on' : 'off'}`}>
-              {bomba.estado ? '🟢 ENCENDIDA' : '🔴 APAGADA'}
+              {!bomba.estado ? '🟢 ENCENDIDA' : '🔴 APAGADA'}
             </div>
             
             <div className="bomba-actions">
