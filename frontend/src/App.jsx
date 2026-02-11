@@ -1757,10 +1757,18 @@ const cargarHistoricoAgua = async () => {
     })
     
     if (res.data && res.data.length > 0) {
-      setHistoricoAgua(res.data.map(d => ({
-        dia: new Date(d.fecha).toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric' }),
-        litros: d.volumen_total
-      })))
+      setHistoricoAgua(res.data.map(d => {
+        // d.fecha = "2026-02-11" -> mostrar "feb 11"
+        const partes = d.fecha.split('-') // ["2026", "02", "11"]
+        const mes = parseInt(partes[1])
+        const dia = parseInt(partes[2])
+        const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+        
+        return {
+          dia: `${meses[mes-1]} ${dia}`,
+          litros: d.volumen_total
+        }
+      }))
     } else {
       setHistoricoAgua([])
     }
