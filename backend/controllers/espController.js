@@ -48,6 +48,7 @@ let ultimosDatosFlujo = {
   volumen_diario: 0,
   volumen_inicio_dia: 0,
   fecha_inicio_dia: null,
+  ultima_lectura_guardada: null,  // ← AGREGADO
   sensor_id: null,
   fecha: null,
   conectado: false
@@ -237,7 +238,6 @@ exports.obtenerHistoricoTemperatura = async (req, res) => {
     res.status(500).json({ mensaje: error.message });
   }
 };
-
 // ═══════════════════════════════════════════════════════════════════════
 // RECIBIR DATOS DE FLUJO DE AGUA (YF-S201)
 // POST /api/esp/flujo
@@ -245,113 +245,118 @@ exports.obtenerHistoricoTemperatura = async (req, res) => {
 
 exports.recibirFlujo = async (req, res) => {
   try {
-    const { sensor_id, caudal_l_min, volumen_l, volumen_diario_l, rssi } = req.body;
+    const { sensor_id, caudal_l_min, volumen_l, rssi } = req.body;
     
-    // ═══════════════════════════════════════════════════════════════════
-    // ✅ CÁLCULO AUTOMÁTICO DE VOLUMEN DIARIO
-    // ═══════════════════════════════════════════════════════════════════
-    
-    let volumenDiarioCalculado = volumen_diario_l;
-    
-    if (volumenDiarioCalculado === undefined && volumen_l !== undefined) {
-      
-      if (esNuevoDia(ultimosDatosFlujo.fecha_inicio_dia)) {
-        ultimosDatosFlujo.volumen_inicio_dia = volumen_l;
-        ultimosDatosFlujo.fecha_inicio_dia = new Date();
-        volumenDiarioCalculado = 0;
-        
-        console.log('[FLUJO] Nuevo día detectado. Volumen inicial:', volumen_l, 'L');
-      } else {
-        volumenDiarioCalculado = volumen_l - ultimosDatosFlujo.volumen_inicio_dia;
-        
-        if (volumenDiarioCalculado < 0) {
-          ultimosDatosFlujo.volumen_inicio_dia = volumen_l;
-          volumenDiarioCalculado = 0;
-        }
-      }
-    }
-    
-    volumenDiarioCalculado = Math.round((volumenDiarioCalculado || 0) * 100) / 100;
+    const caudal = parseFloat(caudal_l_min) || 0;
+    const volumen = parseFloat(volumen_l) || 0;
     
     console.log('========================================');
     console.log('[ESP32] Datos flujo de agua recibidos');
     console.log('  Sensor:', sensor_id);
-    console.log('  Caudal:', caudal_l_min, 'L/min');
-    console.log('  Volumen total:', volumen_l, 'L');
-    console.log('  Volumen diario (calculado):', volumenDiarioCalculado, 'L');
-    console.log('  RSSI:', rssi, 'dBm');
+    console.log('  Caudal:', caudal, 'L/min');
+    console.log('  Volumen total:', volumen, 'L');
     console.log('========================================');
     
-    const lecturas = [];
+    // ═══════════════════════════════════════════════════════════════════
+    // CÁLCULO DE VOLUMEN DIARIO
+    // ═══════════════════════════════════════════════════════════════════
     
-    if (caudal_l_min !== undefined) {
-      lecturas.push({
-        sensor: sensor_id || 'esp_flujo',
-        tipo: 'caudal_agua',
-        valor: caudal_l_min,
-        unidad: 'L/min'
-      });
+    let volumenDiarioCalculado = 0;
+    
+    // Verificar si es un nuevo día
+    if (esNuevoDia(ultimosDatosFlujo.fecha_inicio_dia)) {
+      ultimosDatosFlujo.volumen_inicio_dia = volumen;
+      ultimosDatosFlujo.fecha_inicio_dia = new Date();
+      volumenDiarioCalculado = 0;
+      console.log('[FLUJO] Nuevo día. Volumen inicial:', volumen, 'L');
+    } else if (volumen >= (ultimosDatosFlujo.volumen_inicio_dia || 0)) {
+      // Calcular diferencia solo si el volumen actual es mayor o igual
+      volumenDiarioCalculado = volumen - (ultimosDatosFlujo.volumen_inicio_dia || 0);
+    } else {
+      // ESP se reinició - el nuevo volumen es menor que el inicial
+      // Acumular lo que teníamos + el nuevo volumen
+      const volumenPrevio = ultimosDatosFlujo.volumen_diario || 0;
+      ultimosDatosFlujo.volumen_inicio_dia = 0;
+      volumenDiarioCalculado = volumenPrevio + volumen;
+      console.log('[FLUJO] ESP reiniciado. Acumulando:', volumenDiarioCalculado, 'L');
     }
     
-    if (volumen_l !== undefined) {
-      lecturas.push({
-        sensor: sensor_id || 'esp_flujo',
-        tipo: 'volumen_agua',
-        valor: volumen_l,
-        unidad: 'L'
-      });
-    }
+    volumenDiarioCalculado = Math.round(volumenDiarioCalculado * 100) / 100;
     
-    if (volumenDiarioCalculado !== undefined) {
-      lecturas.push({
+    // ═══════════════════════════════════════════════════════════════════
+    // GUARDAR EN READING (Solo cada 5 minutos para no saturar)
+    // ═══════════════════════════════════════════════════════════════════
+    
+    const ahora = new Date();
+    const ultimaLectura = ultimosDatosFlujo.ultima_lectura_guardada;
+    const minutosPasados = ultimaLectura ? (ahora - ultimaLectura) / 60000 : 999;
+    
+    if (minutosPasados >= 5 || caudal > 0) {
+      // Guardar solo si pasaron 5 min O si hay flujo activo
+      const lectura = new Reading({
         sensor: sensor_id || 'esp_flujo',
-        tipo: 'volumen_diario',
+        tipo: 'flujo_agua',
         valor: volumenDiarioCalculado,
-        unidad: 'L'
+        unidad: 'L',
+        metadata: {
+          caudal: caudal,
+          volumen_total: volumen
+        }
       });
-      
-      const hoy = new Date();
-      hoy.setHours(0, 0, 0, 0);
-      
-      await WaterConsumption.findOneAndUpdate(
-        { fecha: { $gte: hoy }, tipo: 'diario' },
-        { 
-          litros: volumenDiarioCalculado,
-          tipo: 'diario',
-          fecha: new Date()
-        },
-        { upsert: true, new: true }
-      );
+      await lectura.save();
+      ultimosDatosFlujo.ultima_lectura_guardada = ahora;
     }
     
-    if (lecturas.length > 0) {
-      await Reading.insertMany(lecturas);
-    }
+    // ═══════════════════════════════════════════════════════════════════
+    // GUARDAR/ACTUALIZAR CONSUMO DIARIO EN WATERCONSUMPTION
+    // ═══════════════════════════════════════════════════════════════════
+    
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    
+    await WaterConsumption.findOneAndUpdate(
+      { 
+        fecha: { $gte: hoy }, 
+        tipo: 'diario' 
+      },
+      { 
+        $set: {
+          litros: volumenDiarioCalculado,
+          fecha: new Date()
+        }
+      },
+      { upsert: true }
+    );
+    
+    // ═══════════════════════════════════════════════════════════════════
+    // ACTUALIZAR CACHE EN MEMORIA
+    // ═══════════════════════════════════════════════════════════════════
     
     ultimosDatosFlujo = {
       ...ultimosDatosFlujo,
-      caudal: caudal_l_min || 0,
-      volumen_total: volumen_l || 0,
+      caudal: caudal,
+      volumen_total: volumen,
       volumen_diario: volumenDiarioCalculado,
       sensor_id,
-      fecha: new Date(),
+      fecha: ahora,
       conectado: true
     };
     
+    // ═══════════════════════════════════════════════════════════════════
+    // EMITIR POR WEBSOCKET (Siempre, para tiempo real)
+    // ═══════════════════════════════════════════════════════════════════
+    
     if (req.io) {
-      req.io.emit('lectura_actualizada', {
-        caudal_l_min,
-        volumen_l,
-        volumen_diario_l: volumenDiarioCalculado,
-        sensor_id,
-        timestamp: new Date()
+      req.io.emit('flujo_actualizado', {
+        caudal: caudal,
+        volumen_total: volumen,
+        volumen_diario: volumenDiarioCalculado,
+        timestamp: ahora
       });
     }
     
-    res.status(201).json({ 
-      mensaje: 'Datos de flujo registrados',
-      caudal: caudal_l_min,
-      volumen: volumen_l,
+    res.status(200).json({ 
+      ok: true,
       volumen_diario: volumenDiarioCalculado
     });
     
@@ -360,7 +365,6 @@ exports.recibirFlujo = async (req, res) => {
     res.status(400).json({ mensaje: error.message });
   }
 };
-
 // ═══════════════════════════════════════════════════════════════════════
 // OBTENER DATOS DE FLUJO
 // GET /api/esp/flujo
@@ -368,23 +372,27 @@ exports.recibirFlujo = async (req, res) => {
 
 exports.obtenerDatosFlujo = async (req, res) => {
   try {
-    const ultimoCaudal = await Reading.findOne({ tipo: 'caudal_agua' })
+    // Buscar última lectura de flujo
+    const ultimaLectura = await Reading.findOne({ tipo: 'flujo_agua' })
       .sort({ createdAt: -1 });
     
-    const ultimoVolumen = await Reading.findOne({ tipo: 'volumen_agua' })
-      .sort({ createdAt: -1 });
+    // Buscar consumo diario de hoy
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
     
-    const ultimoVolumenDiario = await Reading.findOne({ tipo: 'volumen_diario' })
-      .sort({ createdAt: -1 });
+    const consumoHoy = await WaterConsumption.findOne({
+      fecha: { $gte: hoy },
+      tipo: 'diario'
+    });
     
     const conectado = ultimosDatosFlujo.fecha && 
       (new Date() - ultimosDatosFlujo.fecha) < 120000;
     
     res.json({
-      caudal: ultimoCaudal?.valor || ultimosDatosFlujo.caudal || 0,
-      volumen_total: ultimoVolumen?.valor || ultimosDatosFlujo.volumen_total || 0,
-      volumen_diario: ultimoVolumenDiario?.valor || ultimosDatosFlujo.volumen_diario || 0,
-      fecha: ultimoCaudal?.createdAt || ultimosDatosFlujo.fecha,
+      caudal: ultimosDatosFlujo.caudal || 0,
+      volumen_total: ultimosDatosFlujo.volumen_total || 0,
+      volumen_diario: consumoHoy?.litros || ultimosDatosFlujo.volumen_diario || 0,
+      fecha: ultimaLectura?.createdAt || ultimosDatosFlujo.fecha,
       conectado
     });
   } catch (error) {

@@ -1087,7 +1087,13 @@ const [distribucionGastos, setDistribucionGastos] = useState([])
         setFlujo(prev => ({ ...prev, caudal: data.caudal_l_min, volumen_diario: data.volumen_diario_l, conectado: true }))
       }
     })
-
+socket.on('flujo_actualizado', (data) => {
+  setFlujo({
+    caudal: data.caudal,
+    volumen_diario: data.volumen_diario,
+    conectado: true
+  })
+})
     socket.on('nuevo_peso', (data) => {
       setUltimoPeso(data)
       cargarPesajes()
@@ -1104,11 +1110,12 @@ socket.on('peso_live', (data) => {
     })
 
     return () => {
-      socket.off('lectura_actualizada')
-      socket.off('nuevo_peso')
-      socket.off('bomba_actualizada')
-      socket.off('peso_live')
-    }
+  socket.off('lectura_actualizada')
+  socket.off('nuevo_peso')
+  socket.off('bomba_actualizada')
+  socket.off('peso_live')
+  socket.off('flujo_actualizado')
+}
   }, [])
 
   // ═══════════════════════════════════════════════════════════════════════
