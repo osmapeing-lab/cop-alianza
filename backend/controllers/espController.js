@@ -311,8 +311,10 @@ exports.recibirFlujo = async (req, res) => {
     // GUARDAR/ACTUALIZAR CONSUMO DIARIO EN WATERCONSUMPTION
     // ═══════════════════════════════════════════════════════════════════
     
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
+    // Ajustar a zona horaria Colombia (UTC-5)
+// Obtener inicio del día en UTC (medianoche)
+const hoy = new Date();
+hoy.setUTCHours(0, 0, 0, 0);
     
     await WaterConsumption.findOneAndUpdate(
       { 
@@ -409,7 +411,8 @@ exports.obtenerHistoricoAgua = async (req, res) => {
   try {
     const dias = parseInt(req.query.dias) || 7;
     const fechaLimite = new Date();
-    fechaLimite.setDate(fechaLimite.getDate() - dias);
+fechaLimite.setDate(fechaLimite.getDate() - dias);
+fechaLimite.setHours(0, 0, 0, 0);
     
     const consumos = await WaterConsumption.find({
       fecha: { $gte: fechaLimite },
