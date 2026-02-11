@@ -1271,10 +1271,25 @@ const cargarInventario = async () => {
 // Funciones para acciones
 const crearVenta = async (datos) => {
   try {
+    // Validar campos requeridos
+    if (!datos.comprador?.nombre) {
+      alert('El nombre del comprador es requerido')
+      return
+    }
+    if (!datos.peso_total_kg || datos.peso_total_kg <= 0) {
+      alert('El peso total debe ser mayor a 0')
+      return
+    }
+    if (!datos.precio_kg || datos.precio_kg <= 0) {
+      alert('El precio por kg debe ser mayor a 0')
+      return
+    }
+    
     await axios.post(`${API_URL}/api/ventas`, datos, {
       headers: { Authorization: `Bearer ${token}` }
     })
     cargarVentas()
+    alert('Venta registrada correctamente')
   } catch (error) {
     alert('Error creando venta: ' + (error.response?.data?.mensaje || error.message))
   }
@@ -1295,10 +1310,21 @@ const registrarPagoVenta = async (id) => {
 
 const crearCosto = async (datos) => {
   try {
+    // Validar campos requeridos
+    if (!datos.descripcion || datos.descripcion.trim() === '') {
+      alert('La descripción es requerida')
+      return
+    }
+    if (!datos.precio_unitario || datos.precio_unitario <= 0) {
+      alert('El precio unitario debe ser mayor a 0')
+      return
+    }
+    
     await axios.post(`${API_URL}/api/costos`, datos, {
       headers: { Authorization: `Bearer ${token}` }
     })
     cargarCostos()
+    alert('Costo registrado correctamente')
   } catch (error) {
     alert('Error creando costo: ' + (error.response?.data?.mensaje || error.message))
   }
@@ -1542,46 +1568,63 @@ const verStreamCamara = (camara) => {
   // ═══════════════════════════════════════════════════════════════════════
   // FUNCIONES DE CONTABILIDAD
   // ═══════════════════════════════════════════════════════════════════════
-
-  const crearRegistroContable = async () => {
-    try {
-      await axios.post(`${API_URL}/api/contabilidad`, nuevoRegistro, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      setMostrarModalContabilidad(false)
-      setNuevoRegistro({ lote: '', tipo: 'gasto', categoria: 'alimento', descripcion: '', cantidad: 1, unidad: 'kg', precio_unitario: 0 })
-      cargarContabilidad()
-    } catch (error) {
-      alert('Error creando registro: ' + (error.response?.data?.mensaje || error.message))
+const crearRegistroContable = async () => {
+  try {
+    // Limpiar lote vacío antes de enviar
+    const datosEnviar = {
+      ...nuevoRegistro,
+      lote: nuevoRegistro.lote || null
     }
-  }
+    
+    await axios.post(`${API_URL}/api/contabilidad`, datosEnviar, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
 
-  const eliminarRegistroContable = async (id) => {
-    if (!confirm('¿Eliminar este registro?')) return
-    try {
-      await axios.delete(`${API_URL}/api/contabilidad/${id}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      cargarContabilidad()
-    } catch (error) {
-      alert('Error eliminando registro: ' + (error.response?.data?.mensaje || error.message))
-    }
+    // Éxito: Limpiar formulario, cerrar modal y refrescar
+    setMostrarModalContabilidad(false)
+    setNuevoRegistro({ lote: '', tipo: 'gasto', categoria: 'alimento', descripcion: '', cantidad: 1, unidad: 'kg', precio_unitario: 0 })
+    cargarContabilidad()
+    
+  } catch (error) {
+    console.error("Error al crear:", error)
+    alert('Error guardando registro: ' + (error.response?.data?.mensaje || error.message))
   }
-
+};
   // ═══════════════════════════════════════════════════════════════════════
   // FUNCIONES DE BOMBAS
   // ═══════════════════════════════════════════════════════════════════════
 
   const toggleBomba = async (id) => {
-    try {
-      await axios.put(`${API_URL}/api/motorbombs/${id}/toggle`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      cargarBombas()
-    } catch (error) {
-      alert('Error controlando bomba: ' + (error.response?.data?.mensaje || error.message))
+  try {
+    // Buscar la bomba para saber su estado actual y nombre
+    const bomba = bombas.find(b => b._id === id)
+    if (!bomba) {
+      alert('Bomba no encontrada')
+      return
     }
+    
+    // Determinar acción (recordar: estado invertido - false = encendida, true = apagada)
+    const accion = bomba.estado ? 'ENCENDER' : 'APAGAR'
+    const nombreBomba = bomba.nombre || bomba.codigo_bomba || 'la motobomba'
+    
+    // Confirmar acción
+    const confirmado = confirm(
+      `¿Estás seguro de ${accion} ${nombreBomba}?\n\n` +
+      `Sistema: ${bomba.ubicacion || 'Sistema de riego/distribución'}\n` +
+      `Estado actual: ${bomba.estado ? 'Apagada' : 'Encendida'}`
+    )
+    
+    if (!confirmado) return
+    
+    await axios.put(`${API_URL}/api/motorbombs/${id}/toggle`, {}, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    cargarBombas()
+    alert(`✓ ${nombreBomba} ${accion === 'ENCENDER' ? 'encendida' : 'apagada'} correctamente`)
+  } catch (error) {
+    alert('Error controlando bomba: ' + (error.response?.data?.mensaje || error.message))
   }
+}
 const crearBomba = async () => {
   try {
     await axios.post(`${API_URL}/api/motorbombs`, nuevaBomba, {
@@ -3675,5 +3718,6 @@ const cargarDistribucionGastos = async () => {
   )
 
 
-}
+} 
+
 export default App      
