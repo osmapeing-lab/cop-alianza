@@ -42,9 +42,17 @@ const contabilidadSchema = new mongoose.Schema({
   timestamps: true
 });
 
-contabilidadSchema.pre('save', function(next) {
-  this.total = this.cantidad * this.precio_unitario;
-  next();
+// ═══════════════════════════════════════════════════════════════════════
+// MIDDLEWARE: Calcular total antes de guardar
+// ═══════════════════════════════════════════════════════════════════════
+contabilidadSchema.pre('save', async function() {
+  // Aseguramos que cantidad tenga un valor para evitar NaN (Not a Number)
+  const cant = this.cantidad || 1;
+  const precio = this.precio_unitario || 0;
+  
+  this.total = cant * precio;
+  
+  // Eliminamos next() y usamos async
 });
 
 module.exports = mongoose.model('Contabilidad', contabilidadSchema);
