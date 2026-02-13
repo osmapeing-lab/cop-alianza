@@ -134,11 +134,10 @@ const ventaSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
-
 // ═══════════════════════════════════════════════════════════════════════
 // MIDDLEWARE 1: Calcular totales antes de guardar
 // ═══════════════════════════════════════════════════════════════════════
-ventaSchema.pre('save', function(next) {
+ventaSchema.pre('save', async function() {
   // Calcular subtotal
   this.subtotal = this.peso_total_kg * this.precio_kg;
   
@@ -158,7 +157,7 @@ ventaSchema.pre('save', function(next) {
     this.estado_pago = 'pendiente';
   }
   
-  next();
+  // Aquí ya NO va next()
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -170,6 +169,7 @@ ventaSchema.pre('save', async function() {
     const year = new Date().getFullYear();
     this.numero_factura = `COO-${year}-${String(count + 1).padStart(5, '0')}`;
   }
+  // Aquí tampoco va next()
 });
 // ═══════════════════════════════════════════════════════════════════════
 // MÉTODO: Registrar pago parcial
