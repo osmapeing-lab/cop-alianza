@@ -2291,33 +2291,44 @@ const cargarDistribucionGastos = async () => {
         </div>
       </div>
 
+      
       {/* Gráfica de Consumo de Agua */}
-      <div className="dashboard-section grafica-section">
-        <h3><Droplets size={20} /> Consumo de Agua - Última Semana</h3>
-        <div className="grafica-container">
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={historicoAgua}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-              <XAxis dataKey="dia" tick={{ fontSize: 11 }} stroke="#666" />
-              <YAxis tick={{ fontSize: 11 }} stroke="#666" />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#fff', 
-                  border: '1px solid #e0e0e0',
-                  borderRadius: '8px'
-                }}
-                formatter={(value) => [`${value} L`, 'Consumo']}
-              />
-              <Bar 
-                dataKey="litros" 
-                fill="#3b82f6" 
-                radius={[4, 4, 0, 0]}
-                name="Litros"
-              />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+<div className="dashboard-section grafica-section">
+  <h3><Droplets size={20} /> Consumo de Agua - Última Semana</h3>
+  <div className="grafica-container">
+    <ResponsiveContainer width="100%" height={250}>
+      <LineChart data={historicoAgua}>
+        <defs>
+          <linearGradient id="colorAgua" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+        <XAxis dataKey="dia" tick={{ fontSize: 11 }} stroke="#666" />
+        <YAxis tick={{ fontSize: 11 }} stroke="#666" unit=" L" />
+        <Tooltip 
+          contentStyle={{ 
+            backgroundColor: '#fff', 
+            border: '1px solid #e0e0e0',
+            borderRadius: '8px',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+          }}
+          formatter={(value) => [`${value.toFixed(1)} L`, 'Consumo']}
+        />
+        <Line 
+          type="monotone"
+          dataKey="litros" 
+          stroke="#3b82f6" 
+          strokeWidth={3}
+          dot={{ r: 6, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
+          activeDot={{ r: 8, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }}
+          name="Litros"
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  </div>
+</div>
     </div>
 
     {/* Gráficas Financieras */}

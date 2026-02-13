@@ -48,11 +48,40 @@ let ultimosDatosFlujo = {
   volumen_diario: 0,
   volumen_inicio_dia: 0,
   fecha_inicio_dia: null,
-  ultima_lectura_guardada: null,  // ← AGREGADO
+  ultima_lectura_guardada: null,
   sensor_id: null,
   fecha: null,
   conectado: false
 };
+
+// ═══════════════════════════════════════════════════════════════════════
+// INICIALIZAR DATOS DE FLUJO DESDE BD (PERSISTENCIA)
+// ═══════════════════════════════════════════════════════════════════════
+
+async function inicializarDatosFlujo() {
+  try {
+    const hoy = new Date();
+    hoy.setUTCHours(0, 0, 0, 0);
+    
+    const consumoHoy = await WaterConsumption.findOne({
+      fecha: { $gte: hoy },
+      tipo: 'diario'
+    });
+    
+    if (consumoHoy) {
+      ultimosDatosFlujo.volumen_diario = consumoHoy.litros;
+      ultimosDatosFlujo.fecha_inicio_dia = hoy;
+      console.log('[FLUJO] ✓ Datos recuperados del día:', consumoHoy.litros, 'L');
+    } else {
+      console.log('[FLUJO] Nuevo día sin registros previos');
+    }
+  } catch (error) {
+    console.error('[FLUJO] Error inicializando:', error);
+  }
+}
+
+// Ejecutar al cargar el módulo
+inicializarDatosFlujo();
 
 let pesoEnTiempoReal = {
   peso: 0,
