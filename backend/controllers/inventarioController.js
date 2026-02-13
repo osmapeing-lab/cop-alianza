@@ -59,7 +59,14 @@ exports.obtenerPorId = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.registrarCerdo = async (req, res) => {
   try {
-    const nuevoCerdo = new Inventario(req.body);
+    // Generar código automático
+    const count = await Inventario.countDocuments();
+    const codigo = `CERDO-${String(count + 1).padStart(4, '0')}`;
+    
+    const nuevoCerdo = new Inventario({
+      ...req.body,
+      codigo
+    });
     
     // Si hay peso inicial, agregarlo al historial
     if (req.body.peso_actual) {

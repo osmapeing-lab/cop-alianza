@@ -164,14 +164,17 @@ ventaSchema.pre('save', function(next) {
 // ═══════════════════════════════════════════════════════════════════════
 // MIDDLEWARE 2: Generar número de factura automático
 // ═══════════════════════════════════════════════════════════════════════
-// ✅ CORRECCIÓN: Quitamos "next" porque es función async
-ventaSchema.pre('save', async function() {
-  if (!this.numero_factura) {
-    const count = await mongoose.model('Venta').countDocuments();
-    const year = new Date().getFullYear();
-    this.numero_factura = `COO-${year}-${String(count + 1).padStart(5, '0')}`;
+ventaSchema.pre('save', async function(next) {
+  try {
+    if (!this.numero_factura) {
+      const count = await mongoose.model('Venta').countDocuments();
+      const year = new Date().getFullYear();
+      this.numero_factura = `COO-${year}-${String(count + 1).padStart(5, '0')}`;
+    }
+    next();
+  } catch (error) {
+    next(error);
   }
-  // ✅ NO llamamos next() porque la función es async
 });
 
 // ═══════════════════════════════════════════════════════════════════════
