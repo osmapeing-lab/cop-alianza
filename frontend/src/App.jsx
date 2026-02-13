@@ -971,6 +971,16 @@ const PantallaMantenimiento = () => (
     peso_inicial_promedio: 0,
     notas: ''
   })
+const [loteDetalle, setLoteDetalle] = useState(null)
+const [alimentacionLote, setAlimentacionLote] = useState([])
+const [graficaEvolucionLote, setGraficaEvolucionLote] = useState([])
+const [mostrarModalAlimentacion, setMostrarModalAlimentacion] = useState(false)
+const [nuevaAlimentacion, setNuevaAlimentacion] = useState({
+  tipo_alimento: 'engorde',
+  cantidad_kg: '',
+  precio_kg: '',
+  notas: ''
+})
   
   // Estados de pesajes
   const [pesajes, setPesajes] = useState([])
