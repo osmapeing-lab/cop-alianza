@@ -2553,168 +2553,499 @@ const cargarDistribucionGastos = async () => {
       </div>
     </div>
   </div>
-)}
-    {/* ════════════════════════════════════════════════════════════════ */}
-          {/* PÁGINA: LOTES */}
-          {/* ════════════════════════════════════════════════════════════════ */}
-          {pagina === 'lotes' && (
-            <div className="page-lotes">
-              <div className="page-header">
-                <h2>Gestión de Lotes</h2>
-                <button className="btn-primary" onClick={() => setMostrarModalLote(true)}>
-                  <IconMas />
-                  Nuevo Lote
-                </button>
-              </div>
+)}{/* ════════════════════════════════════════════════════════════════ */}
+{/* PÁGINA: LOTES (MEJORADA) */}
+{/* ════════════════════════════════════════════════════════════════ */}
+{pagina === 'lotes' && (
+  <div className="page-lotes">
+    <div className="page-header">
+      <h2>Gestión de Lotes</h2>
+      <div className="header-actions">
+        <button className="btn-refresh" onClick={cargarLotes}>
+          <RefreshCw size={18} />
+        </button>
+        <button className="btn-primary" onClick={() => {
+          setLoteSeleccionado(null)
+          setNuevoLote({
+            nombre: '',
+            cantidad_cerdos: 0,
+            estado: 'engorde',
+            peso_inicial_promedio: 0,
+            fecha_nacimiento: '',
+            edad_dias_manual: '',
+            corral: '',
+            notas: ''
+          })
+          setMostrarModalLote(true)
+        }}>
+          <Plus size={18} />
+          Nuevo Lote
+        </button>
+      </div>
+    </div>
 
-              <div className="lotes-grid">
-                {lotes.length === 0 ? (
-                  <p className="sin-datos">No hay lotes registrados</p>
-                ) : (
-                  lotes.map(lote => (
-                    <div key={lote._id} className={`lote-card ${!lote.activo ? 'inactivo' : ''}`}>
-                      <div className="lote-header">
-                        <h3>{lote.nombre}</h3>
-                        <span className={`estado-lote ${lote.estado}`}>{lote.estado}</span>
-                      </div>
-                      <div className="lote-body">
-                        <div className="lote-dato">
-                          <span>Cantidad</span>
-                          <strong>{lote.cantidad_cerdos} cerdos</strong>
-                        </div>
-                        <div className="lote-dato">
-                          <span>Peso Promedio</span>
-                          <strong>{lote.peso_promedio_actual || 0} kg</strong>
-                        </div>
-                        <div className="lote-dato">
-                          <span>Peso Inicial</span>
-                          <strong>{lote.peso_inicial_promedio || 0} kg</strong>
-                        </div>
-                        <div className="lote-dato">
-                          <span>Ganancia</span>
-                          <strong>{((lote.peso_promedio_actual || 0) - (lote.peso_inicial_promedio || 0)).toFixed(1)} kg</strong>
-                        </div>
-                        <div className="lote-dato">
-                          <span>Fecha Inicio</span>
-                          <strong>{new Date(lote.fecha_inicio).toLocaleDateString()}</strong>
-                        </div>
-                        <div className="lote-dato">
-                          <span>Estado</span>
-                          <strong>{lote.activo ? 'Activo' : 'Finalizado'}</strong>
-                        </div>
-                        {lote.notas && (
-                          <div className="lote-notas">
-                            <span>Notas:</span>
-                            <p>{lote.notas}</p>
-                          </div>
-                        )}
-                      </div>
-                      <div className="lote-actions">
-                        {lote.activo && (
-                          <>
-                            <button className="btn-icon" onClick={() => {
-                              setLoteSeleccionado(lote)
-                              setNuevoLote({
-                                nombre: lote.nombre,
-                                cantidad_cerdos: lote.cantidad_cerdos,
-                                estado: lote.estado,
-                                peso_inicial_promedio: lote.peso_inicial_promedio,
-                                notas: lote.notas || ''
-                              })
-                              setMostrarModalLote(true)
-                            }}>
-                              <IconEditar />
-                            </button>
-                            <button className="btn-icon btn-warning" onClick={() => finalizarLote(lote._id)}>
-                              Finalizar
-                            </button>
-                          </>
-                        )}
-                        <button className="btn-icon btn-danger" onClick={() => eliminarLote(lote._id)}>
-                          <IconEliminar />
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+    {/* Vista de detalle de lote seleccionado */}
+    {loteDetalle ? (
+      <div className="lote-detalle-view">
+        <button className="btn-volver" onClick={() => setLoteDetalle(null)}>
+          ← Volver a lotes
+        </button>
+        
+        {/* Info principal del lote */}
+        <div className="lote-detalle-header">
+          <div className="lote-detalle-titulo">
+            <h3>{loteDetalle.nombre}</h3>
+            <span className={`estado-lote ${loteDetalle.estado}`}>{loteDetalle.estado}</span>
+          </div>
+          {loteDetalle.activo && (
+            <button className="btn-primary" onClick={() => setMostrarModalAlimentacion(true)}>
+              <Plus size={16} /> Registrar Alimentación
+            </button>
+          )}
+        </div>
 
-              {/* Modal Lote */}
-              {mostrarModalLote && (
-                <div className="modal-overlay" onClick={() => { setMostrarModalLote(false); setLoteSeleccionado(null) }}>
-                  <div className="modal" onClick={e => e.stopPropagation()}>
-                    <div className="modal-header">
-                      <h3>{loteSeleccionado ? 'Editar Lote' : 'Nuevo Lote'}</h3>
-                      <button className="btn-cerrar" onClick={() => { setMostrarModalLote(false); setLoteSeleccionado(null) }}>&times;</button>
-                    </div>
-                    <div className="modal-body">
-                      <div className="form-group">
-                        <label>Nombre del Lote</label>
-                        <input
-                          type="text"
-                          value={nuevoLote.nombre}
-                          onChange={e => setNuevoLote({ ...nuevoLote, nombre: e.target.value })}
-                          placeholder="Ej: Lote A - Enero 2026"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Cantidad de Cerdos</label>
-                        <input
-                          type="number"
-                          value={nuevoLote.cantidad_cerdos}
-                          onChange={e => setNuevoLote({ ...nuevoLote, cantidad_cerdos: parseInt(e.target.value) || 0 })}
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Estado</label>
-                        <select
-                          value={nuevoLote.estado}
-                          onChange={e => setNuevoLote({ ...nuevoLote, estado: e.target.value })}
-                        >
-                          <option value="engorde">Engorde</option>
-                          <option value="destete">Destete</option>
-                          <option value="gestacion">Gestación</option>
-                          <option value="lactancia">Lactancia</option>
-                        </select>
-                      </div>
-                      <div className="form-group">
-                        <label>Peso Inicial Promedio (kg)</label>
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={nuevoLote.peso_inicial_promedio}
-                          onChange={e => setNuevoLote({ ...nuevoLote, peso_inicial_promedio: parseFloat(e.target.value) || 0 })}
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Notas</label>
-                        <textarea
-                          value={nuevoLote.notas}
-                          onChange={e => setNuevoLote({ ...nuevoLote, notas: e.target.value })}
-                          placeholder="Observaciones del lote..."
-                          rows={3}
-                        />
-                      </div>
-                    </div>
-                    <div className="modal-footer">
-                      <button className="btn-secondary" onClick={() => { setMostrarModalLote(false); setLoteSeleccionado(null) }}>Cancelar</button>
-                      <button className="btn-primary" onClick={() => {
-                        if (loteSeleccionado) {
-                          actualizarLote(loteSeleccionado._id, nuevoLote)
-                          setMostrarModalLote(false)
-                          setLoteSeleccionado(null)
-                        } else {
-                          crearLote()
-                        }
-                      }}>
-                        {loteSeleccionado ? 'Guardar Cambios' : 'Crear Lote'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
+        {/* Tarjetas de datos calculados */}
+        <div className="lote-stats-grid">
+          <div className="lote-stat-card">
+            <Calendar size={24} />
+            <div className="stat-info">
+              <span className="stat-valor">{loteDetalle.edad_dias || 0} días</span>
+              <span className="stat-label">Edad del Lote</span>
+            </div>
+          </div>
+          <div className="lote-stat-card">
+            <PiggyBank size={24} />
+            <div className="stat-info">
+              <span className="stat-valor">{loteDetalle.cantidad_cerdos}</span>
+              <span className="stat-label">Cerdos</span>
+            </div>
+          </div>
+          <div className="lote-stat-card">
+            <Weight size={24} />
+            <div className="stat-info">
+              <span className="stat-valor">{loteDetalle.peso_promedio_actual?.toFixed(1) || 0} kg</span>
+              <span className="stat-label">Peso Promedio</span>
+            </div>
+          </div>
+          <div className="lote-stat-card destacado">
+            <Package size={24} />
+            <div className="stat-info">
+              <span className="stat-valor">{loteDetalle.peso_total?.toFixed(0) || 0} kg</span>
+              <span className="stat-label">Peso Total Lote</span>
+            </div>
+          </div>
+          <div className="lote-stat-card">
+            <TrendingUp size={24} />
+            <div className="stat-info">
+              <span className="stat-valor">{loteDetalle.ganancia_peso?.toFixed(1) || 0} kg</span>
+              <span className="stat-label">Ganancia Promedio</span>
+            </div>
+          </div>
+          <div className="lote-stat-card">
+            <BarChart3 size={24} />
+            <div className="stat-info">
+              <span className="stat-valor">{loteDetalle.conversion_alimenticia || '0.00'}</span>
+              <span className="stat-label">Conversión Alimenticia</span>
+            </div>
+          </div>
+          <div className="lote-stat-card">
+            <DollarSign size={24} />
+            <div className="stat-info">
+              <span className="stat-valor">{formatearDinero(loteDetalle.costo_por_cerdo || 0)}</span>
+              <span className="stat-label">Costo por Cerdo</span>
+            </div>
+          </div>
+          <div className="lote-stat-card">
+            <Wallet size={24} />
+            <div className="stat-info">
+              <span className="stat-valor">{formatearDinero(loteDetalle.costo_alimento_total || 0)}</span>
+              <span className="stat-label">Costo Total Alimento</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Info adicional */}
+        <div className="lote-info-adicional">
+          <div className="info-item">
+            <span className="info-label">Corral:</span>
+            <span className="info-valor">{loteDetalle.corral || 'No asignado'}</span>
+          </div>
+          <div className="info-item">
+            <span className="info-label">Alimento Total:</span>
+            <span className="info-valor">{loteDetalle.alimento_total_kg?.toFixed(1) || 0} kg</span>
+          </div>
+          <div className="info-item">
+            <span className="info-label">Fecha Inicio:</span>
+            <span className="info-valor">{new Date(loteDetalle.fecha_inicio).toLocaleDateString()}</span>
+          </div>
+          {loteDetalle.notas && (
+            <div className="info-item full">
+              <span className="info-label">Notas:</span>
+              <span className="info-valor">{loteDetalle.notas}</span>
             </div>
           )}
+        </div>
+
+        {/* Gráfica de Evolución */}
+        <div className="dashboard-section grafica-section">
+          <h3><LineChartIcon size={20} /> Evolución del Lote</h3>
+          <div className="grafica-container">
+            {graficaEvolucionLote.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={graficaEvolucionLote}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                  <XAxis dataKey="fecha" tick={{ fontSize: 10 }} stroke="#666" />
+                  <YAxis yAxisId="peso" tick={{ fontSize: 11 }} stroke="#2d6a4f" unit=" kg" />
+                  <YAxis yAxisId="alimento" orientation="right" tick={{ fontSize: 11 }} stroke="#3b82f6" unit=" kg" />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: '8px' }}
+                    formatter={(value, name) => [
+                      name === 'peso_promedio' ? `${value} kg` : `${value} kg`,
+                      name === 'peso_promedio' ? 'Peso Promedio' : 'Alimento'
+                    ]}
+                  />
+                  <Legend />
+                  <Line 
+                    yAxisId="peso"
+                    type="monotone" 
+                    dataKey="peso_promedio" 
+                    stroke="#2d6a4f" 
+                    strokeWidth={3}
+                    dot={{ r: 5, fill: '#2d6a4f' }}
+                    name="Peso Promedio"
+                    connectNulls
+                  />
+                  <Line 
+                    yAxisId="alimento"
+                    type="monotone" 
+                    dataKey="alimento_kg" 
+                    stroke="#3b82f6" 
+                    strokeWidth={2}
+                    dot={{ r: 4, fill: '#3b82f6' }}
+                    name="Alimento Diario"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="sin-datos">No hay datos de evolución. Registra pesajes y alimentación.</p>
+            )}
+          </div>
+        </div>
+
+        {/* Historial de Alimentación */}
+        <div className="dashboard-section">
+          <h3><Archive size={20} /> Historial de Alimentación</h3>
+          {alimentacionLote.length === 0 ? (
+            <p className="sin-datos">No hay registros de alimentación</p>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Cantidad</th>
+                    <th>Precio/kg</th>
+                    <th>Total</th>
+                    <th>Notas</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {alimentacionLote.map(a => (
+                    <tr key={a._id}>
+                      <td>{new Date(a.fecha).toLocaleDateString()}</td>
+                      <td><span className={`tipo-badge ${a.tipo_alimento}`}>{a.tipo_alimento}</span></td>
+                      <td><strong>{a.cantidad_kg} kg</strong></td>
+                      <td>{formatearDinero(a.precio_kg)}</td>
+                      <td><strong>{formatearDinero(a.total)}</strong></td>
+                      <td>{a.notas || '-'}</td>
+                      <td>
+                        <button className="btn-icon btn-danger" onClick={() => eliminarAlimentacion(a._id)}>
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    ) : (
+      /* Vista de tarjetas de lotes */
+      <div className="lotes-grid">
+        {lotes.length === 0 ? (
+          <p className="sin-datos">No hay lotes registrados</p>
+        ) : (
+          lotes.map(lote => (
+            <div key={lote._id} className={`lote-card ${!lote.activo ? 'inactivo' : ''}`}>
+              <div className="lote-header">
+                <h3>{lote.nombre}</h3>
+                <span className={`estado-lote ${lote.estado}`}>{lote.estado}</span>
+              </div>
+              <div className="lote-body">
+                <div className="lote-dato">
+                  <span>Edad</span>
+                  <strong>{lote.edad_dias || Math.floor((Date.now() - new Date(lote.fecha_inicio)) / (1000*60*60*24))} días</strong>
+                </div>
+                <div className="lote-dato">
+                  <span>Cantidad</span>
+                  <strong>{lote.cantidad_cerdos} cerdos</strong>
+                </div>
+                <div className="lote-dato">
+                  <span>Peso Promedio</span>
+                  <strong>{lote.peso_promedio_actual || 0} kg</strong>
+                </div>
+                <div className="lote-dato destacado">
+                  <span>Peso Total</span>
+                  <strong>{((lote.cantidad_cerdos || 0) * (lote.peso_promedio_actual || 0)).toFixed(0)} kg</strong>
+                </div>
+                <div className="lote-dato">
+                  <span>Ganancia</span>
+                  <strong>{((lote.peso_promedio_actual || 0) - (lote.peso_inicial_promedio || 0)).toFixed(1)} kg</strong>
+                </div>
+                <div className="lote-dato">
+                  <span>Corral</span>
+                  <strong>{lote.corral || '-'}</strong>
+                </div>
+              </div>
+              <div className="lote-actions">
+                <button className="btn-ver-detalle" onClick={() => verDetalleLote(lote._id)}>
+                  <Eye size={16} /> Ver Detalle
+                </button>
+                {lote.activo && (
+                  <>
+                    <button className="btn-icon" onClick={() => {
+                      setLoteSeleccionado(lote)
+                      setNuevoLote({
+                        nombre: lote.nombre,
+                        cantidad_cerdos: lote.cantidad_cerdos,
+                        estado: lote.estado,
+                        peso_inicial_promedio: lote.peso_inicial_promedio,
+                        fecha_nacimiento: lote.fecha_nacimiento ? lote.fecha_nacimiento.split('T')[0] : '',
+                        edad_dias_manual: lote.edad_dias_manual || '',
+                        corral: lote.corral || '',
+                        notas: lote.notas || ''
+                      })
+                      setMostrarModalLote(true)
+                    }}>
+                      <Edit size={16} />
+                    </button>
+                    <button className="btn-icon btn-warning" onClick={() => finalizarLote(lote._id)}>
+                      Fin
+                    </button>
+                  </>
+                )}
+                <button className="btn-icon btn-danger" onClick={() => eliminarLote(lote._id)}>
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    )}
+
+    {/* Modal Crear/Editar Lote */}
+    {mostrarModalLote && (
+      <div className="modal-overlay" onClick={() => { setMostrarModalLote(false); setLoteSeleccionado(null) }}>
+        <div className="modal modal-grande" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>{loteSeleccionado ? 'Editar Lote' : 'Nuevo Lote'}</h3>
+            <button className="btn-cerrar" onClick={() => { setMostrarModalLote(false); setLoteSeleccionado(null) }}>&times;</button>
+          </div>
+          <div className="modal-body">
+            <div className="form-row">
+              <div className="form-group">
+                <label>Nombre del Lote *</label>
+                <input
+                  type="text"
+                  value={nuevoLote.nombre}
+                  onChange={e => setNuevoLote({ ...nuevoLote, nombre: e.target.value })}
+                  placeholder="Ej: Lote A - Febrero 2026"
+                />
+              </div>
+              <div className="form-group">
+                <label>Cantidad de Cerdos *</label>
+                <input
+                  type="number"
+                  value={nuevoLote.cantidad_cerdos}
+                  onChange={e => setNuevoLote({ ...nuevoLote, cantidad_cerdos: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+            
+            <div className="form-row">
+              <div className="form-group">
+                <label>Etapa/Estado</label>
+                <select
+                  value={nuevoLote.estado}
+                  onChange={e => setNuevoLote({ ...nuevoLote, estado: e.target.value })}
+                >
+                  <option value="destete">Destete</option>
+                  <option value="levante">Levante</option>
+                  <option value="engorde">Engorde</option>
+                  <option value="gestacion">Gestación</option>
+                  <option value="lactancia">Lactancia</option>
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Corral</label>
+                <input
+                  type="text"
+                  value={nuevoLote.corral}
+                  onChange={e => setNuevoLote({ ...nuevoLote, corral: e.target.value })}
+                  placeholder="Ej: Corral 1, Galpón Norte"
+                />
+              </div>
+            </div>
+
+            <div className="form-section-title">Edad del Lote</div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Fecha de Nacimiento</label>
+                <input
+                  type="date"
+                  value={nuevoLote.fecha_nacimiento}
+                  onChange={e => setNuevoLote({ ...nuevoLote, fecha_nacimiento: e.target.value, edad_dias_manual: '' })}
+                />
+                <small>O ingresa la edad manualmente →</small>
+              </div>
+              <div className="form-group">
+                <label>Edad Manual (días)</label>
+                <input
+                  type="number"
+                  value={nuevoLote.edad_dias_manual}
+                  onChange={e => setNuevoLote({ ...nuevoLote, edad_dias_manual: parseInt(e.target.value) || '', fecha_nacimiento: '' })}
+                  placeholder="Ej: 45"
+                />
+                <small>Días de vida al ingresar el lote</small>
+              </div>
+            </div>
+
+            <div className="form-section-title">Peso</div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Peso Inicial Promedio (kg)</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={nuevoLote.peso_inicial_promedio}
+                  onChange={e => setNuevoLote({ ...nuevoLote, peso_inicial_promedio: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Peso Total Estimado</label>
+                <input
+                  type="text"
+                  value={`${((nuevoLote.cantidad_cerdos || 0) * (nuevoLote.peso_inicial_promedio || 0)).toFixed(0)} kg`}
+                  disabled
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label>Notas</label>
+              <textarea
+                value={nuevoLote.notas}
+                onChange={e => setNuevoLote({ ...nuevoLote, notas: e.target.value })}
+                placeholder="Observaciones del lote..."
+                rows={2}
+              />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button className="btn-secondary" onClick={() => { setMostrarModalLote(false); setLoteSeleccionado(null) }}>Cancelar</button>
+            <button className="btn-primary" onClick={() => {
+              if (loteSeleccionado) {
+                actualizarLote(loteSeleccionado._id, nuevoLote)
+                setMostrarModalLote(false)
+                setLoteSeleccionado(null)
+              } else {
+                crearLote()
+              }
+            }}>
+              {loteSeleccionado ? 'Guardar Cambios' : 'Crear Lote'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Modal Registrar Alimentación */}
+    {mostrarModalAlimentacion && (
+      <div className="modal-overlay" onClick={() => setMostrarModalAlimentacion(false)}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Registrar Alimentación - {loteDetalle?.nombre}</h3>
+            <button className="btn-cerrar" onClick={() => setMostrarModalAlimentacion(false)}>&times;</button>
+          </div>
+          <div className="modal-body">
+            <div className="form-group">
+              <label>Tipo de Alimento</label>
+              <select
+                value={nuevaAlimentacion.tipo_alimento}
+                onChange={e => setNuevaAlimentacion({ ...nuevaAlimentacion, tipo_alimento: e.target.value })}
+              >
+                <option value="iniciador">Iniciador</option>
+                <option value="levante">Levante</option>
+                <option value="engorde">Engorde</option>
+                <option value="gestacion">Gestación</option>
+                <option value="lactancia">Lactancia</option>
+                <option value="otro">Otro</option>
+              </select>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Cantidad (kg) *</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={nuevaAlimentacion.cantidad_kg}
+                  onChange={e => setNuevaAlimentacion({ ...nuevaAlimentacion, cantidad_kg: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div className="form-group">
+                <label>Precio por kg *</label>
+                <input
+                  type="number"
+                  value={nuevaAlimentacion.precio_kg}
+                  onChange={e => setNuevaAlimentacion({ ...nuevaAlimentacion, precio_kg: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Total (calculado)</label>
+              <input
+                type="text"
+                value={formatearDinero((nuevaAlimentacion.cantidad_kg || 0) * (nuevaAlimentacion.precio_kg || 0))}
+                disabled
+              />
+              <small>Este costo se registrará automáticamente en Contabilidad</small>
+            </div>
+            <div className="form-group">
+              <label>Notas (opcional)</label>
+              <input
+                type="text"
+                value={nuevaAlimentacion.notas}
+                onChange={e => setNuevaAlimentacion({ ...nuevaAlimentacion, notas: e.target.value })}
+                placeholder="Observaciones..."
+              />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button className="btn-secondary" onClick={() => setMostrarModalAlimentacion(false)}>Cancelar</button>
+            <button className="btn-primary" onClick={registrarAlimentacion}>
+              Registrar Alimentación
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+)}
 {/* ════════════════════════════════════════════════════════════════ */}
           {/* PÁGINA: PESAJES */}
           {/* ════════════════════════════════════════════════════════════════ */}

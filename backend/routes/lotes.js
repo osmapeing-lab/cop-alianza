@@ -1,3 +1,9 @@
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ * COO ALIANZAS - RUTAS DE LOTES (MEJORADO)
+ * ═══════════════════════════════════════════════════════════════════════
+ */
+
 const express = require('express');
 const router = express.Router();
 const {
@@ -8,8 +14,18 @@ const {
   updateLote,
   deleteLote,
   finalizarLote,
-  getResumenLote
+  getResumenLote,
+  registrarAlimentacion,
+  getAlimentacionLote,
+  eliminarAlimentacion,
+  getGraficaPeso,
+  getGraficaAlimentacion,
+  getGraficaEvolucion
 } = require('../controllers/gestionLotesController');
+
+// ═══════════════════════════════════════════════════════════════════════
+// RUTAS CRUD LOTES
+// ═══════════════════════════════════════════════════════════════════════
 router.get('/', getLotes);
 router.get('/activos', getLotesActivos);
 router.get('/:id', getLote);
@@ -19,6 +35,18 @@ router.put('/:id', updateLote);
 router.put('/:id/finalizar', finalizarLote);
 router.delete('/:id', deleteLote);
 
-module.exports = router;
+// ═══════════════════════════════════════════════════════════════════════
+// RUTAS ALIMENTACIÓN
+// ═══════════════════════════════════════════════════════════════════════
+router.post('/alimentacion', registrarAlimentacion);
+router.get('/:id/alimentacion', getAlimentacionLote);
+router.delete('/alimentacion/:alimentacionId', eliminarAlimentacion);
 
-        //espacio para comit 
+// ═══════════════════════════════════════════════════════════════════════
+// RUTAS GRÁFICAS
+// ═══════════════════════════════════════════════════════════════════════
+router.get('/:id/grafica/peso', getGraficaPeso);
+router.get('/:id/grafica/alimentacion', getGraficaAlimentacion);
+router.get('/:id/grafica/evolucion', getGraficaEvolucion);
+
+module.exports = router;
