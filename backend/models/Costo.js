@@ -158,19 +158,17 @@ const costoSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Calcular totales
-costoSchema.pre('save', function(next) {
+// Línea 161
+costoSchema.pre('save', async function() { 
   this.total = this.cantidad * this.precio_unitario;
   this.total_con_iva = this.total + (this.total * (this.iva / 100));
-  
-  // Asignar periodo automáticamente
+
   const fecha = this.fecha || new Date();
   this.periodo = {
     mes: fecha.getMonth() + 1,
     año: fecha.getFullYear()
   };
-  
-  next();
+  // NO USAR next() AQUÍ
 });
 
 // Índices
