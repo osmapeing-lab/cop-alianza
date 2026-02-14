@@ -1052,6 +1052,7 @@ const [estadisticasInventario, setEstadisticasInventario] = useState({})
 // Estados para gráficas
 const [historicoTemperatura, setHistoricoTemperatura] = useState([])
 const [historicoAgua, setHistoricoAgua] = useState([])
+const [periodoAgua, setPeriodoAgua] = useState('semanal')
 const [historicoContable, setHistoricoContable] = useState([])
 const [historicoPesos, setHistoricoPesos] = useState([])
 const [distribucionGastos, setDistribucionGastos] = useState([])
@@ -1868,25 +1869,40 @@ const cargarHistoricoTemperatura = async () => {
     setHistoricoTemperatura([])
   }
 }
-const cargarHistoricoAgua = async () => {
+const cargarHistoricoAgua = async (periodo) => {
   try {
-    const res = await axios.get(`${API_URL}/api/esp/flujo/historico?dias=7`, {
+    const periodoActual = periodo || periodoAgua
+    let dias = 7
+    if (periodoActual === 'diario') dias = 1
+    if (periodoActual === 'mensual') dias = 30
+    
+    const res = await axios.get(`${API_URL}/api/esp/flujo/historico?dias=${dias}`, {
       headers: { Authorization: `Bearer ${token}` }
     })
     
     if (res.data && res.data.length > 0) {
-      setHistoricoAgua(res.data.map(d => {
-        // d.fecha = "2026-02-11" -> mostrar "feb 11"
-        const partes = d.fecha.split('-') // ["2026", "02", "11"]
+      const datosFormateados = res.data.map(d => {
+        const partes = d.fecha.split('-')
+        const año = parseInt(partes[0])
         const mes = parseInt(partes[1])
         const dia = parseInt(partes[2])
         const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
         
+        // Restar 5 horas para ajustar UTC a Colombia
+        // Si la hora en que se guardó fue antes de las 5am UTC, es el día anterior en Colombia
+        const fechaOriginal = new Date(d.fecha + 'T12:00:00Z')
+        const fechaColombia = new Date(fechaOriginal.getTime() - (5 * 60 * 60 * 1000))
+        
+        const mesColombia = fechaColombia.getMonth()
+        const diaColombia = fechaColombia.getDate()
+        
         return {
-          dia: `${meses[mes-1]} ${dia}`,
-          litros: d.volumen_total
+          dia: `${meses[mesColombia]} ${diaColombia}`,
+          litros: d.volumen_total || 0
         }
-      }))
+      })
+      
+      setHistoricoAgua(datosFormateados)
     } else {
       setHistoricoAgua([])
     }
@@ -2410,41 +2426,76 @@ const cargarDistribucionGastos = async () => {
       </div>
 
       
-      {/* Gráfica de Consumo de Agua */}
+     {/* Gráfica de Consumo de Agua */}
 <div className="dashboard-section grafica-section">
-  <h3><Droplets size={20} /> Consumo de Agua - Última Semana</h3>
+  <div className="grafica-header-agua">
+    <h3><Droplets size={20} /> Consumo de Agua</h3>
+    <div className="periodo-selector">
+      <button 
+        className={`periodo-btn ${periodoAgua === 'diario' ? 'activo' : ''}`}
+        onClick={() => {
+          setPeriodoAgua('diario')
+          cargarHistoricoAgua('diario')
+        }}
+      >
+        Hoy
+      </button>
+      <button 
+        className={`periodo-btn ${periodoAgua === 'semanal' ? 'activo' : ''}`}
+        onClick={() => {
+          setPeriodoAgua('semanal')
+          cargarHistoricoAgua('semanal')
+        }}
+      >
+        Semanal
+      </button>
+      <button 
+        className={`periodo-btn ${periodoAgua === 'mensual' ? 'activo' : ''}`}
+        onClick={() => {
+          setPeriodoAgua('mensual')
+          cargarHistoricoAgua('mensual')
+        }}
+      >
+        Mensual
+      </button>
+    </div>
+  </div>
   <div className="grafica-container">
-    <ResponsiveContainer width="100%" height={250}>
-      <LineChart data={historicoAgua}>
-        <defs>
-          <linearGradient id="colorAgua" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-        <XAxis dataKey="dia" tick={{ fontSize: 11 }} stroke="#666" />
-        <YAxis tick={{ fontSize: 11 }} stroke="#666" unit=" L" />
-        <Tooltip 
-          contentStyle={{ 
-            backgroundColor: '#fff', 
-            border: '1px solid #e0e0e0',
-            borderRadius: '8px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-          }}
-          formatter={(value) => [`${value.toFixed(1)} L`, 'Consumo']}
-        />
-        <Line 
-          type="monotone"
-          dataKey="litros" 
-          stroke="#3b82f6" 
-          strokeWidth={3}
-          dot={{ r: 6, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
-          activeDot={{ r: 8, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }}
-          name="Litros"
-        />
-      </LineChart>
-    </ResponsiveContainer>
+    {historicoAgua.length === 0 ? (
+      <p className="sin-datos">No hay datos de consumo</p>
+    ) : (
+      <ResponsiveContainer width="100%" height={250}>
+        <LineChart data={historicoAgua}>
+          <defs>
+            <linearGradient id="colorAgua" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
+              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+            </linearGradient>
+          </defs>
+          <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+          <XAxis dataKey="dia" tick={{ fontSize: 11 }} stroke="#666" />
+          <YAxis tick={{ fontSize: 11 }} stroke="#666" unit=" L" />
+          <Tooltip 
+            contentStyle={{ 
+              backgroundColor: '#fff', 
+              border: '1px solid #e0e0e0',
+              borderRadius: '8px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+            }}
+            formatter={(value) => [`${Number(value).toFixed(1)} L`, 'Consumo']}
+          />
+          <Line 
+            type="monotone"
+            dataKey="litros" 
+            stroke="#3b82f6" 
+            strokeWidth={3}
+            dot={{ r: 6, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
+            activeDot={{ r: 8, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }}
+            name="Litros"
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    )}
   </div>
 </div>
     </div>

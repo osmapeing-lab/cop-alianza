@@ -4102,3 +4102,73 @@ table td.sin-datos {
     grid-column: span 1;
   }
 }
+/* ═══════════════════════════════════════════════════════════════════════
+   SELECTOR DE PERÍODO - GRÁFICA DE AGUA
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.grafica-header-agua {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.grafica-header-agua h3 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1.1rem;
+  color: #1a1a2e;
+}
+
+.periodo-selector {
+  display: flex;
+  gap: 4px;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.periodo-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: #64748b;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.periodo-btn:hover {
+  color: #334155;
+  background: #e2e8f0;
+}
+
+.periodo-btn.activo {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+@media (max-width: 480px) {
+  .grafica-header-agua {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .periodo-selector {
+    width: 100%;
+  }
+  
+  .periodo-btn {
+    flex: 1;
+    text-align: center;
+    padding: 10px 8px;
+    font-size: 0.8rem;
+  }
+}
