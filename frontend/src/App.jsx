@@ -1881,28 +1881,37 @@ const cargarHistoricoAgua = async (periodo) => {
     })
     
     if (res.data && res.data.length > 0) {
+      const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
+      
       const datosFormateados = res.data.map(d => {
+        // La fecha viene como "2026-02-14" en UTC
+        // Pero en Colombia (UTC-5) todavía es el día anterior si se guardó después de las 7pm
         const partes = d.fecha.split('-')
         const año = parseInt(partes[0])
-        const mes = parseInt(partes[1])
+        const mes = parseInt(partes[1]) - 1 // Mes base 0
         const dia = parseInt(partes[2])
-        const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
         
-        // Restar 5 horas para ajustar UTC a Colombia
-        // Si la hora en que se guardó fue antes de las 5am UTC, es el día anterior en Colombia
-        const fechaOriginal = new Date(d.fecha + 'T12:00:00Z')
-        const fechaColombia = new Date(fechaOriginal.getTime() - (5 * 60 * 60 * 1000))
-        
-        const mesColombia = fechaColombia.getMonth()
-        const diaColombia = fechaColombia.getDate()
+        // Crear fecha y restar 1 día para ajustar a Colombia
+        const fechaUTC = new Date(año, mes, dia)
+        fechaUTC.setDate(fechaUTC.getDate() - 1) // Restar 1 día
         
         return {
-          dia: `${meses[mesColombia]} ${diaColombia}`,
-          litros: d.volumen_total || 0
+          dia: `${meses[fechaUTC.getMonth()]} ${fechaUTC.getDate()}`,
+          litros: d.volumen_total || 0,
+          fechaOrden: fechaUTC.getTime()
         }
       })
       
-      setHistoricoAgua(datosFormateados)
+      // Ordenar por fecha
+      datosFormateados.sort((a, b) => a.fechaOrden - b.fechaOrden)
+      
+      // Si es "Hoy", filtrar solo el último día
+      if (periodoActual === 'diario') {
+        const ultimoDato = datosFormateados[datosFormateados.length - 1]
+        setHistoricoAgua(ultimoDato ? [ultimoDato] : [])
+      } else {
+        setHistoricoAgua(datosFormateados)
+      }
     } else {
       setHistoricoAgua([])
     }
