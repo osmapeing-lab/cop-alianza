@@ -1553,6 +1553,102 @@ const verStreamCamara = (camara) => {
   }
 
   // ═══════════════════════════════════════════════════════════════════════
+// FUNCIONES DE LOTES - DETALLE Y ALIMENTACIÓN
+// ═══════════════════════════════════════════════════════════════════════
+
+const verDetalleLote = async (id) => {
+  try {
+    const res = await axios.get(`${API_URL}/api/lotes/${id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setLoteDetalle(res.data)
+    
+    // Cargar alimentación del lote
+    await cargarAlimentacionLote(id)
+    
+    // Cargar gráfica de evolución
+    await cargarGraficaEvolucion(id)
+  } catch (error) {
+    alert('Error cargando detalle del lote: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
+const cargarAlimentacionLote = async (id) => {
+  try {
+    const res = await axios.get(`${API_URL}/api/lotes/${id}/alimentacion`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setAlimentacionLote(res.data)
+  } catch (error) {
+    console.error('Error cargando alimentación:', error)
+    setAlimentacionLote([])
+  }
+}
+
+const cargarGraficaEvolucion = async (id) => {
+  try {
+    const res = await axios.get(`${API_URL}/api/lotes/${id}/grafica/evolucion`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setGraficaEvolucionLote(res.data)
+  } catch (error) {
+    console.error('Error cargando gráfica evolución:', error)
+    setGraficaEvolucionLote([])
+  }
+}
+
+const registrarAlimentacion = async () => {
+  try {
+    if (!nuevaAlimentacion.cantidad_kg || nuevaAlimentacion.cantidad_kg <= 0) {
+      alert('La cantidad debe ser mayor a 0')
+      return
+    }
+    if (!nuevaAlimentacion.precio_kg || nuevaAlimentacion.precio_kg <= 0) {
+      alert('El precio debe ser mayor a 0')
+      return
+    }
+    
+    await axios.post(`${API_URL}/api/lotes/alimentacion`, {
+      lote: loteDetalle._id,
+      tipo_alimento: nuevaAlimentacion.tipo_alimento,
+      cantidad_kg: nuevaAlimentacion.cantidad_kg,
+      precio_kg: nuevaAlimentacion.precio_kg,
+      notas: nuevaAlimentacion.notas
+    }, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    
+    alert('✓ Alimentación registrada y costo creado automáticamente')
+    setMostrarModalAlimentacion(false)
+    setNuevaAlimentacion({
+      tipo_alimento: 'engorde',
+      cantidad_kg: '',
+      precio_kg: '',
+      notas: ''
+    })
+    
+    // Recargar datos del lote
+    await verDetalleLote(loteDetalle._id)
+  } catch (error) {
+    alert('Error registrando alimentación: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
+const eliminarAlimentacion = async (id) => {
+  if (!confirm('¿Eliminar este registro de alimentación? También se eliminará el costo asociado.')) return
+  try {
+    await axios.delete(`${API_URL}/api/lotes/alimentacion/${id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    
+    // Recargar datos del lote
+    await verDetalleLote(loteDetalle._id)
+  } catch (error) {
+    alert('Error eliminando alimentación: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
+  // ═══════════════════════════════════════════════════════════════════════
   // FUNCIONES DE PESAJES
   // ═══════════════════════════════════════════════════════════════════════
 
@@ -1607,6 +1703,18 @@ const crearRegistroContable = async () => {
     alert('Error guardando registro: ' + (error.response?.data?.mensaje || error.message))
   }
 };
+
+const eliminarRegistroContable = async (id) => {
+  if (!confirm('¿Eliminar este registro contable?')) return
+  try {
+    await axios.delete(`${API_URL}/api/contabilidad/${id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    cargarContabilidad()
+  } catch (error) {
+    alert('Error eliminando registro: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
   // ═══════════════════════════════════════════════════════════════════════
   // FUNCIONES DE BOMBAS
   // ═══════════════════════════════════════════════════════════════════════
