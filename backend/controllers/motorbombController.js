@@ -1,4 +1,5 @@
 const Motorbomb = require('../models/Motorbomb');
+const Alert = require('../models/Alert');
 
 exports.getAllMotorbombs = async (req, res) => {
   try {
@@ -16,6 +17,15 @@ exports.toggleMotorbomb = async (req, res) => {
     motorbomb.estado = !motorbomb.estado;
     motorbomb.fecha_cambio = Date.now();
     await motorbomb.save();
+
+    // Registrar alerta de cambio de estado
+    const hora = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', hour12: true });
+    const alerta = new Alert({
+      tipo: motorbomb.estado ? 'info' : 'info',
+      mensaje: `Bomba "${motorbomb.nombre}" ${motorbomb.estado ? 'ENCENDIDA' : 'APAGADA'} manualmente a las ${hora}`
+    });
+    await alerta.save();
+
     res.json(motorbomb);
   } catch (error) {
     res.status(400).json({ mensaje: error.message });
