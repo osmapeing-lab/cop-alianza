@@ -1057,6 +1057,9 @@ const [costos, setCostos] = useState([])
 const [resumenCostos, setResumenCostos] = useState({})
 const [comparativoCostos, setComparativoCostos] = useState([])
 
+// Estado del panel unificado de finanzas
+const [tabFinanzas, setTabFinanzas] = useState('resumen')
+
 // Estados de bombas (CRUD)
 const [bombas, setBombas] = useState([])
 const [mostrarModalBomba, setMostrarModalBomba] = useState(false)
@@ -1738,6 +1741,30 @@ const eliminarRegistroContable = async (id) => {
     alert('Error eliminando registro: ' + (error.response?.data?.mensaje || error.message))
   }
 }
+
+const eliminarCosto = async (id) => {
+  if (!confirm('¿Eliminar este costo?')) return
+  try {
+    await axios.delete(`${API_URL}/api/costos/${id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    cargarCostos()
+  } catch (error) {
+    alert('Error eliminando costo: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
+const anularVenta = async (id) => {
+  if (!confirm('¿Anular esta venta?')) return
+  try {
+    await axios.put(`${API_URL}/api/ventas/${id}/anular`, {}, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    cargarVentas()
+  } catch (error) {
+    alert('Error anulando venta: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
   // ═══════════════════════════════════════════════════════════════════════
   // FUNCIONES DE BOMBAS
   // ═══════════════════════════════════════════════════════════════════════
@@ -2172,12 +2199,12 @@ const cargarDistribucionGastos = async () => {
               <span>Pesajes</span>
             </button>
             
-            <button 
-              className={`nav-item ${pagina === 'contabilidad' ? 'activo' : ''}`}
-              onClick={() => { setPagina('contabilidad'); setMenuAbierto(false) }}
+            <button
+              className={`nav-item ${pagina === 'finanzas' ? 'activo' : ''}`}
+              onClick={() => { setPagina('finanzas'); setMenuAbierto(false) }}
             >
               <IconDinero />
-              <span>Contabilidad</span>
+              <span>Finanzas</span>
             </button>
             
             <button 
@@ -2203,21 +2230,6 @@ const cargarDistribucionGastos = async () => {
   <span>Cámaras</span>
 </button>
 
-<button 
-  className={`nav-item ${pagina === 'ventas' ? 'activo' : ''}`}
-  onClick={() => { setPagina('ventas'); setMenuAbierto(false) }}
->
-  <IconVenta />
-  <span>Ventas</span>
-</button>
-
-<button 
-  className={`nav-item ${pagina === 'costos' ? 'activo' : ''}`}
-  onClick={() => { setPagina('costos'); setMenuAbierto(false) }}
->
-  <IconContabilidad />
-  <span>Costos</span>
-</button>
 
 <button 
   className={`nav-item ${pagina === 'inventario' ? 'activo' : ''}`}
@@ -2522,6 +2534,14 @@ const cargarDistribucionGastos = async () => {
           />
         </LineChart>
       </ResponsiveContainer>
+    )}
+    {historicoAgua.length > 0 && (
+      <div className="agua-total-periodo">
+        <Droplets size={18} />
+        <span>Total {periodoAgua === 'diario' ? 'Hoy' : periodoAgua === 'semanal' ? 'Semanal' : 'Mensual'}:</span>
+        <strong>{historicoAgua.reduce((sum, d) => sum + (d.litros || 0), 0).toFixed(1)} L</strong>
+        <span className="agua-promedio">| Promedio: {(historicoAgua.reduce((sum, d) => sum + (d.litros || 0), 0) / historicoAgua.length).toFixed(1)} L/día</span>
+      </div>
     )}
   </div>
 </div>
@@ -3638,189 +3658,323 @@ const cargarDistribucionGastos = async () => {
             </div>
           )}
           {/* ════════════════════════════════════════════════════════════════ */}
-          {/* PÁGINA: CONTABILIDAD */}
+          {/* PÁGINA: FINANZAS (Panel Unificado) */}
           {/* ════════════════════════════════════════════════════════════════ */}
-          {pagina === 'contabilidad' && (
-            <div className="page-contabilidad">
+          {pagina === 'finanzas' && (
+            <div className="page-finanzas">
               <div className="page-header">
-                <h2>Contabilidad</h2>
-                <button className="btn-primary" onClick={() => setMostrarModalContabilidad(true)}>
-                  <IconMas />
-                  Nuevo Registro
-                </button>
+                <h2><DollarSign size={24} /> Panel Financiero</h2>
               </div>
 
-              {/* Resumen contable */}
-              <div className="contabilidad-resumen">
-                <div className="resumen-card ingresos">
-                  <h4>Total Ingresos</h4>
-                  <strong>{formatearDinero(resumenContable.total_ingresos)}</strong>
-                </div>
-                <div className="resumen-card gastos">
-                  <h4>Total Gastos</h4>
-                  <strong>{formatearDinero(resumenContable.total_gastos)}</strong>
-                </div>
-                <div className={`resumen-card balance ${resumenContable.ganancia >= 0 ? 'positivo' : 'negativo'}`}>
-                  <h4>Balance</h4>
-                  <strong>{formatearDinero(resumenContable.ganancia)}</strong>
-                </div>
+              {/* Tabs de navegación */}
+              <div className="finanzas-tabs">
+                <button className={`tab-btn ${tabFinanzas === 'resumen' ? 'activo' : ''}`} onClick={() => setTabFinanzas('resumen')}>Resumen</button>
+                <button className={`tab-btn ${tabFinanzas === 'costos' ? 'activo' : ''}`} onClick={() => setTabFinanzas('costos')}>Costos</button>
+                <button className={`tab-btn ${tabFinanzas === 'ventas' ? 'activo' : ''}`} onClick={() => setTabFinanzas('ventas')}>Ventas</button>
+                <button className={`tab-btn ${tabFinanzas === 'registros' ? 'activo' : ''}`} onClick={() => setTabFinanzas('registros')}>Registros</button>
               </div>
 
-              {/* Tabla de registros */}
-              <div className="table-container">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Fecha</th>
-                      <th>Tipo</th>
-                      <th>Categoría</th>
-                      <th>Descripción</th>
-                      <th>Cantidad</th>
-                      <th>Precio Unit.</th>
-                      <th>Total</th>
-                      <th>Lote</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {contabilidad.length === 0 ? (
-                      <tr>
-                        <td colSpan="9" className="sin-datos">No hay registros contables</td>
-                      </tr>
-                    ) : (
-                      contabilidad.map(reg => (
-                        <tr key={reg._id} className={reg.tipo}>
-                          <td>{new Date(reg.fecha).toLocaleDateString()}</td>
-                          <td>
-                            <span className={`tipo-badge ${reg.tipo}`}>
-                              {reg.tipo === 'ingreso' ? 'Ingreso' : 'Gasto'}
-                            </span>
-                          </td>
-                          <td>{reg.categoria}</td>
-                          <td>{reg.descripcion || '-'}</td>
-                          <td>{reg.cantidad} {reg.unidad}</td>
-                          <td>{formatearDinero(reg.precio_unitario)}</td>
-                          <td><strong>{formatearDinero(reg.total)}</strong></td>
-                          <td>{reg.lote?.nombre || '-'}</td>
-                          <td>
-                            <button className="btn-icon btn-danger" onClick={() => eliminarRegistroContable(reg._id)}>
-                              <IconEliminar />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Modal Contabilidad */}
-              {mostrarModalContabilidad && (
-                <div className="modal-overlay" onClick={() => setMostrarModalContabilidad(false)}>
-                  <div className="modal modal-grande" onClick={e => e.stopPropagation()}>
-                    <div className="modal-header">
-                      <h3>Nuevo Registro Contable</h3>
-                      <button className="btn-cerrar" onClick={() => setMostrarModalContabilidad(false)}>&times;</button>
-                    </div>
-                    <div className="modal-body">
-                      <div className="form-row">
-                        <div className="form-group">
-                          <label>Tipo</label>
-                          <select
-                            value={nuevoRegistro.tipo}
-                            onChange={e => setNuevoRegistro({ ...nuevoRegistro, tipo: e.target.value })}
-                          >
-                            <option value="gasto">Gasto</option>
-                            <option value="ingreso">Ingreso</option>
-                          </select>
-                        </div>
-                        <div className="form-group">
-                          <label>Categoría</label>
-                          <select
-                            value={nuevoRegistro.categoria}
-                            onChange={e => setNuevoRegistro({ ...nuevoRegistro, categoria: e.target.value })}
-                          >
-                            <option value="alimento">Alimento</option>
-                            <option value="agua">Agua</option>
-                            <option value="medicamento">Medicamento</option>
-                            <option value="vacuna">Vacuna</option>
-                            <option value="compra_cerdos">Compra de Cerdos</option>
-                            <option value="venta_cerdos">Venta de Cerdos</option>
-                            <option value="mano_obra">Mano de Obra</option>
-                            <option value="transporte">Transporte</option>
-                            <option value="otro">Otro</option>
-                          </select>
-                        </div>
-                      </div>
-                      <div className="form-group">
-                        <label>Lote (opcional)</label>
-                        <select
-                          value={nuevoRegistro.lote}
-                          onChange={e => setNuevoRegistro({ ...nuevoRegistro, lote: e.target.value })}
-                        >
-                          <option value="">Sin lote específico</option>
-                          {lotes.map(lote => (
-                            <option key={lote._id} value={lote._id}>{lote.nombre}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="form-group">
-                        <label>Descripción</label>
-                        <input
-                          type="text"
-                          value={nuevoRegistro.descripcion}
-                          onChange={e => setNuevoRegistro({ ...nuevoRegistro, descripcion: e.target.value })}
-                          placeholder="Descripción del registro..."
-                        />
-                      </div>
-                      <div className="form-row">
-                        <div className="form-group">
-                          <label>Cantidad</label>
-                          <input
-                            type="number"
-                            step="0.1"
-                            value={nuevoRegistro.cantidad}
-                            onChange={e => setNuevoRegistro({ ...nuevoRegistro, cantidad: parseFloat(e.target.value) || 0 })}
-                          />
-                        </div>
-                        <div className="form-group">
-                          <label>Unidad</label>
-                          <select
-                            value={nuevoRegistro.unidad}
-                            onChange={e => setNuevoRegistro({ ...nuevoRegistro, unidad: e.target.value })}
-                          >
-                            <option value="kg">kg</option>
-                            <option value="L">Litros</option>
-                            <option value="unidad">Unidad</option>
-                            <option value="dosis">Dosis</option>
-                            <option value="hora">Hora</option>
-                            <option value="dia">Día</option>
-                            <option value="viaje">Viaje</option>
-                          </select>
-                        </div>
-                        <div className="form-group">
-                          <label>Precio Unitario</label>
-                          <input
-                            type="number"
-                            value={nuevoRegistro.precio_unitario}
-                            onChange={e => setNuevoRegistro({ ...nuevoRegistro, precio_unitario: parseFloat(e.target.value) || 0 })}
-                          />
-                        </div>
-                      </div>
-                      <div className="form-group">
-                        <label>Total (calculado)</label>
-                        <input
-                          type="text"
-                          value={formatearDinero(nuevoRegistro.cantidad * nuevoRegistro.precio_unitario)}
-                          disabled
-                        />
+              {/* ── TAB: RESUMEN ── */}
+              {tabFinanzas === 'resumen' && (
+                <div className="finanzas-resumen">
+                  {/* Tarjetas principales */}
+                  <div className="finanzas-cards">
+                    <div className="finanza-card ingresos">
+                      <TrendingUp size={28} />
+                      <div>
+                        <span className="fc-label">Ingresos</span>
+                        <span className="fc-valor">{formatearDinero(resumenCostos?.ingresos?.total || resumenContable.total_ingresos || 0)}</span>
                       </div>
                     </div>
-                    <div className="modal-footer">
-                      <button className="btn-secondary" onClick={() => setMostrarModalContabilidad(false)}>Cancelar</button>
-                      <button className="btn-primary" onClick={crearRegistroContable}>Guardar Registro</button>
+                    <div className="finanza-card gastos">
+                      <TrendingDown size={28} />
+                      <div>
+                        <span className="fc-label">Gastos</span>
+                        <span className="fc-valor">{formatearDinero(resumenCostos?.costos?.total || resumenContable.total_gastos || 0)}</span>
+                      </div>
+                    </div>
+                    <div className={`finanza-card balance ${(resumenCostos?.resultado?.utilidad_bruta || resumenContable.ganancia || 0) >= 0 ? 'positivo' : 'negativo'}`}>
+                      <Wallet size={28} />
+                      <div>
+                        <span className="fc-label">Balance</span>
+                        <span className="fc-valor">{formatearDinero(resumenCostos?.resultado?.utilidad_bruta || resumenContable.ganancia || 0)}</span>
+                        {resumenCostos?.resultado?.margen_porcentaje && (
+                          <span className="fc-pct">{resumenCostos.resultado.margen_porcentaje}%</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="finanza-card ventas-count">
+                      <Package size={28} />
+                      <div>
+                        <span className="fc-label">Ventas del Mes</span>
+                        <span className="fc-valor">{estadisticasVentas?.totales?.total_ventas || 0}</span>
+                      </div>
                     </div>
                   </div>
+
+                  {/* Desglose por categoría */}
+                  {resumenCostos?.costos?.por_categoria?.length > 0 && (
+                    <div className="finanzas-desglose">
+                      <h3><BarChart3 size={18} /> Desglose de Costos - {resumenCostos?.periodo?.nombre_mes}</h3>
+                      <div className="costos-categorias">
+                        {resumenCostos.costos.por_categoria.map(cat => (
+                          <div key={cat._id} className="categoria-item">
+                            <span className="cat-nombre">{cat._id.replace(/_/g, ' ')}</span>
+                            <span className="cat-valor">{formatearDinero(cat.total)}</span>
+                            <div className="cat-barra">
+                              <div className="cat-progreso" style={{ width: `${Math.min((cat.total / (resumenCostos.costos.total || 1)) * 100, 100)}%` }}></div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Comparativo mensual */}
+                  {comparativoCostos?.length > 0 && (
+                    <div className="finanzas-comparativo">
+                      <h3><LineChartIcon size={18} /> Comparativo Mensual</h3>
+                      <ResponsiveContainer width="100%" height={280}>
+                        <BarChart data={comparativoCostos}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                          <XAxis dataKey="nombre" tick={{ fontSize: 11 }} stroke="#666" />
+                          <YAxis tick={{ fontSize: 11 }} stroke="#666" tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                          <Tooltip formatter={(value) => [formatearDinero(value)]} />
+                          <Legend />
+                          <Bar dataKey="ingresos" fill="#22c55e" name="Ingresos" radius={[4,4,0,0]} />
+                          <Bar dataKey="costos" fill="#ef4444" name="Costos" radius={[4,4,0,0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── TAB: COSTOS ── */}
+              {tabFinanzas === 'costos' && (
+                <div className="finanzas-costos">
+                  <div className="tab-header-actions">
+                    <h3>Costos Registrados</h3>
+                    <PanelContabilidad resumen={resumenCostos} comparativo={[]} onNuevoCosto={crearCosto} />
+                  </div>
+                  <div className="table-container">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Fecha</th>
+                          <th>Categoría</th>
+                          <th>Descripción</th>
+                          <th>Cantidad</th>
+                          <th>Total</th>
+                          <th>Estado</th>
+                          <th>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {costos.length === 0 ? (
+                          <tr><td colSpan="7" className="sin-datos">No hay costos registrados</td></tr>
+                        ) : (
+                          costos.map(c => (
+                            <tr key={c._id} className={c.estado === 'anulado' ? 'anulado' : ''}>
+                              <td>{new Date(c.fecha).toLocaleDateString()}</td>
+                              <td><span className="tipo-badge">{(c.categoria || '').replace(/_/g, ' ')}</span></td>
+                              <td>{c.descripcion || '-'}</td>
+                              <td>{c.cantidad} {c.unidad}</td>
+                              <td><strong>{formatearDinero(c.total)}</strong></td>
+                              <td><span className={`estado-badge ${c.estado}`}>{c.estado}</span></td>
+                              <td>
+                                {c.estado !== 'anulado' && (
+                                  <button className="btn-icon btn-danger" onClick={() => eliminarCosto(c._id)} title="Anular">
+                                    <Trash2 size={15} />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* ── TAB: VENTAS ── */}
+              {tabFinanzas === 'ventas' && (
+                <div className="finanzas-ventas">
+                  <PanelVentas
+                    ventas={ventas}
+                    estadisticas={estadisticasVentas}
+                    onNuevaVenta={crearVenta}
+                    onRegistrarPago={registrarPagoVenta}
+                  />
+                  {/* Tabla con opción anular */}
+                  {ventas.length > 0 && (
+                    <div className="table-container" style={{ marginTop: '16px' }}>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Factura</th>
+                            <th>Comprador</th>
+                            <th>Tipo</th>
+                            <th>Total</th>
+                            <th>Estado Pago</th>
+                            <th>Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ventas.map(v => (
+                            <tr key={v._id} className={!v.activa ? 'anulado' : ''}>
+                              <td><strong>{v.numero_factura}</strong></td>
+                              <td>{v.comprador?.nombre}</td>
+                              <td>{v.tipo_venta === 'en_pie' ? 'En Pie' : v.tipo_venta === 'carne' ? 'Carne' : 'Lechón'}</td>
+                              <td><strong>{formatearDinero(v.total)}</strong></td>
+                              <td><span className={`estado-pago ${v.estado_pago}`}>{v.estado_pago}</span></td>
+                              <td>
+                                {v.activa !== false && (
+                                  <div className="acciones-grupo">
+                                    {v.estado_pago !== 'pagado' && (
+                                      <button className="btn-xs btn-primary" onClick={() => registrarPagoVenta(v._id)}>Pago</button>
+                                    )}
+                                    <button className="btn-icon btn-danger" onClick={() => anularVenta(v._id)} title="Anular">
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── TAB: REGISTROS (Sistema legado contabilidad) ── */}
+              {tabFinanzas === 'registros' && (
+                <div className="finanzas-registros">
+                  <div className="tab-header-actions">
+                    <h3>Registros Contables</h3>
+                    <button className="btn-primary" onClick={() => setMostrarModalContabilidad(true)}>
+                      <Plus size={16} /> Nuevo Registro
+                    </button>
+                  </div>
+                  <div className="table-container">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Fecha</th>
+                          <th>Tipo</th>
+                          <th>Categoría</th>
+                          <th>Descripción</th>
+                          <th>Total</th>
+                          <th>Lote</th>
+                          <th>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {contabilidad.length === 0 ? (
+                          <tr><td colSpan="7" className="sin-datos">No hay registros</td></tr>
+                        ) : (
+                          contabilidad.map(reg => (
+                            <tr key={reg._id} className={reg.tipo}>
+                              <td>{new Date(reg.fecha).toLocaleDateString()}</td>
+                              <td><span className={`tipo-badge ${reg.tipo}`}>{reg.tipo === 'ingreso' ? 'Ingreso' : 'Gasto'}</span></td>
+                              <td>{reg.categoria}</td>
+                              <td>{reg.descripcion || '-'}</td>
+                              <td><strong>{formatearDinero(reg.total)}</strong></td>
+                              <td>{reg.lote?.nombre || '-'}</td>
+                              <td>
+                                <button className="btn-icon btn-danger" onClick={() => eliminarRegistroContable(reg._id)}>
+                                  <Trash2 size={15} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Modal Contabilidad */}
+                  {mostrarModalContabilidad && (
+                    <div className="modal-overlay" onClick={() => setMostrarModalContabilidad(false)}>
+                      <div className="modal modal-grande" onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                          <h3>Nuevo Registro Contable</h3>
+                          <button className="btn-cerrar" onClick={() => setMostrarModalContabilidad(false)}>&times;</button>
+                        </div>
+                        <div className="modal-body">
+                          <div className="form-row">
+                            <div className="form-group">
+                              <label>Tipo</label>
+                              <select value={nuevoRegistro.tipo} onChange={e => setNuevoRegistro({ ...nuevoRegistro, tipo: e.target.value })}>
+                                <option value="gasto">Gasto</option>
+                                <option value="ingreso">Ingreso</option>
+                              </select>
+                            </div>
+                            <div className="form-group">
+                              <label>Categoría</label>
+                              <select value={nuevoRegistro.categoria} onChange={e => setNuevoRegistro({ ...nuevoRegistro, categoria: e.target.value })}>
+                                <option value="alimento">Alimento</option>
+                                <option value="agua">Agua</option>
+                                <option value="medicamento">Medicamento</option>
+                                <option value="vacuna">Vacuna</option>
+                                <option value="compra_cerdos">Compra de Cerdos</option>
+                                <option value="venta_cerdos">Venta de Cerdos</option>
+                                <option value="mano_obra">Mano de Obra</option>
+                                <option value="transporte">Transporte</option>
+                                <option value="otro">Otro</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="form-group">
+                            <label>Lote (opcional)</label>
+                            <select value={nuevoRegistro.lote} onChange={e => setNuevoRegistro({ ...nuevoRegistro, lote: e.target.value })}>
+                              <option value="">Sin lote específico</option>
+                              {lotes.map(lote => (
+                                <option key={lote._id} value={lote._id}>{lote.nombre}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="form-group">
+                            <label>Descripción</label>
+                            <input type="text" value={nuevoRegistro.descripcion} onChange={e => setNuevoRegistro({ ...nuevoRegistro, descripcion: e.target.value })} placeholder="Descripción del registro..." />
+                          </div>
+                          <div className="form-row">
+                            <div className="form-group">
+                              <label>Cantidad</label>
+                              <input type="number" step="0.1" value={nuevoRegistro.cantidad} onChange={e => setNuevoRegistro({ ...nuevoRegistro, cantidad: parseFloat(e.target.value) || 0 })} />
+                            </div>
+                            <div className="form-group">
+                              <label>Unidad</label>
+                              <select value={nuevoRegistro.unidad} onChange={e => setNuevoRegistro({ ...nuevoRegistro, unidad: e.target.value })}>
+                                <option value="kg">kg</option>
+                                <option value="L">Litros</option>
+                                <option value="unidad">Unidad</option>
+                                <option value="dosis">Dosis</option>
+                                <option value="hora">Hora</option>
+                                <option value="dia">Día</option>
+                                <option value="viaje">Viaje</option>
+                              </select>
+                            </div>
+                            <div className="form-group">
+                              <label>Precio Unitario</label>
+                              <input type="number" value={nuevoRegistro.precio_unitario} onChange={e => setNuevoRegistro({ ...nuevoRegistro, precio_unitario: parseFloat(e.target.value) || 0 })} />
+                            </div>
+                          </div>
+                          <div className="form-group">
+                            <label>Total (calculado)</label>
+                            <input type="text" value={formatearDinero(nuevoRegistro.cantidad * nuevoRegistro.precio_unitario)} disabled />
+                          </div>
+                        </div>
+                        <div className="modal-footer">
+                          <button className="btn-secondary" onClick={() => setMostrarModalContabilidad(false)}>Cancelar</button>
+                          <button className="btn-primary" onClick={crearRegistroContable}>Guardar Registro</button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -4247,33 +4401,6 @@ const cargarDistribucionGastos = async () => {
       grabaciones={grabaciones}
       onCapturar={capturarFotoCamara}
       onVerStream={verStreamCamara}
-    />
-  </div>
-)}
-
-{/* ════════════════════════════════════════════════════════════════ */}
-{/* PÁGINA: VENTAS */}
-{/* ════════════════════════════════════════════════════════════════ */}
-{pagina === 'ventas' && (
-  <div className="page-ventas">
-    <PanelVentas 
-      ventas={ventas}
-      estadisticas={estadisticasVentas}
-      onNuevaVenta={crearVenta}
-      onRegistrarPago={registrarPagoVenta}
-    />
-  </div>
-)}
-
-{/* ════════════════════════════════════════════════════════════════ */}
-{/* PÁGINA: COSTOS */}
-{/* ════════════════════════════════════════════════════════════════ */}
-{pagina === 'costos' && (
-  <div className="page-costos">
-    <PanelContabilidad 
-      resumen={resumenCostos}
-      comparativo={comparativoCostos}
-      onNuevoCosto={crearCosto}
     />
   </div>
 )}

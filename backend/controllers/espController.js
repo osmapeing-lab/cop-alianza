@@ -484,7 +484,7 @@ const fechaLimite = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia
     }
     
     const historico = consumos.map(c => ({
-      fecha: c.fecha.toISOString().split('T')[0],
+      fecha: c.fecha.toLocaleDateString('en-CA', { timeZone: 'America/Bogota' }),
       volumen_total: c.litros
     }));
     
