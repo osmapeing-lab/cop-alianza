@@ -22,7 +22,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'https://cop-alianza-backend.onr
 const socket = io(API_URL)
 
 // reCAPTCHA v2 - Reemplazar con tu clave real de google.com/recaptcha
-const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI'
+const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '6LcC2G0sAAAABSWCf7iMidlwNV57kGQgrCY2Djy'
 
 // Coordenadas Lorica para clima
 const LAT = 9.2397
