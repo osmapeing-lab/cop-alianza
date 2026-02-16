@@ -51,59 +51,97 @@ exports.register = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
+// HELPER: Detectar dispositivo desde User-Agent
+// ═══════════════════════════════════════════════════════════════════════
+function detectarDispositivo(ua) {
+  if (!ua) return 'Desconocido';
+  if (/iPhone/i.test(ua)) return 'iPhone';
+  if (/iPad/i.test(ua)) return 'iPad';
+  if (/Android.*Mobile/i.test(ua)) return 'Android (Móvil)';
+  if (/Android/i.test(ua)) return 'Android (Tablet)';
+  if (/Macintosh/i.test(ua)) return 'Mac';
+  if (/Windows/i.test(ua)) return 'Windows PC';
+  if (/Linux/i.test(ua)) return 'Linux PC';
+  return 'Navegador Web';
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // LOGIN
 // ═══════════════════════════════════════════════════════════════════════
 exports.login = async (req, res) => {
   try {
-    const { usuario, password } = req.body;
-    
+    const { usuario, password, forzar } = req.body;
+
     // Buscar usuario
     const user = await User.findOne({ usuario });
-    
+
     if (!user) {
       return res.status(404).json({ mensaje: 'Usuario no encontrado' });
     }
-    
+
     if (!user.activo) {
       return res.status(401).json({ mensaje: 'Usuario desactivado' });
     }
-    
+
     // Verificar contraseña
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) {
       return res.status(401).json({ mensaje: 'Contraseña incorrecta' });
     }
-    
+
+    // Verificar si hay sesión activa en otro dispositivo
+    const sesionActiva = await Session.findOne({
+      usuario_id: user._id,
+      activa: true,
+      fecha_salida: null
+    }).sort({ fecha_entrada: -1 });
+
+    if (sesionActiva && !forzar) {
+      // Hay sesión activa y no se pidió forzar → informar al usuario
+      return res.status(409).json({
+        mensaje: 'Sesión activa en otro dispositivo',
+        sesion_existente: {
+          dispositivo: sesionActiva.dispositivo || 'Desconocido',
+          ip: sesionActiva.ip,
+          desde: sesionActiva.fecha_entrada
+        }
+      });
+    }
+
     // Cerrar sesiones anteriores del usuario
     await Session.updateMany(
       { usuario_id: user._id, activa: true },
       { activa: false, fecha_salida: new Date() }
     );
-    
+
     // Generar token JWT
     const token = jwt.sign(
-      { 
-        id: user._id, 
-        rol: user.rol, 
-        usuario: user.usuario 
+      {
+        id: user._id,
+        rol: user.rol,
+        usuario: user.usuario
       },
       process.env.JWT_SECRET,
       { expiresIn: '8h' }
     );
-    
+
+    // Detectar dispositivo actual
+    const dispositivo = detectarDispositivo(req.headers['user-agent']);
+
     // Crear nueva sesión
     const session = new Session({
       usuario_id: user._id,
       usuario: user.usuario,
       ip: req.ip || req.connection.remoteAddress,
+      dispositivo,
       token
     });
     await session.save();
-    
+
     // Actualizar último acceso
     user.ultimo_acceso = Date.now();
     await user.save();
-    
+
     res.json({
       token,
       usuario: {

@@ -945,6 +945,7 @@ const PantallaMantenimiento = () => (
   const [mostrarPassword, setMostrarPassword] = useState(false)
   const [errorLogin, setErrorLogin] = useState('')
   const [cargando, setCargando] = useState(false)
+  const [conflictoSesion, setConflictoSesion] = useState(null)
   
   // Estados de navegación
   const [pagina, setPagina] = useState('dashboard')
@@ -1156,15 +1157,16 @@ socket.on('peso_live', (data) => {
     }
   }
 
-  const handleLogin = async (e) => {
-    e.preventDefault()
+  const handleLogin = async (e, forzar = false) => {
+    if (e) e.preventDefault()
     setErrorLogin('')
     setCargando(true)
 
     try {
       const res = await axios.post(`${API_URL}/api/users/login`, {
         usuario,
-        password
+        password,
+        forzar
       })
 
       const { token: nuevoToken, usuario: userData } = res.data
@@ -1173,8 +1175,13 @@ socket.on('peso_live', (data) => {
       setUser(userData)
       setUsuario('')
       setPassword('')
+      setConflictoSesion(null)
     } catch (error) {
-      setErrorLogin(error.response?.data?.mensaje || 'Error al iniciar sesión')
+      if (error.response?.status === 409) {
+        setConflictoSesion(error.response.data.sesion_existente)
+      } else {
+        setErrorLogin(error.response?.data?.mensaje || 'Error al iniciar sesión')
+      }
     } finally {
       setCargando(false)
     }
@@ -2118,7 +2125,33 @@ const cargarHistoricoPesos = async () => {
           
           <form onSubmit={handleLogin} style={{padding: '30px 45px'}}>
             {errorLogin && <div className="error-msg">{errorLogin}</div>}
-            
+
+            {conflictoSesion && (
+              <div className="sesion-conflicto">
+                <div className="conflicto-icono">
+                  <AlertTriangle size={32} />
+                </div>
+                <h3>Sesión activa detectada</h3>
+                <p>Tu cuenta está abierta en otro dispositivo:</p>
+                <div className="conflicto-info">
+                  <div className="conflicto-dispositivo">
+                    <strong>{conflictoSesion.dispositivo}</strong>
+                    <span>IP: {conflictoSesion.ip}</span>
+                    <small>Desde: {new Date(conflictoSesion.desde).toLocaleString('es-CO')}</small>
+                  </div>
+                </div>
+                <div className="conflicto-acciones">
+                  <button className="btn-cerrar-sesion" onClick={() => handleLogin(null, true)}>
+                    <LogOut size={16} /> Cerrar otra sesión e ingresar
+                  </button>
+                  <button className="btn-cancelar" onClick={() => setConflictoSesion(null)}>
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {!conflictoSesion && (<>
             <div className="input-group">
               <label>Usuario</label>
               <input
@@ -2129,7 +2162,7 @@ const cargarHistoricoPesos = async () => {
                 required
               />
             </div>
-            
+
             <div className="input-group">
               <label>Contraseña</label>
               <div className="password-input">
@@ -2149,10 +2182,11 @@ const cargarHistoricoPesos = async () => {
                 </button>
               </div>
             </div>
-            
+
             <button type="submit" className="btn-login" disabled={cargando}>
               {cargando ? 'Ingresando...' : 'Ingresar'}
             </button>
+            </>)}
           </form>
           
           <div className="login-footer">
