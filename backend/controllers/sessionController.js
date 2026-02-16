@@ -21,12 +21,12 @@ exports.getHistorial = async (req, res) => {
 
 exports.cerrarSesion = async (req, res) => {
   try {
-    const session = await Session.findByIdAndUpdate(
-      req.params.id,
-      { fecha_salida: Date.now() },
-      { new: true }
+    const session = await Session.findOneAndUpdate(
+      { usuario_id: req.user.id, activa: true, fecha_salida: null },
+      { fecha_salida: Date.now(), activa: false },
+      { new: true, sort: { fecha_entrada: -1 } }
     );
-    res.json(session);
+    res.json(session || { mensaje: 'Sesión cerrada' });
   } catch (error) {
     res.status(400).json({ mensaje: error.message });
   }

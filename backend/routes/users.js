@@ -40,14 +40,14 @@ router.get('/me', verificarToken, getMe);
 // Obtener todos los usuarios
 router.get('/', verificarToken, getAllUsers);
 
-// Activar / desactivar usuario
-router.put('/:id/toggle', verificarToken, toggleUser);
-
-// Cambiar contraseña
+// Cambiar contraseña (antes de /:id para evitar conflicto)
 router.put('/me/password', verificarToken, cambiarPassword);
 
-// Actualizar perfil
+// Actualizar perfil (antes de /:id para evitar conflicto)
 router.put('/me/perfil', verificarToken, actualizarPerfil);
+
+// Activar / desactivar usuario
+router.put('/:id/toggle', verificarToken, toggleUser);
 
 // Eliminar usuario
 router.delete('/:id', verificarToken, deleteUser);

@@ -31,6 +31,26 @@ exports.createMotorbomb = async (req, res) => {
     res.status(400).json({ mensaje: error.message });
   }
 };
+exports.updateMotorbomb = async (req, res) => {
+  try {
+    const motorbomb = await Motorbomb.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!motorbomb) return res.status(404).json({ mensaje: 'Motorbomba no encontrada' });
+    res.json(motorbomb);
+  } catch (error) {
+    res.status(400).json({ mensaje: error.message });
+  }
+};
+
+exports.deleteMotorbomb = async (req, res) => {
+  try {
+    const motorbomb = await Motorbomb.findByIdAndDelete(req.params.id);
+    if (!motorbomb) return res.status(404).json({ mensaje: 'Motorbomba no encontrada' });
+    res.json({ mensaje: 'Motorbomba eliminada' });
+  } catch (error) {
+    res.status(400).json({ mensaje: error.message });
+  }
+};
+
 exports.getMotorbombStatus = async (req, res) => {
   try {
     const motorbombs = await Motorbomb.find();

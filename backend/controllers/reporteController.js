@@ -60,7 +60,7 @@ exports.generarReporteExcel = async (req, res) => {
 
     // Helper: alternar colores filas
     const estilizarFilas = (sheet, startRow) => {
-      for (let i = startRow; i <= sheet.lastRow?.number || startRow; i++) {
+      for (let i = startRow; i <= (sheet.lastRow?.number || startRow); i++) {
         const row = sheet.getRow(i);
         row.eachCell(cell => {
           cell.border = borderThin;

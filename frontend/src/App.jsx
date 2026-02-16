@@ -2,16 +2,16 @@ import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { io } from 'socket.io-client'
 import './App.css'
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
-import { 
-  Thermometer, Droplets, Weight, TrendingUp, TrendingDown, 
-  PiggyBank, Package, Zap, Bell, BellOff, Activity, 
-  BarChart3, PieChart as PieChartIcon, LineChart as LineChartIcon,
-  Users, Settings, LogOut, Eye, EyeOff, Plus, Edit, Trash2,
-  RefreshCw, Camera, DollarSign, Wallet, Calculator, Archive,
+import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import {
+  Thermometer, Droplets, Weight, TrendingUp, TrendingDown,
+  PiggyBank, Package, Bell, Activity,
+  BarChart3, LineChart as LineChartIcon,
+  LogOut, Eye, Plus, Edit, Trash2,
+  RefreshCw, DollarSign, Wallet, Archive,
   AlertTriangle, CheckCircle, XCircle, Clock, Calendar,
-  Home, ChevronRight, MoreVertical, Download, Send, Mail,
-  Smartphone, Wifi, WifiOff, Power, PowerOff, Gauge
+  Home, ChevronRight, MoreVertical,
+  Wifi, WifiOff, Power, PowerOff, Gauge
 } from 'lucide-react'
 // ═══════════════════════════════════════════════════════════════════════
 // CONFIGURACIÓN
@@ -51,13 +51,7 @@ const TABLA_FINCA = [
 
 
 
-const IconTemp = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-    <path d="M15 13V5A3 3 0 0 0 9 5V13A5 5 0 1 0 15 13M12 4A1 1 0 0 1 13 5V8H11V5A1 1 0 0 1 12 4Z"/>
-  </svg>
-)
-
-  // ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
 // ICONOS NUEVOS
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -120,17 +114,6 @@ const IconFoto = ({ size = 24 }) => (
     <polyline points="21 15 16 10 5 21"/>
   </svg>
 )
-const IconHumedad = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-    <path d="M12 2C6.5 8 4 12 4 15.5C4 19.64 7.58 23 12 23S20 19.64 20 15.5C20 12 17.5 8 12 2ZM12 21C8.69 21 6 18.54 6 15.5C6 13.06 7.81 9.98 12 5.34C16.19 9.98 18 13.06 18 15.5C18 18.54 15.31 21 12 21Z"/>
-  </svg>
-)
-
-const IconAgua = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-    <path d="M12 20C8.69 20 6 17.31 6 14C6 10 12 3.25 12 3.25S18 10 18 14C18 17.31 15.31 20 12 20ZM12 18C14.21 18 16 16.21 16 14C16 11.79 12 6.25 12 6.25S8 11.79 8 14C8 16.21 9.79 18 12 18Z"/>
-  </svg>
-)
 
 const IconPeso = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
@@ -162,11 +145,6 @@ const IconConfig = () => (
   </svg>
 )
 
-const IconLogout = () => (
-  <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
-    <path d="M17 7L15.59 8.41L18.17 11H8V13H18.17L15.59 15.58L17 17L22 12L17 7ZM4 5H12V3H4C2.9 3 2 3.9 2 5V19C2 20.1 2.9 21 4 21H12V19H4V5Z"/>
-  </svg>
-)
 
 const IconOjo = () => (
   <svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24">
@@ -237,8 +215,6 @@ const IconRefresh = () => (
 // ═══════════════════════════════════════════════════════════════════════
 
 const PanelCamaras = ({ camaras, grabaciones, onCapturar, onVerStream }) => {
-  const [camaraSeleccionada, setCamaraSeleccionada] = useState(null)
-  
   return (
     <div className="panel-camaras">
       <div className="section-header">
@@ -1042,7 +1018,6 @@ const [pesajeLive, setPesajeLive] = useState({ lote: '', cantidad: 1, notas: '' 
     umbral_temp_max: 37,
     umbral_temp_critico: 40
   })
-  const [mostrarConfig, setMostrarConfig] = useState(false)
   //Estado camaras 
   // Estados de cámaras
 const [camaras, setCamaras] = useState([])
@@ -1080,7 +1055,6 @@ const [historicoAgua, setHistoricoAgua] = useState([])
 const [periodoAgua, setPeriodoAgua] = useState('semanal')
 const [historicoContable, setHistoricoContable] = useState([])
 const [historicoPesos, setHistoricoPesos] = useState([])
-const [distribucionGastos, setDistribucionGastos] = useState([])
 
   // Estados de usuarios (SuperAdmin)
   const [usuarios, setUsuarios] = useState([])
@@ -1095,6 +1069,7 @@ const [distribucionGastos, setDistribucionGastos] = useState([])
 
 // Estados para notificaciones y config usuario
 const [mostrarNotificaciones, setMostrarNotificaciones] = useState(false)
+const [alertasLeidas, setAlertasLeidas] = useState(0)
 const [mostrarConfigUsuario, setMostrarConfigUsuario] = useState(false)
 const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo: '', password_actual: '', password_nuevo: '' })
 
@@ -1284,7 +1259,6 @@ socket.on('peso_live', (data) => {
   cargarHistoricoTemperatura()
   cargarHistoricoAgua()
   cargarHistoricoContable()
-  cargarDistribucionGastos()
   // cargarHistoricoPesos se llama desde useEffect cuando pesajes cambia
   
   if (user?.rol === 'superadmin' || user?.rol === 'ingeniero') {
@@ -1921,7 +1895,6 @@ const eliminarBomba = async (id) => {
       await axios.put(`${API_URL}/api/config`, config, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      setMostrarConfig(false)
       alert('Configuración guardada')
     } catch (error) {
       alert('Error guardando configuración: ' + (error.response?.data?.mensaje || error.message))
@@ -2088,29 +2061,6 @@ const cargarHistoricoPesos = async () => {
   }
 }
 
-const cargarDistribucionGastos = async () => {
-  try {
-    const res = await axios.get(`${API_URL}/api/costos/resumen`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    
-    const colores = ['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2', '#b7e4c7', '#d8f3dc']
-    
-    if (res.data?.costos?.por_categoria && res.data.costos.por_categoria.length > 0) {
-      const datos = res.data.costos.por_categoria.map((cat, i) => ({
-        nombre: cat._id.replace(/_/g, ' ').charAt(0).toUpperCase() + cat._id.slice(1).replace(/_/g, ' '),
-        valor: cat.total,
-        color: colores[i % colores.length]
-      }))
-      setDistribucionGastos(datos)
-    } else {
-      setDistribucionGastos([])
-    }
-  } catch (error) {
-    console.error('Error cargando distribución gastos:', error)
-    setDistribucionGastos([])
-  }
-}
   // ═══════════════════════════════════════════════════════════════════════
   // FUNCIONES DE REPORTES
   // ═══════════════════════════════════════════════════════════════════════
@@ -2235,9 +2185,13 @@ const cargarDistribucionGastos = async () => {
   <div className="header-right">
     {/* Notificaciones */}
     <div className="notif-wrapper">
-      <button className="btn-notif" onClick={() => { setMostrarNotificaciones(!mostrarNotificaciones); setMostrarConfigUsuario(false) }}>
+      <button className="btn-notif" onClick={() => {
+        if (!mostrarNotificaciones) setAlertasLeidas(alertas.length)
+        setMostrarNotificaciones(!mostrarNotificaciones)
+        setMostrarConfigUsuario(false)
+      }}>
         <Bell size={20} />
-        {alertas.length > 0 && <span className="notif-dot">{alertas.length > 9 ? '9+' : alertas.length}</span>}
+        {alertas.length > alertasLeidas && <span className="notif-dot">{alertas.length - alertasLeidas > 9 ? '9+' : alertas.length - alertasLeidas}</span>}
       </button>
       {mostrarNotificaciones && (
         <div className="notif-panel">
@@ -2648,35 +2602,32 @@ const cargarDistribucionGastos = async () => {
       <p className="sin-datos">No hay datos de consumo</p>
     ) : (
       <ResponsiveContainer width="100%" height={250}>
-        <LineChart data={historicoAgua}>
+        <AreaChart data={historicoAgua}>
           <defs>
-            <linearGradient id="colorAgua" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+            <linearGradient id="gradAgua" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35}/>
+              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.02}/>
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-          <XAxis dataKey="dia" tick={{ fontSize: 11 }} stroke="#666" />
-          <YAxis tick={{ fontSize: 11 }} stroke="#666" unit=" L" />
-          <Tooltip 
-            contentStyle={{ 
-              backgroundColor: '#fff', 
-              border: '1px solid #e0e0e0',
-              borderRadius: '8px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-            }}
+          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+          <XAxis dataKey="dia" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" />
+          <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" unit=" L" />
+          <Tooltip
+            contentStyle={{ backgroundColor: 'rgba(255,255,255,0.96)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}
             formatter={(value) => [`${Number(value).toFixed(1)} L`, 'Consumo']}
           />
-          <Line 
+          <Area
             type="monotone"
-            dataKey="litros" 
-            stroke="#3b82f6" 
-            strokeWidth={3}
-            dot={{ r: 6, fill: '#3b82f6', strokeWidth: 2, stroke: '#fff' }}
-            activeDot={{ r: 8, fill: '#2563eb', strokeWidth: 2, stroke: '#fff' }}
+            dataKey="litros"
+            stroke="#3b82f6"
+            strokeWidth={2.5}
+            fillOpacity={1}
+            fill="url(#gradAgua)"
+            dot={{ r: 3, fill: '#fff', stroke: '#3b82f6', strokeWidth: 2 }}
+            activeDot={{ r: 6, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }}
             name="Litros"
           />
-        </LineChart>
+        </AreaChart>
       </ResponsiveContainer>
     )}
     {historicoAgua.length > 0 && (
@@ -2691,148 +2642,78 @@ const cargarDistribucionGastos = async () => {
 </div>
     </div>
 
-    {/* Gráficas Financieras */}
-    <div className="graficas-grid">
-      {/* Ingresos vs Gastos */}
-      <div className="dashboard-section grafica-section">
-        <h3><BarChart3 size={20} /> Ingresos vs Gastos - Últimos Meses</h3>
-        <div className="grafica-container">
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={historicoContable}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-              <XAxis dataKey="mes" tick={{ fontSize: 11 }} stroke="#666" />
-              <YAxis tick={{ fontSize: 11 }} stroke="#666" tickFormatter={(v) => `$${(v/1000000).toFixed(1)}M`} />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#fff', 
-                  border: '1px solid #e0e0e0',
-                  borderRadius: '8px'
-                }}
-                formatter={(value) => [formatearDinero(value), '']}
-              />
-              <Legend />
-              <Bar dataKey="ingresos" fill="#10b981" radius={[4, 4, 0, 0]} name="Ingresos" />
-              <Bar dataKey="gastos" fill="#ef4444" radius={[4, 4, 0, 0]} name="Gastos" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      {/* Distribución de Gastos */}
-      <div className="dashboard-section grafica-section">
-        <h3><PieChartIcon size={20} /> Distribución de Gastos</h3>
-        <div className="grafica-container grafica-pie">
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie
-                data={distribucionGastos}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={100}
-                paddingAngle={2}
-                dataKey="valor"
-                label={({ nombre, percent }) => `${nombre} ${(percent * 100).toFixed(0)}%`}
-                labelLine={{ stroke: '#666', strokeWidth: 1 }}
-              >
-                {distribucionGastos.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip 
-                formatter={(value) => [formatearDinero(value), 'Gasto']}
-                contentStyle={{ 
-                  backgroundColor: '#fff', 
-                  border: '1px solid #e0e0e0',
-                  borderRadius: '8px'
-                }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="pie-legend">
-            {distribucionGastos.map((item, i) => (
-              <div key={i} className="pie-legend-item">
-                <span className="pie-color" style={{ backgroundColor: item.color }}></span>
-                <span className="pie-label">{item.nombre}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-
-    {/* Gráfica de Evolución de Peso */}
+    {/* Gráfica de Evolución de Peso - estilo bolsa */}
     <div className="dashboard-section grafica-section grafica-full">
       <h3><TrendingUp size={20} /> Evolución de Peso por Lote</h3>
       <div className="grafica-container">
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={historicoPesos}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-            <XAxis dataKey="fecha" tick={{ fontSize: 11 }} stroke="#666" />
-            <YAxis tick={{ fontSize: 11 }} stroke="#666" unit=" kg" />
-            <Tooltip 
-              contentStyle={{ 
-                backgroundColor: '#fff', 
-                border: '1px solid #e0e0e0',
-                borderRadius: '8px'
-              }}
+          <AreaChart data={historicoPesos}>
+            <defs>
+              {lotes.filter(l => l.activo).slice(0, 5).map((lote, i) => (
+                <linearGradient key={lote._id} id={`gradPeso${i}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2'][i]} stopOpacity={0.4}/>
+                  <stop offset="95%" stopColor={['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2'][i]} stopOpacity={0.02}/>
+                </linearGradient>
+              ))}
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis dataKey="fecha" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" />
+            <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" unit=" kg" />
+            <Tooltip
+              contentStyle={{ backgroundColor: 'rgba(255,255,255,0.96)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', backdropFilter: 'blur(8px)' }}
               formatter={(value) => [`${value} kg`, '']}
             />
             <Legend />
             {lotes.filter(l => l.activo).slice(0, 5).map((lote, i) => (
-              <Line 
+              <Area
                 key={lote._id}
-                type="monotone" 
+                type="monotone"
                 dataKey={lote.nombre}
                 stroke={['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2'][i]}
-                strokeWidth={2}
-                dot={{ r: 4 }}
-                activeDot={{ r: 6 }}
+                strokeWidth={2.5}
+                fillOpacity={1}
+                fill={`url(#gradPeso${i})`}
+                dot={{ r: 3, fill: '#fff', stroke: ['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2'][i], strokeWidth: 2 }}
+                activeDot={{ r: 6, fill: ['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2'][i], stroke: '#fff', strokeWidth: 2 }}
               />
             ))}
-          </LineChart>
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </div>
 
-    {/* Distribución de Gastos (Pie) + Comparativo */}
-    <div className="graficas-grid">
-      {distribucionGastos.length > 0 && (
-        <div className="dashboard-section grafica-section">
-          <h3><PieChartIcon size={20} /> Distribución de Gastos</h3>
-          <div className="grafica-container">
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie data={distribucionGastos} cx="50%" cy="50%" outerRadius={80} dataKey="valor" nameKey="nombre" label={({ nombre, percent }) => `${nombre} ${(percent * 100).toFixed(0)}%`}>
-                  {distribucionGastos.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => [formatearDinero(value)]} />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+    {/* Resumen Financiero - una sola gráfica limpia */}
+    {historicoContable.length > 0 && (
+      <div className="dashboard-section grafica-section grafica-full">
+        <h3><DollarSign size={20} /> Resumen Financiero</h3>
+        <div className="grafica-container">
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={historicoContable}>
+              <defs>
+                <linearGradient id="gradIngresos" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.35}/>
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.02}/>
+                </linearGradient>
+                <linearGradient id="gradGastos" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25}/>
+                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0.02}/>
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" />
+              <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
+              <Tooltip
+                contentStyle={{ backgroundColor: 'rgba(255,255,255,0.96)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}
+                formatter={(value) => [formatearDinero(value), '']}
+              />
+              <Legend />
+              <Area type="monotone" dataKey="ingresos" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#gradIngresos)" name="Ingresos" dot={{ r: 3, fill: '#fff', stroke: '#10b981', strokeWidth: 2 }} activeDot={{ r: 6, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }} />
+              <Area type="monotone" dataKey="gastos" stroke="#ef4444" strokeWidth={2.5} fillOpacity={1} fill="url(#gradGastos)" name="Gastos" dot={{ r: 3, fill: '#fff', stroke: '#ef4444', strokeWidth: 2 }} activeDot={{ r: 6, fill: '#ef4444', stroke: '#fff', strokeWidth: 2 }} />
+            </AreaChart>
+          </ResponsiveContainer>
         </div>
-      )}
-      {comparativoCostos?.length > 0 && (
-        <div className="dashboard-section grafica-section">
-          <h3><Wallet size={20} /> Ingresos vs Costos</h3>
-          <div className="grafica-container">
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={comparativoCostos.slice(-4)}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                <XAxis dataKey="nombre" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-                <Tooltip formatter={(value) => [formatearDinero(value)]} />
-                <Legend />
-                <Bar dataKey="ingresos" fill="#22c55e" name="Ingresos" radius={[4,4,0,0]} />
-                <Bar dataKey="costos" fill="#ef4444" name="Costos" radius={[4,4,0,0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-    </div>
+      </div>
+    )}
 
     {/* Lotes y Alertas */}
     <div className="dashboard-columns">
