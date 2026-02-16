@@ -36,9 +36,62 @@ const LAT = 9.2397
 const LON = -75.8091
 
 // ═══════════════════════════════════════════════════════════════════════
-// TABLA REFERENCIA FINCA - Programa Alimentación Levante/Ceba
-// Inicio: 70 días, 30.2 kg
+// TABLAS DE PRODUCCIÓN PORCINA - Ciclo Completo
 // ═══════════════════════════════════════════════════════════════════════
+
+// Fase 1: Inicio (Días 43-70) - Peso: 12 → 25 kg
+const TABLA_INICIO = [
+  { semana: 1, edad_inicio: 43, edad_fin: 49, peso_final: 15, consumo_dia_min: 0.8, consumo_dia_max: 0.9, consumo_sem_min: 5.6, consumo_sem_max: 6.3, fase: 'inicio' },
+  { semana: 2, edad_inicio: 50, edad_fin: 56, peso_final: 18, consumo_dia_min: 0.9, consumo_dia_max: 1.0, consumo_sem_min: 6.3, consumo_sem_max: 7.0, fase: 'inicio' },
+  { semana: 3, edad_inicio: 57, edad_fin: 63, peso_final: 21.5, consumo_dia_min: 1.0, consumo_dia_max: 1.1, consumo_sem_min: 7.0, consumo_sem_max: 7.7, fase: 'inicio' },
+  { semana: 4, edad_inicio: 64, edad_fin: 70, peso_final: 25, consumo_dia_min: 1.1, consumo_dia_max: 1.2, consumo_sem_min: 7.7, consumo_sem_max: 8.4, fase: 'inicio' }
+]
+
+// Fase 2: Crecimiento (Días 71-120) - Peso: 25 → 60 kg
+const TABLA_CRECIMIENTO = [
+  { semana: 1, edad_inicio: 71,  edad_fin: 77,  peso_final: 29, consumo_dia: 1.5, consumo_sem: 10.5, fase: 'crecimiento' },
+  { semana: 2, edad_inicio: 78,  edad_fin: 84,  peso_final: 34, consumo_dia: 1.6, consumo_sem: 11.2, fase: 'crecimiento' },
+  { semana: 3, edad_inicio: 85,  edad_fin: 91,  peso_final: 39, consumo_dia: 1.8, consumo_sem: 12.6, fase: 'crecimiento' },
+  { semana: 4, edad_inicio: 92,  edad_fin: 98,  peso_final: 45, consumo_dia: 2.0, consumo_sem: 14.0, fase: 'crecimiento' },
+  { semana: 5, edad_inicio: 99,  edad_fin: 105, peso_final: 51, consumo_dia: 2.1, consumo_sem: 14.7, fase: 'crecimiento' },
+  { semana: 6, edad_inicio: 106, edad_fin: 112, peso_final: 56, consumo_dia: 2.2, consumo_sem: 15.4, fase: 'crecimiento' },
+  { semana: 7, edad_inicio: 113, edad_fin: 120, peso_final: 60, consumo_dia: 2.3, consumo_sem: 18.4, fase: 'crecimiento' }
+]
+
+// Fase 3: Engorde/Finalización (Días 121-180) - Peso: 60 → 110 kg
+const TABLA_ENGORDE = [
+  { semana: 1, edad_inicio: 121, edad_fin: 127, peso_final: 66,  consumo_dia: 2.5, consumo_sem: 17.5, fase: 'engorde' },
+  { semana: 2, edad_inicio: 128, edad_fin: 134, peso_final: 72,  consumo_dia: 2.6, consumo_sem: 18.2, fase: 'engorde' },
+  { semana: 3, edad_inicio: 135, edad_fin: 141, peso_final: 79,  consumo_dia: 2.7, consumo_sem: 18.9, fase: 'engorde' },
+  { semana: 4, edad_inicio: 142, edad_fin: 148, peso_final: 86,  consumo_dia: 2.8, consumo_sem: 19.6, fase: 'engorde' },
+  { semana: 5, edad_inicio: 149, edad_fin: 155, peso_final: 93,  consumo_dia: 3.0, consumo_sem: 21.0, fase: 'engorde' },
+  { semana: 6, edad_inicio: 156, edad_fin: 162, peso_final: 100, consumo_dia: 3.1, consumo_sem: 21.7, fase: 'engorde' },
+  { semana: 7, edad_inicio: 163, edad_fin: 169, peso_final: 106, consumo_dia: 3.2, consumo_sem: 22.4, fase: 'engorde' },
+  { semana: 8, edad_inicio: 170, edad_fin: 180, peso_final: 110, consumo_dia: 3.2, consumo_sem: 32.0, fase: 'engorde' }
+]
+
+// Resumen de fases para indicadores rápidos
+const FASES_PRODUCCION = [
+  { nombre: 'Inicio',       edad_min: 43,  edad_max: 70,  peso_min: 12, peso_max: 25,  ganancia_dia: '460-500 g', conversion: '1.6-1.8', tabla: TABLA_INICIO },
+  { nombre: 'Crecimiento',  edad_min: 71,  edad_max: 120, peso_min: 25, peso_max: 60,  ganancia_dia: '650-750 g', conversion: '1.8-2.0', tabla: TABLA_CRECIMIENTO },
+  { nombre: 'Engorde',      edad_min: 121, edad_max: 180, peso_min: 60, peso_max: 110, ganancia_dia: '800-900 g', conversion: '2.1-2.4', tabla: TABLA_ENGORDE }
+]
+
+// Función para encontrar la fase actual de un lote según su edad
+const getFaseActual = (edadDias) => {
+  return FASES_PRODUCCION.find(f => edadDias >= f.edad_min && edadDias <= f.edad_max) || null
+}
+
+// Función para encontrar la semana de referencia dentro de una fase
+const getRefSemana = (edadDias) => {
+  for (const fase of FASES_PRODUCCION) {
+    const fila = fase.tabla.find(s => edadDias >= s.edad_inicio && edadDias <= s.edad_fin)
+    if (fila) return { ...fila, nombre_fase: fase.nombre }
+  }
+  return null
+}
+
+// TABLA FINCA original (Levante/Ceba semanas 11-24) - Se mantiene para compatibilidad
 const TABLA_FINCA = [
   { semana: 11, edad: 77,  peso: 35.1, ganancia_dia: 0.697, consumo_sem: 8.70,  consumo_dia: 1.243, consumo_acum: 8.70,   conversion: 1.785, etapa: 'levante' },
   { semana: 12, edad: 84,  peso: 40.6, ganancia_dia: 0.789, consumo_sem: 9.70,  consumo_dia: 1.386, consumo_acum: 18.40,  conversion: 1.770, etapa: 'levante' },
@@ -3089,52 +3142,51 @@ const cargarHistoricoPesos = async () => {
         {/* ═══ TABLA COMPARATIVA FINCA - Programa Alimentación ═══ */}
         <div className="dashboard-section finca-section">
           <div className="finca-header-row">
-            <h3><BarChart3 size={20} /> Programa Finca - Levante/Ceba</h3>
+            <h3><BarChart3 size={20} /> Plan de Producción Porcina</h3>
             <button
               className="btn-toggle-finca"
               onClick={() => setMostrarTablaFinca(!mostrarTablaFinca)}
             >
-              {mostrarTablaFinca ? 'Ocultar' : 'Ver Comparativa'}
+              {mostrarTablaFinca ? 'Ocultar' : 'Ver Plan Completo'}
               <ChevronRight size={16} className={mostrarTablaFinca ? 'rotado' : ''} />
             </button>
           </div>
 
-          {/* Indicadores rápidos vs Finca */}
+          {/* Indicadores rápidos - Ciclo completo */}
           {(() => {
             const edadLote = loteDetalle.edad_dias || 0
-            const semanaActual = Math.floor(edadLote / 7)
-            const fincaRef = TABLA_FINCA.find(f => f.semana === semanaActual) || TABLA_FINCA.find(f => f.edad <= edadLote && edadLote < f.edad + 7)
-            if (!fincaRef) return <p className="sin-datos">El lote no está en rango Finca (semana 11-24 / 77-168 días)</p>
+            const faseActual = getFaseActual(edadLote)
+            const refSemana = getRefSemana(edadLote)
+
+            if (!faseActual) return <p className="sin-datos">El lote no está en rango de producción (días 43-180)</p>
 
             const pesoReal = loteDetalle.peso_promedio_actual || 0
-            const diffPeso = pesoReal - fincaRef.peso
-            const convReal = parseFloat(loteDetalle.conversion_alimenticia) || 0
-            const diffConv = convReal - fincaRef.conversion
-            const consumoRealDia = loteDetalle.cantidad_cerdos > 0 && loteDetalle.alimento_total_kg > 0
-              ? (loteDetalle.alimento_total_kg / Math.max(edadLote - 70, 1)).toFixed(2)
-              : 0
+            const pesoMeta = refSemana ? refSemana.peso_final : faseActual.peso_max
+            const diffPeso = pesoReal - pesoMeta
+            const semanaEnFase = refSemana ? refSemana.semana : '—'
+            const consumoRef = refSemana ? (refSemana.consumo_dia || `${refSemana.consumo_dia_min}-${refSemana.consumo_dia_max}`) : '—'
 
             return (
               <div className="finca-indicadores">
                 <div className={`finca-indicador ${diffPeso >= 0 ? 'positivo' : 'negativo'}`}>
                   <span className="finca-label">Peso vs Meta</span>
-                  <span className="finca-valor">{pesoReal.toFixed(1)} / {fincaRef.peso} kg</span>
+                  <span className="finca-valor">{pesoReal.toFixed(1)} / {pesoMeta} kg</span>
                   <span className="finca-diff">{diffPeso >= 0 ? '+' : ''}{diffPeso.toFixed(1)} kg</span>
                 </div>
-                <div className={`finca-indicador ${diffConv <= 0 ? 'positivo' : 'negativo'}`}>
-                  <span className="finca-label">Conversión vs Meta</span>
-                  <span className="finca-valor">{convReal || '—'} / {fincaRef.conversion}</span>
-                  <span className="finca-diff">{convReal ? ((diffConv >= 0 ? '+' : '') + diffConv.toFixed(3)) : '—'}</span>
+                <div className="finca-indicador info">
+                  <span className="finca-label">Fase Actual</span>
+                  <span className="finca-valor">{faseActual.nombre}</span>
+                  <span className="finca-diff">Sem {semanaEnFase} de fase</span>
                 </div>
                 <div className="finca-indicador info">
-                  <span className="finca-label">Semana</span>
-                  <span className="finca-valor">Sem {fincaRef.semana}</span>
-                  <span className="finca-diff">{fincaRef.etapa}</span>
+                  <span className="finca-label">Edad</span>
+                  <span className="finca-valor">{edadLote} días</span>
+                  <span className="finca-diff">Ganancia ref: {faseActual.ganancia_dia}</span>
                 </div>
                 <div className="finca-indicador info">
                   <span className="finca-label">Consumo/día ref</span>
-                  <span className="finca-valor">{fincaRef.consumo_dia} kg</span>
-                  <span className="finca-diff">Real: {consumoRealDia} kg</span>
+                  <span className="finca-valor">{consumoRef} kg</span>
+                  <span className="finca-diff">Conv. ref: {faseActual.conversion}</span>
                 </div>
               </div>
             )
@@ -3142,6 +3194,112 @@ const cargarHistoricoPesos = async () => {
 
           {mostrarTablaFinca && (
             <div className="table-container tabla-finca-scroll">
+              {/* Resumen de fases */}
+              <div className="fases-resumen">
+                {FASES_PRODUCCION.map((fase, i) => {
+                  const edadLote = loteDetalle.edad_dias || 0
+                  const esActual = edadLote >= fase.edad_min && edadLote <= fase.edad_max
+                  return (
+                    <div key={i} className={`fase-card ${fase.nombre.toLowerCase()} ${esActual ? 'fase-activa' : ''}`}>
+                      <h4>{i + 1}. {fase.nombre}</h4>
+                      <p>Edad: {fase.edad_min}-{fase.edad_max} días</p>
+                      <p>Peso: {fase.peso_min} → {fase.peso_max} kg</p>
+                      <p>Ganancia: {fase.ganancia_dia}/día</p>
+                      <p>Conversión: {fase.conversion}</p>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Tabla Fase Inicio */}
+              <h4 className="tabla-fase-titulo inicio">Fase Inicio (Días 43-70) — 12 → 25 kg</h4>
+              <table className="tabla-finca">
+                <thead>
+                  <tr>
+                    <th>Sem</th>
+                    <th>Días</th>
+                    <th>Peso Final (kg)</th>
+                    <th>Consumo/día (kg)</th>
+                    <th>Consumo/sem por cerdo (kg)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {TABLA_INICIO.map(f => {
+                    const edadLote = loteDetalle.edad_dias || 0
+                    const esActual = edadLote >= f.edad_inicio && edadLote <= f.edad_fin
+                    return (
+                      <tr key={f.semana} className={`inicio ${esActual ? 'semana-actual' : ''}`}>
+                        <td>{f.semana}</td>
+                        <td>{f.edad_inicio}-{f.edad_fin}</td>
+                        <td><strong>{f.peso_final}</strong></td>
+                        <td>{f.consumo_dia_min}-{f.consumo_dia_max}</td>
+                        <td>{f.consumo_sem_min}-{f.consumo_sem_max}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+
+              {/* Tabla Fase Crecimiento */}
+              <h4 className="tabla-fase-titulo crecimiento">Fase Crecimiento (Días 71-120) — 25 → 60 kg</h4>
+              <table className="tabla-finca">
+                <thead>
+                  <tr>
+                    <th>Sem</th>
+                    <th>Días</th>
+                    <th>Peso Final (kg)</th>
+                    <th>Consumo/día (kg)</th>
+                    <th>Consumo/sem (kg)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {TABLA_CRECIMIENTO.map(f => {
+                    const edadLote = loteDetalle.edad_dias || 0
+                    const esActual = edadLote >= f.edad_inicio && edadLote <= f.edad_fin
+                    return (
+                      <tr key={f.semana} className={`crecimiento ${esActual ? 'semana-actual' : ''}`}>
+                        <td>{f.semana}</td>
+                        <td>{f.edad_inicio}-{f.edad_fin}</td>
+                        <td><strong>{f.peso_final}</strong></td>
+                        <td>{f.consumo_dia}</td>
+                        <td>{f.consumo_sem}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+
+              {/* Tabla Fase Engorde */}
+              <h4 className="tabla-fase-titulo engorde">Fase Engorde (Días 121-180) — 60 → 110 kg</h4>
+              <table className="tabla-finca">
+                <thead>
+                  <tr>
+                    <th>Sem</th>
+                    <th>Días</th>
+                    <th>Peso Final (kg)</th>
+                    <th>Consumo/día (kg)</th>
+                    <th>Consumo/sem (kg)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {TABLA_ENGORDE.map(f => {
+                    const edadLote = loteDetalle.edad_dias || 0
+                    const esActual = edadLote >= f.edad_inicio && edadLote <= f.edad_fin
+                    return (
+                      <tr key={f.semana} className={`engorde ${esActual ? 'semana-actual' : ''}`}>
+                        <td>{f.semana}</td>
+                        <td>{f.edad_inicio}-{f.edad_fin}</td>
+                        <td><strong>{f.peso_final}</strong></td>
+                        <td>{f.consumo_dia}</td>
+                        <td>{f.consumo_sem}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+
+              {/* Tabla Finca original */}
+              <h4 className="tabla-fase-titulo levante">Tabla Finca Referencia — Levante/Ceba (Sem 11-24)</h4>
               <table className="tabla-finca">
                 <thead>
                   <tr>
@@ -3153,7 +3311,7 @@ const cargarHistoricoPesos = async () => {
                     <th>Consumo/sem (kg)</th>
                     <th>Consumo/día (kg)</th>
                     <th>Consumo Acum (kg)</th>
-                    <th>Conversión Acum</th>
+                    <th>Conversión</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3176,10 +3334,10 @@ const cargarHistoricoPesos = async () => {
                   })}
                 </tbody>
               </table>
+
               <div className="finca-notas">
-                <p><strong>Inicio programa:</strong> 70 días / 30.2 kg</p>
-                <p><strong>Ganancia promedio:</strong> 0.968 kg/día | <strong>Consumo promedio:</strong> 2.285 kg/día</p>
-                <p>Fuente: Finca S.A. — Programa Alimentación Línea Tecnificada Levante/Ceba</p>
+                <p><strong>Ciclo total:</strong> 43-180 días | Peso: 12 → 110 kg</p>
+                <p><strong>Fases:</strong> Inicio (28d) → Crecimiento (50d) → Engorde (60d)</p>
               </div>
             </div>
           )}

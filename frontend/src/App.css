@@ -4086,6 +4086,76 @@ table td.sin-datos {
   color: #94a3b8;
 }
 
+/* Resumen de fases */
+.fases-resumen {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.fase-card {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 10px;
+  padding: 14px;
+  border-left: 4px solid #64748b;
+}
+
+.fase-card h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.95rem;
+}
+
+.fase-card p {
+  margin: 2px 0;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.fase-card.inicio { border-left-color: #f59e0b; }
+.fase-card.inicio h4 { color: #f59e0b; }
+.fase-card.crecimiento { border-left-color: #3b82f6; }
+.fase-card.crecimiento h4 { color: #3b82f6; }
+.fase-card.engorde { border-left-color: #ef4444; }
+.fase-card.engorde h4 { color: #ef4444; }
+
+.fase-card.fase-activa {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: #22c55e;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.2);
+}
+
+.fase-card.fase-activa h4 { color: #22c55e; }
+
+/* Títulos de tablas por fase */
+.tabla-fase-titulo {
+  margin: 20px 0 8px 0;
+  font-size: 0.95rem;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border-left: 4px solid #64748b;
+}
+
+.tabla-fase-titulo.inicio { border-left-color: #f59e0b; color: #f59e0b; background: rgba(245, 158, 11, 0.08); }
+.tabla-fase-titulo.crecimiento { border-left-color: #3b82f6; color: #3b82f6; background: rgba(59, 130, 246, 0.08); }
+.tabla-fase-titulo.engorde { border-left-color: #ef4444; color: #ef4444; background: rgba(239, 68, 68, 0.08); }
+.tabla-fase-titulo.levante { border-left-color: #8b5cf6; color: #8b5cf6; background: rgba(139, 92, 246, 0.08); }
+
+/* Filas de tabla por fase */
+.tabla-finca tbody tr.inicio { border-left: 3px solid #f59e0b; }
+.tabla-finca tbody tr.crecimiento { border-left: 3px solid #3b82f6; }
+
+.etapa-badge.inicio { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+.etapa-badge.crecimiento { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .fases-resumen {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .finca-indicadores {
