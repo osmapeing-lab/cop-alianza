@@ -263,3 +263,30 @@ exports.cambiarPassword = async (req, res) => {
     res.status(500).json({ mensaje: error.message });
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════════
+// ACTUALIZAR PERFIL
+// ═══════════════════════════════════════════════════════════════════════
+exports.actualizarPerfil = async (req, res) => {
+  try {
+    const { usuario, correo } = req.body;
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ mensaje: 'Usuario no encontrado' });
+
+    if (usuario && usuario !== user.usuario) {
+      const existe = await User.findOne({ usuario });
+      if (existe) return res.status(400).json({ mensaje: 'Ese nombre de usuario ya existe' });
+      user.usuario = usuario;
+    }
+    if (correo && correo !== user.correo) {
+      const existe = await User.findOne({ correo });
+      if (existe) return res.status(400).json({ mensaje: 'Ese correo ya está registrado' });
+      user.correo = correo;
+    }
+
+    await user.save();
+    res.json({ mensaje: 'Perfil actualizado', user: { _id: user._id, usuario: user.usuario, correo: user.correo, rol: user.rol } });
+  } catch (error) {
+    res.status(500).json({ mensaje: error.message });
+  }
+};

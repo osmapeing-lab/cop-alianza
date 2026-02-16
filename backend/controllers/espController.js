@@ -410,9 +410,9 @@ exports.obtenerDatosFlujo = async (req, res) => {
     const ultimaLectura = await Reading.findOne({ tipo: 'flujo_agua' })
       .sort({ createdAt: -1 });
     
-    // Buscar consumo diario de hoy
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0);
+    // Buscar consumo diario de hoy (zona horaria Colombia UTC-5)
+    const ahoraCol = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+    const hoy = new Date(Date.UTC(ahoraCol.getFullYear(), ahoraCol.getMonth(), ahoraCol.getDate()));
     
     const consumoHoy = await WaterConsumption.findOne({
       fecha: { $gte: hoy },

@@ -13,7 +13,9 @@ const {
   getMe,
   getAllUsers,
   toggleUser,
-  deleteUser
+  deleteUser,
+  cambiarPassword,
+  actualizarPerfil
 } = require('../controllers/userController');
 
 const { verificarToken } = require('../middleware/auth');
@@ -40,6 +42,12 @@ router.get('/', verificarToken, getAllUsers);
 
 // Activar / desactivar usuario
 router.put('/:id/toggle', verificarToken, toggleUser);
+
+// Cambiar contraseña
+router.put('/me/password', verificarToken, cambiarPassword);
+
+// Actualizar perfil
+router.put('/me/perfil', verificarToken, actualizarPerfil);
 
 // Eliminar usuario
 router.delete('/:id', verificarToken, deleteUser);

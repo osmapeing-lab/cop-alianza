@@ -1093,6 +1093,11 @@ const [distribucionGastos, setDistribucionGastos] = useState([])
   })
 
 
+// Estados para notificaciones y config usuario
+const [mostrarNotificaciones, setMostrarNotificaciones] = useState(false)
+const [mostrarConfigUsuario, setMostrarConfigUsuario] = useState(false)
+const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo: '', password_actual: '', password_nuevo: '' })
+
   // ═══════════════════════════════════════════════════════════════════════
   // EFECTOS
   // ═══════════════════════════════════════════════════════════════════════
@@ -1112,6 +1117,11 @@ const [distribucionGastos, setDistribucionGastos] = useState([])
       return () => clearInterval(interval)
     }
   }, [user])
+
+  // Recalcular gráfica de pesos cuando pesajes cambian
+  useEffect(() => {
+    if (pesajes.length > 0) cargarHistoricoPesos()
+  }, [pesajes])
 
   // WebSocket
   useEffect(() => {
@@ -1210,6 +1220,45 @@ socket.on('peso_live', (data) => {
     setPagina('dashboard')
   }
 
+  const cambiarPasswordUsuario = async () => {
+    if (!configUsuarioForm.password_actual || !configUsuarioForm.password_nuevo) {
+      alert('Completa ambos campos de contraseña')
+      return
+    }
+    if (configUsuarioForm.password_nuevo.length < 6) {
+      alert('La nueva contraseña debe tener al menos 6 caracteres')
+      return
+    }
+    try {
+      const res = await axios.put(`${API_URL}/api/users/me/password`, {
+        password_actual: configUsuarioForm.password_actual,
+        password_nuevo: configUsuarioForm.password_nuevo
+      }, { headers: { Authorization: `Bearer ${token}` } })
+      alert(res.data.mensaje)
+      setConfigUsuarioForm({ ...configUsuarioForm, password_actual: '', password_nuevo: '' })
+      handleLogout()
+    } catch (error) {
+      alert(error.response?.data?.mensaje || 'Error cambiando contraseña')
+    }
+  }
+
+  const actualizarPerfilUsuario = async () => {
+    try {
+      const datos = {}
+      if (configUsuarioForm.usuario && configUsuarioForm.usuario !== user.usuario) datos.usuario = configUsuarioForm.usuario
+      if (configUsuarioForm.correo && configUsuarioForm.correo !== user.correo) datos.correo = configUsuarioForm.correo
+      if (Object.keys(datos).length === 0) { alert('No hay cambios'); return }
+
+      const res = await axios.put(`${API_URL}/api/users/me/perfil`, datos, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setUser({ ...user, ...res.data.user })
+      alert('Perfil actualizado')
+    } catch (error) {
+      alert(error.response?.data?.mensaje || 'Error actualizando perfil')
+    }
+  }
+
   // ═══════════════════════════════════════════════════════════════════════
   // FUNCIONES DE CARGA DE DATOS
   // ═══════════════════════════════════════════════════════════════════════
@@ -1235,8 +1284,8 @@ socket.on('peso_live', (data) => {
   cargarHistoricoTemperatura()
   cargarHistoricoAgua()
   cargarHistoricoContable()
-  cargarHistoricoPesos()
   cargarDistribucionGastos()
+  // cargarHistoricoPesos se llama desde useEffect cuando pesajes cambia
   
   if (user?.rol === 'superadmin' || user?.rol === 'ingeniero') {
     cargarUsuarios()
@@ -1406,11 +1455,36 @@ const verStreamCamara = (camara) => {
   const cargarClima = async () => {
     try {
       const res = await axios.get(
-        `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,relative_humidity_2m`
+        `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,relative_humidity_2m,weather_code&hourly=temperature_2m,precipitation_probability,weather_code&forecast_days=1&timezone=America/Bogota`
       )
+      const hourly = res.data.hourly || {}
+      const pronosticos = []
+      if (hourly.time) {
+        const ahora = new Date()
+        hourly.time.forEach((t, i) => {
+          const h = new Date(t)
+          if (h > ahora && pronosticos.length < 6) {
+            pronosticos.push({
+              hora: h.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' }),
+              temp: hourly.temperature_2m[i],
+              lluvia: hourly.precipitation_probability[i],
+              code: hourly.weather_code[i]
+            })
+          }
+        })
+      }
+      const wc = res.data.current.weather_code
+      let climaTexto = 'Despejado'
+      if (wc >= 61) climaTexto = 'Lluvia'
+      else if (wc >= 51) climaTexto = 'Llovizna'
+      else if (wc >= 3) climaTexto = 'Nublado'
+      else if (wc >= 1) climaTexto = 'Parcialmente nublado'
+
       setClima({
         temp: res.data.current.temperature_2m,
-        humedad: res.data.current.relative_humidity_2m
+        humedad: res.data.current.relative_humidity_2m,
+        descripcion: climaTexto,
+        pronosticos
       })
     } catch (error) {
       console.error('Error cargando clima:', error)
@@ -2159,15 +2233,85 @@ const cargarDistribucionGastos = async () => {
   </div>
   
   <div className="header-right">
-    <span className="user-info">
-      <IconUsuario />
-      {user.usuario}
-    </span>
-    <span className="rol-badge">{user.rol}</span>
-    <button className="btn-logout" onClick={handleLogout}>
-      <IconLogout />
-      Salir
-    </button>
+    {/* Notificaciones */}
+    <div className="notif-wrapper">
+      <button className="btn-notif" onClick={() => { setMostrarNotificaciones(!mostrarNotificaciones); setMostrarConfigUsuario(false) }}>
+        <Bell size={20} />
+        {alertas.length > 0 && <span className="notif-dot">{alertas.length > 9 ? '9+' : alertas.length}</span>}
+      </button>
+      {mostrarNotificaciones && (
+        <div className="notif-panel">
+          <div className="notif-header">
+            <h4>Notificaciones</h4>
+            <button onClick={() => setMostrarNotificaciones(false)}>&times;</button>
+          </div>
+          {/* Pronóstico */}
+          {clima.descripcion && (
+            <div className="notif-clima">
+              <strong>{clima.descripcion} - {clima.temp}°C</strong>
+              {clima.pronosticos?.slice(0, 4).map((p, i) => (
+                <div key={i} className="pronostico-item">
+                  <span>{p.hora}</span>
+                  <span>{p.temp}°C</span>
+                  <span>{p.lluvia > 30 ? `🌧 ${p.lluvia}%` : '☀'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {/* Alertas */}
+          <div className="notif-alertas">
+            {alertas.length === 0 ? (
+              <p className="notif-vacio">Sin alertas</p>
+            ) : (
+              alertas.slice(0, 8).map((a, i) => (
+                <div key={i} className={`notif-alerta ${a.tipo}`}>
+                  <span>{a.mensaje}</span>
+                  <small>{new Date(a.createdAt).toLocaleString('es-CO', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}</small>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+
+    {/* Usuario */}
+    <div className="user-wrapper">
+      <button className="btn-user" onClick={() => { setMostrarConfigUsuario(!mostrarConfigUsuario); setMostrarNotificaciones(false); setConfigUsuarioForm({ usuario: user.usuario, correo: user.correo || '', password_actual: '', password_nuevo: '' }) }}>
+        <IconUsuario />
+        <span className="user-name">{user.usuario}</span>
+        <ChevronRight size={14} className={mostrarConfigUsuario ? 'rotado-90' : ''} />
+      </button>
+      {mostrarConfigUsuario && (
+        <div className="user-panel">
+          <div className="user-panel-header">
+            <IconUsuario />
+            <div>
+              <strong>{user.usuario}</strong>
+              <span className="rol-badge-sm">{user.rol}</span>
+            </div>
+          </div>
+          <div className="user-panel-section">
+            <h5>Datos de Perfil</h5>
+            <input type="text" placeholder="Nombre de usuario" value={configUsuarioForm.usuario} onChange={e => setConfigUsuarioForm({ ...configUsuarioForm, usuario: e.target.value })} />
+            <input type="email" placeholder="Correo electrónico" value={configUsuarioForm.correo} onChange={e => setConfigUsuarioForm({ ...configUsuarioForm, correo: e.target.value })} />
+            <button className="btn-sm btn-primary" onClick={actualizarPerfilUsuario}>Guardar Cambios</button>
+          </div>
+          <div className="user-panel-section">
+            <h5>Cambiar Contraseña</h5>
+            <input type="password" placeholder="Contraseña actual" value={configUsuarioForm.password_actual} onChange={e => setConfigUsuarioForm({ ...configUsuarioForm, password_actual: e.target.value })} />
+            <input type="password" placeholder="Nueva contraseña" value={configUsuarioForm.password_nuevo} onChange={e => setConfigUsuarioForm({ ...configUsuarioForm, password_nuevo: e.target.value })} />
+            <button className="btn-sm btn-warning" onClick={cambiarPasswordUsuario}>Cambiar Contraseña</button>
+          </div>
+          <div className="user-panel-section">
+            <a href="mailto:soporte@cooalianzas.com?subject=Solicitud de Soporte" className="btn-sm btn-outline">Solicitar Soporte</a>
+          </div>
+          <button className="btn-logout-full" onClick={handleLogout}>
+            <LogOut size={16} /> Cerrar Sesión
+          </button>
+        </div>
+      )}
+    </div>
   </div>
 </header>
 
@@ -2265,22 +2409,22 @@ const cargarDistribucionGastos = async () => {
             </button>
           </nav>
           
-          {/* Resumen contable en sidebar */}
-          <div className="sidebar-resumen">
-            <h4>Resumen Contable</h4>
-            <div className="resumen-item ingresos">
-              <span>Ingresos</span>
-              <strong>{formatearDinero(resumenContable.total_ingresos)}</strong>
+          {/* Mini gráfica financiera en sidebar */}
+          {comparativoCostos?.length > 0 && (
+            <div className="sidebar-mini-grafica">
+              <h4><BarChart3 size={14} /> Finanzas</h4>
+              <ResponsiveContainer width="100%" height={100}>
+                <BarChart data={comparativoCostos.slice(-4)}>
+                  <Bar dataKey="ingresos" fill="#22c55e" radius={[3,3,0,0]} />
+                  <Bar dataKey="costos" fill="#ef4444" radius={[3,3,0,0]} />
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="sidebar-mini-leyenda">
+                <span className="dot-verde"></span> Ingresos
+                <span className="dot-rojo"></span> Costos
+              </div>
             </div>
-            <div className="resumen-item gastos">
-              <span>Gastos</span>
-              <strong>{formatearDinero(resumenContable.total_gastos)}</strong>
-            </div>
-            <div className={`resumen-item balance ${resumenContable.ganancia >= 0 ? 'positivo' : 'negativo'}`}>
-              <span>Balance</span>
-              <strong>{formatearDinero(resumenContable.ganancia)}</strong>
-            </div>
-          </div>
+          )}
         </aside>
 
         {/* Contenido principal */}
@@ -2651,32 +2795,43 @@ const cargarDistribucionGastos = async () => {
       </div>
     </div>
 
-    {/* Resumen Contable */}
-    <div className="dashboard-section resumen-contable-dashboard">
-      <h3><Wallet size={20} /> Resumen Contable del Mes</h3>
-      <div className="contable-dashboard-grid">
-        <div className="contable-card ingresos">
-          <TrendingUp size={28} className="contable-icon" />
-          <div className="contable-info">
-            <span className="contable-valor">{formatearDinero(resumenContable.total_ingresos)}</span>
-            <span className="contable-label">Ingresos</span>
+    {/* Distribución de Gastos (Pie) + Comparativo */}
+    <div className="graficas-grid">
+      {distribucionGastos.length > 0 && (
+        <div className="dashboard-section grafica-section">
+          <h3><PieChartIcon size={20} /> Distribución de Gastos</h3>
+          <div className="grafica-container">
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie data={distribucionGastos} cx="50%" cy="50%" outerRadius={80} dataKey="valor" nameKey="nombre" label={({ nombre, percent }) => `${nombre} ${(percent * 100).toFixed(0)}%`}>
+                  {distribucionGastos.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => [formatearDinero(value)]} />
+              </PieChart>
+            </ResponsiveContainer>
           </div>
         </div>
-        <div className="contable-card gastos">
-          <TrendingDown size={28} className="contable-icon" />
-          <div className="contable-info">
-            <span className="contable-valor">{formatearDinero(resumenContable.total_gastos)}</span>
-            <span className="contable-label">Gastos</span>
+      )}
+      {comparativoCostos?.length > 0 && (
+        <div className="dashboard-section grafica-section">
+          <h3><Wallet size={20} /> Ingresos vs Costos</h3>
+          <div className="grafica-container">
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={comparativoCostos.slice(-4)}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                <XAxis dataKey="nombre" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                <Tooltip formatter={(value) => [formatearDinero(value)]} />
+                <Legend />
+                <Bar dataKey="ingresos" fill="#22c55e" name="Ingresos" radius={[4,4,0,0]} />
+                <Bar dataKey="costos" fill="#ef4444" name="Costos" radius={[4,4,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
-        <div className={`contable-card balance ${resumenContable.ganancia >= 0 ? 'positivo' : 'negativo'}`}>
-          {resumenContable.ganancia >= 0 ? <CheckCircle size={28} className="contable-icon" /> : <AlertTriangle size={28} className="contable-icon" />}
-          <div className="contable-info">
-            <span className="contable-valor">{formatearDinero(resumenContable.ganancia)}</span>
-            <span className="contable-label">Balance</span>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
 
     {/* Lotes y Alertas */}
