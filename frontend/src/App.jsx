@@ -24,6 +24,13 @@ const socket = io(API_URL)
 // reCAPTCHA v2 - Reemplazar con tu clave real de google.com/recaptcha
 const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '6Ldn320sAAAAANB8zwnmeM-lxQ7CVAYJUAemLdV0'
 
+// Helper: permite borrar, escribir decimales y editar inputs numéricos sin problemas
+const numVal = (v, dec = false) => {
+  if (v === '' || v === '-') return ''
+  const n = dec ? parseFloat(v) : parseInt(v)
+  return isNaN(n) ? '' : n
+}
+
 // Coordenadas Lorica para clima
 const LAT = 9.2397
 const LON = -75.8091
@@ -443,7 +450,7 @@ const PanelVentas = ({ ventas, estadisticas, onNuevaVenta, onRegistrarPago }) =>
                     type="number"
                     min="1"
                     value={nuevaVenta.cantidad}
-                    onChange={(e) => setNuevaVenta({...nuevaVenta, cantidad: parseInt(e.target.value)})}
+                    onChange={(e) => setNuevaVenta({...nuevaVenta, cantidad: numVal(e.target.value)})}
                     required
                   />
                 </div>
@@ -453,7 +460,7 @@ const PanelVentas = ({ ventas, estadisticas, onNuevaVenta, onRegistrarPago }) =>
                     type="number"
                     step="0.1"
                     value={nuevaVenta.peso_total_kg}
-                    onChange={(e) => setNuevaVenta({...nuevaVenta, peso_total_kg: parseFloat(e.target.value)})}
+                    onChange={(e) => setNuevaVenta({...nuevaVenta, peso_total_kg: numVal(e.target.value, true)})}
                     required
                   />
                 </div>
@@ -465,7 +472,7 @@ const PanelVentas = ({ ventas, estadisticas, onNuevaVenta, onRegistrarPago }) =>
                   <input 
                     type="number"
                     value={nuevaVenta.precio_kg}
-                    onChange={(e) => setNuevaVenta({...nuevaVenta, precio_kg: parseInt(e.target.value)})}
+                    onChange={(e) => setNuevaVenta({...nuevaVenta, precio_kg: numVal(e.target.value)})}
                     required
                   />
                 </div>
@@ -677,7 +684,7 @@ const PanelContabilidad = ({ resumen, comparativo, onNuevoCosto }) => {
                     type="number"
                     min="1"
                     value={nuevoCosto.cantidad}
-                    onChange={(e) => setNuevoCosto({...nuevoCosto, cantidad: parseInt(e.target.value)})}
+                    onChange={(e) => setNuevoCosto({...nuevoCosto, cantidad: numVal(e.target.value)})}
                   />
                 </div>
                 <div className="form-group">
@@ -685,7 +692,7 @@ const PanelContabilidad = ({ resumen, comparativo, onNuevoCosto }) => {
                   <input 
                     type="number"
                     value={nuevoCosto.precio_unitario}
-                    onChange={(e) => setNuevoCosto({...nuevoCosto, precio_unitario: parseInt(e.target.value)})}
+                    onChange={(e) => setNuevoCosto({...nuevoCosto, precio_unitario: numVal(e.target.value)})}
                     required
                   />
                 </div>
@@ -853,7 +860,7 @@ const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo }) => {
                     type="number"
                     step="0.1"
                     value={nuevoCerdo.peso_actual}
-                    onChange={(e) => setNuevoCerdo({...nuevoCerdo, peso_actual: parseFloat(e.target.value)})}
+                    onChange={(e) => setNuevoCerdo({...nuevoCerdo, peso_actual: numVal(e.target.value, true)})}
                   />
                 </div>
                 <div className="form-group">
@@ -3278,7 +3285,7 @@ const cargarHistoricoPesos = async () => {
                 <input
                   type="number"
                   value={nuevoLote.cantidad_cerdos}
-                  onChange={e => setNuevoLote({ ...nuevoLote, cantidad_cerdos: parseInt(e.target.value) || 0 })}
+                  onChange={e => setNuevoLote({ ...nuevoLote, cantidad_cerdos: numVal(e.target.value) })}
                 />
               </div>
             </div>
@@ -3324,7 +3331,7 @@ const cargarHistoricoPesos = async () => {
                 <input
                   type="number"
                   value={nuevoLote.edad_dias_manual}
-                  onChange={e => setNuevoLote({ ...nuevoLote, edad_dias_manual: parseInt(e.target.value) || '', fecha_nacimiento: '' })}
+                  onChange={e => setNuevoLote({ ...nuevoLote, edad_dias_manual: numVal(e.target.value), fecha_nacimiento: '' })}
                   placeholder="Ej: 45"
                 />
                 <small>Días de vida al ingresar el lote</small>
@@ -3339,7 +3346,7 @@ const cargarHistoricoPesos = async () => {
                   type="number"
                   step="0.1"
                   value={nuevoLote.peso_inicial_promedio}
-                  onChange={e => setNuevoLote({ ...nuevoLote, peso_inicial_promedio: parseFloat(e.target.value) || 0 })}
+                  onChange={e => setNuevoLote({ ...nuevoLote, peso_inicial_promedio: numVal(e.target.value, true) })}
                 />
               </div>
               <div className="form-group">
@@ -3410,7 +3417,7 @@ const cargarHistoricoPesos = async () => {
                   type="number"
                   step="0.1"
                   value={nuevaAlimentacion.cantidad_kg}
-                  onChange={e => setNuevaAlimentacion({ ...nuevaAlimentacion, cantidad_kg: parseFloat(e.target.value) || 0 })}
+                  onChange={e => setNuevaAlimentacion({ ...nuevaAlimentacion, cantidad_kg: numVal(e.target.value, true) })}
                 />
               </div>
               <div className="form-group">
@@ -3418,7 +3425,7 @@ const cargarHistoricoPesos = async () => {
                 <input
                   type="number"
                   value={nuevaAlimentacion.precio_kg}
-                  onChange={e => setNuevaAlimentacion({ ...nuevaAlimentacion, precio_kg: parseInt(e.target.value) || 0 })}
+                  onChange={e => setNuevaAlimentacion({ ...nuevaAlimentacion, precio_kg: numVal(e.target.value) })}
                 />
               </div>
             </div>
@@ -3526,7 +3533,7 @@ const cargarHistoricoPesos = async () => {
                           type="number"
                           min="1"
                           value={pesajeLive.cantidad}
-                          onChange={e => setPesajeLive({...pesajeLive, cantidad: parseInt(e.target.value) || 1})}
+                          onChange={e => setPesajeLive({...pesajeLive, cantidad: numVal(e.target.value)})}
                         />
                       </div>
                     </div>
@@ -3709,7 +3716,7 @@ const cargarHistoricoPesos = async () => {
                           type="number"
                           step="0.1"
                           value={nuevoPesaje.peso}
-                          onChange={e => setNuevoPesaje({ ...nuevoPesaje, peso: parseFloat(e.target.value) || 0 })}
+                          onChange={e => setNuevoPesaje({ ...nuevoPesaje, peso: numVal(e.target.value, true) })}
                         />
                       </div>
                       <div className="form-group">
@@ -3717,7 +3724,7 @@ const cargarHistoricoPesos = async () => {
                         <input
                           type="number"
                           value={nuevoPesaje.cantidad_cerdos_pesados}
-                          onChange={e => setNuevoPesaje({ ...nuevoPesaje, cantidad_cerdos_pesados: parseInt(e.target.value) || 1 })}
+                          onChange={e => setNuevoPesaje({ ...nuevoPesaje, cantidad_cerdos_pesados: numVal(e.target.value) })}
                         />
                       </div>
                       <div className="form-group">
@@ -4034,7 +4041,7 @@ const cargarHistoricoPesos = async () => {
                           <div className="form-row">
                             <div className="form-group">
                               <label>Cantidad</label>
-                              <input type="number" step="0.1" value={nuevoRegistro.cantidad} onChange={e => setNuevoRegistro({ ...nuevoRegistro, cantidad: parseFloat(e.target.value) || 0 })} />
+                              <input type="number" step="0.1" value={nuevoRegistro.cantidad} onChange={e => setNuevoRegistro({ ...nuevoRegistro, cantidad: numVal(e.target.value, true) })} />
                             </div>
                             <div className="form-group">
                               <label>Unidad</label>
@@ -4050,7 +4057,7 @@ const cargarHistoricoPesos = async () => {
                             </div>
                             <div className="form-group">
                               <label>Precio Unitario</label>
-                              <input type="number" value={nuevoRegistro.precio_unitario} onChange={e => setNuevoRegistro({ ...nuevoRegistro, precio_unitario: parseFloat(e.target.value) || 0 })} />
+                              <input type="number" value={nuevoRegistro.precio_unitario} onChange={e => setNuevoRegistro({ ...nuevoRegistro, precio_unitario: numVal(e.target.value, true) })} />
                             </div>
                           </div>
                           <div className="form-group">
@@ -4526,7 +4533,7 @@ const cargarHistoricoPesos = async () => {
                       <input
                         type="number"
                         value={config.precio_agua_litro}
-                        onChange={e => setConfig({ ...config, precio_agua_litro: parseFloat(e.target.value) || 0 })}
+                        onChange={e => setConfig({ ...config, precio_agua_litro: numVal(e.target.value, true) })}
                       />
                     </div>
                     <div className="form-group">
@@ -4534,7 +4541,7 @@ const cargarHistoricoPesos = async () => {
                       <input
                         type="number"
                         value={config.precio_alimento_kg}
-                        onChange={e => setConfig({ ...config, precio_alimento_kg: parseFloat(e.target.value) || 0 })}
+                        onChange={e => setConfig({ ...config, precio_alimento_kg: numVal(e.target.value, true) })}
                       />
                     </div>
                     <div className="form-group">
@@ -4542,7 +4549,7 @@ const cargarHistoricoPesos = async () => {
                       <input
                         type="number"
                         value={config.precio_venta_kg}
-                        onChange={e => setConfig({ ...config, precio_venta_kg: parseFloat(e.target.value) || 0 })}
+                        onChange={e => setConfig({ ...config, precio_venta_kg: numVal(e.target.value, true) })}
                       />
                     </div>
                   </div>
@@ -4557,7 +4564,7 @@ const cargarHistoricoPesos = async () => {
                       <input
                         type="number"
                         value={config.umbral_temp_max}
-                        onChange={e => setConfig({ ...config, umbral_temp_max: parseFloat(e.target.value) || 37 })}
+                        onChange={e => setConfig({ ...config, umbral_temp_max: numVal(e.target.value, true) })}
                       />
                       <small>Se genera alerta cuando supera este valor</small>
                     </div>
@@ -4566,7 +4573,7 @@ const cargarHistoricoPesos = async () => {
                       <input
                         type="number"
                         value={config.umbral_temp_critico}
-                        onChange={e => setConfig({ ...config, umbral_temp_critico: parseFloat(e.target.value) || 40 })}
+                        onChange={e => setConfig({ ...config, umbral_temp_critico: numVal(e.target.value, true) })}
                       />
                       <small>Se activan bombas automáticamente</small>
                     </div>

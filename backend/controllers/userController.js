@@ -71,7 +71,8 @@ function detectarDispositivo(ua) {
 // ═══════════════════════════════════════════════════════════════════════
 exports.login = async (req, res) => {
   try {
-    const { usuario, password, forzar, captchaToken } = req.body;
+    const { password, forzar, captchaToken } = req.body;
+    const usuario = (req.body.usuario || '').trim();
 
     // Verificar reCAPTCHA
     if (process.env.RECAPTCHA_SECRET && !forzar) {
