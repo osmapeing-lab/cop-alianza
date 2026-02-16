@@ -203,6 +203,15 @@ body {
   height: 22px;
 }
 
+.captcha-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+.captcha-wrapper > div {
+  transform-origin: center;
+}
+
 .btn-login {
   width: 100%;
   padding: 16px;

@@ -8,6 +8,7 @@ const User = require('../models/User');
 const Session = require('../models/Session');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const axios = require('axios');
 
 // ═══════════════════════════════════════════════════════════════════════
 // REGISTRAR NUEVO USUARIO
@@ -70,7 +71,24 @@ function detectarDispositivo(ua) {
 // ═══════════════════════════════════════════════════════════════════════
 exports.login = async (req, res) => {
   try {
-    const { usuario, password, forzar } = req.body;
+    const { usuario, password, forzar, captchaToken } = req.body;
+
+    // Verificar reCAPTCHA
+    if (process.env.RECAPTCHA_SECRET && !forzar) {
+      if (!captchaToken) {
+        return res.status(400).json({ mensaje: 'Completa el captcha' });
+      }
+      try {
+        const captchaRes = await axios.post('https://www.google.com/recaptcha/api/siteverify', null, {
+          params: { secret: process.env.RECAPTCHA_SECRET, response: captchaToken }
+        });
+        if (!captchaRes.data.success) {
+          return res.status(400).json({ mensaje: 'Captcha inválido, intenta de nuevo' });
+        }
+      } catch (err) {
+        console.error('[CAPTCHA] Error verificando:', err.message);
+      }
+    }
 
     // Buscar usuario
     const user = await User.findOne({ usuario });

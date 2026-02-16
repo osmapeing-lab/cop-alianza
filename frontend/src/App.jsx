@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import axios from 'axios'
 import { io } from 'socket.io-client'
+import ReCAPTCHA from 'react-google-recaptcha'
 import './App.css'
 import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import {
@@ -19,6 +20,9 @@ import {
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://cop-alianza-backend.onrender.com'
 const socket = io(API_URL)
+
+// reCAPTCHA v2 - Reemplazar con tu clave real de google.com/recaptcha
+const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI'
 
 // Coordenadas Lorica para clima
 const LAT = 9.2397
@@ -946,6 +950,8 @@ const PantallaMantenimiento = () => (
   const [errorLogin, setErrorLogin] = useState('')
   const [cargando, setCargando] = useState(false)
   const [conflictoSesion, setConflictoSesion] = useState(null)
+  const [captchaToken, setCaptchaToken] = useState(null)
+  const captchaRef = useRef(null)
   
   // Estados de navegación
   const [pagina, setPagina] = useState('dashboard')
@@ -1166,7 +1172,8 @@ socket.on('peso_live', (data) => {
       const res = await axios.post(`${API_URL}/api/users/login`, {
         usuario,
         password,
-        forzar
+        forzar,
+        captchaToken
       })
 
       const { token: nuevoToken, usuario: userData } = res.data
@@ -1176,11 +1183,15 @@ socket.on('peso_live', (data) => {
       setUsuario('')
       setPassword('')
       setConflictoSesion(null)
+      setCaptchaToken(null)
     } catch (error) {
       if (error.response?.status === 409) {
         setConflictoSesion(error.response.data.sesion_existente)
       } else {
         setErrorLogin(error.response?.data?.mensaje || 'Error al iniciar sesión')
+        // Reset captcha on error
+        if (captchaRef.current) captchaRef.current.reset()
+        setCaptchaToken(null)
       }
     } finally {
       setCargando(false)
@@ -2183,7 +2194,16 @@ const cargarHistoricoPesos = async () => {
               </div>
             </div>
 
-            <button type="submit" className="btn-login" disabled={cargando}>
+            <div className="captcha-wrapper">
+              <ReCAPTCHA
+                ref={captchaRef}
+                sitekey={RECAPTCHA_SITE_KEY}
+                onChange={(token) => setCaptchaToken(token)}
+                onExpired={() => setCaptchaToken(null)}
+              />
+            </div>
+
+            <button type="submit" className="btn-login" disabled={cargando || !captchaToken}>
               {cargando ? 'Ingresando...' : 'Ingresar'}
             </button>
             </>)}
