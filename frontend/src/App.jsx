@@ -91,6 +91,27 @@ const getRefSemana = (edadDias) => {
   return null
 }
 
+// Calcula el consumo diario estimado y acumulado por cerdo según la edad
+const getConsumoEstimado = (edadDias, cantidadCerdos = 1) => {
+  let consumoDiario = 0
+  let consumoAcumulado = 0
+
+  for (let d = 43; d <= Math.min(edadDias, 180); d++) {
+    const ref = getRefSemana(d)
+    if (ref) {
+      consumoDiario = ref.consumo_dia || ((ref.consumo_dia_min + ref.consumo_dia_max) / 2) || 0
+    }
+    consumoAcumulado += consumoDiario
+  }
+
+  return {
+    consumo_dia_cerdo: Math.round(consumoDiario * 100) / 100,
+    consumo_acum_cerdo: Math.round(consumoAcumulado * 100) / 100,
+    consumo_acum_total: Math.round(consumoAcumulado * cantidadCerdos * 100) / 100,
+    consumo_dia_total: Math.round(consumoDiario * cantidadCerdos * 100) / 100
+  }
+}
+
 // TABLA FINCA original (Levante/Ceba semanas 11-24) - Se mantiene para compatibilidad
 const TABLA_FINCA = [
   { semana: 11, edad: 77,  peso: 35.1, ganancia_dia: 0.697, consumo_sem: 8.70,  consumo_dia: 1.243, consumo_acum: 8.70,   conversion: 1.785, etapa: 'levante' },
@@ -3037,9 +3058,24 @@ const cargarHistoricoPesos = async () => {
             <span className="info-valor">{loteDetalle.corral || 'No asignado'}</span>
           </div>
           <div className="info-item">
-            <span className="info-label">Alimento Total:</span>
+            <span className="info-label">Alimento Registrado:</span>
             <span className="info-valor">{loteDetalle.alimento_total_kg?.toFixed(1) || 0} kg</span>
           </div>
+          {(() => {
+            const consumo = getConsumoEstimado(loteDetalle.edad_dias || 0, loteDetalle.cantidad_cerdos || 1)
+            return consumo.consumo_acum_total > 0 ? (
+              <>
+                <div className="info-item">
+                  <span className="info-label">Alimento Estimado (plan):</span>
+                  <span className="info-valor">{consumo.consumo_acum_total.toFixed(1)} kg total ({consumo.consumo_acum_cerdo.toFixed(1)} kg/cerdo)</span>
+                </div>
+                <div className="info-item">
+                  <span className="info-label">Consumo Hoy (plan):</span>
+                  <span className="info-valor">{consumo.consumo_dia_cerdo} kg/cerdo × {loteDetalle.cantidad_cerdos} = {consumo.consumo_dia_total} kg/día</span>
+                </div>
+              </>
+            ) : null
+          })()}
           <div className="info-item">
             <span className="info-label">Fecha Inicio:</span>
             <span className="info-valor">{new Date(loteDetalle.fecha_inicio).toLocaleDateString()}</span>
@@ -3052,49 +3088,101 @@ const cargarHistoricoPesos = async () => {
           )}
         </div>
 
-        {/* Gráfica de Evolución */}
+        {/* Gráfica Comparativa: Peso Real vs Esperado */}
         <div className="dashboard-section grafica-section">
-          <h3><LineChartIcon size={20} /> Evolución del Lote</h3>
+          <h3><LineChartIcon size={20} /> Peso Real vs Plan de Producción</h3>
           <div className="grafica-container">
-            {graficaEvolucionLote.length > 0 ? (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={graficaEvolucionLote}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                  <XAxis dataKey="fecha" tick={{ fontSize: 10 }} stroke="#666" />
-                  <YAxis yAxisId="peso" tick={{ fontSize: 11 }} stroke="#2d6a4f" unit=" kg" />
-                  <YAxis yAxisId="alimento" orientation="right" tick={{ fontSize: 11 }} stroke="#3b82f6" unit=" kg" />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: '8px' }}
-                    formatter={(value, name) => [
-                      name === 'peso_promedio' ? `${value} kg` : `${value} kg`,
-                      name === 'peso_promedio' ? 'Peso Promedio' : 'Alimento'
-                    ]}
-                  />
-                  <Legend />
-                  <Line 
-                    yAxisId="peso"
-                    type="monotone" 
-                    dataKey="peso_promedio" 
-                    stroke="#2d6a4f" 
-                    strokeWidth={3}
-                    dot={{ r: 5, fill: '#2d6a4f' }}
-                    name="Peso Promedio"
-                    connectNulls
-                  />
-                  <Line 
-                    yAxisId="alimento"
-                    type="monotone" 
-                    dataKey="alimento_kg" 
-                    stroke="#3b82f6" 
-                    strokeWidth={2}
-                    dot={{ r: 4, fill: '#3b82f6' }}
-                    name="Alimento Diario"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <p className="sin-datos">No hay datos de evolución. Registra pesajes y alimentación.</p>
-            )}
+            {(() => {
+              // Generar curva esperada completa desde las tablas de producción
+              const curvaEsperada = []
+              // Punto inicial
+              curvaEsperada.push({ semana: 6, dia: 43, peso_esperado: 12, fase: 'Inicio' })
+              TABLA_INICIO.forEach(s => curvaEsperada.push({ semana: 6 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Inicio' }))
+              TABLA_CRECIMIENTO.forEach(s => curvaEsperada.push({ semana: 10 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Crecimiento' }))
+              TABLA_ENGORDE.forEach(s => curvaEsperada.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
+
+              // Datos reales de pesajes (del estado graficaEvolucionLote)
+              const edadLote = loteDetalle.edad_dias || 0
+              const fechaInicio = loteDetalle.fecha_inicio ? new Date(loteDetalle.fecha_inicio) : null
+
+              // Construir datos combinados para la gráfica
+              const datosGrafica = curvaEsperada.map(punto => {
+                const entry = { dia: punto.dia, semana: `Sem ${punto.semana}`, peso_esperado: punto.peso_esperado, fase: punto.fase }
+                // Si hay pesaje para este rango de días, agregar peso real
+                if (graficaEvolucionLote.length > 0 && fechaInicio) {
+                  const pesajeMatch = graficaEvolucionLote.find(p => {
+                    if (!p.peso_promedio) return false
+                    const fechaPesaje = new Date(p.fecha)
+                    const diasDesdeinicio = Math.floor((fechaPesaje - fechaInicio) / (1000 * 60 * 60 * 24))
+                    // El lote puede tener edad_dias_manual, ajustar
+                    const edadEnPesaje = (loteDetalle.edad_dias_manual || 0) + diasDesdeinicio
+                    return Math.abs(edadEnPesaje - punto.dia) <= 3
+                  })
+                  if (pesajeMatch) entry.peso_real = pesajeMatch.peso_promedio
+                }
+                return entry
+              })
+
+              // Agregar punto actual si no coincide con ningún punto de la curva
+              if (loteDetalle.peso_promedio_actual > 0 && edadLote >= 43) {
+                const yaExiste = datosGrafica.some(d => d.peso_real)
+                if (!yaExiste) {
+                  // Encontrar el punto más cercano e insertar el peso real
+                  let closest = datosGrafica.reduce((prev, curr) =>
+                    Math.abs(curr.dia - edadLote) < Math.abs(prev.dia - edadLote) ? curr : prev
+                  )
+                  closest.peso_real = loteDetalle.peso_promedio_actual
+                }
+              }
+
+              return (
+                <ResponsiveContainer width="100%" height={320}>
+                  <AreaChart data={datosGrafica}>
+                    <defs>
+                      <linearGradient id="colorEsperado" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+                    <XAxis dataKey="semana" tick={{ fontSize: 10 }} stroke="#666" />
+                    <YAxis tick={{ fontSize: 11 }} stroke="#666" unit=" kg" domain={[0, 120]} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: '8px' }}
+                      formatter={(value, name) => {
+                        if (name === 'peso_esperado') return [`${value} kg`, 'Meta Plan']
+                        if (name === 'peso_real') return [`${value} kg`, 'Peso Real']
+                        return [value, name]
+                      }}
+                      labelFormatter={(label) => {
+                        const punto = datosGrafica.find(d => d.semana === label)
+                        return punto ? `${label} — Día ${punto.dia} (${punto.fase})` : label
+                      }}
+                    />
+                    <Legend />
+                    <Area
+                      type="monotone"
+                      dataKey="peso_esperado"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      strokeDasharray="6 3"
+                      fill="url(#colorEsperado)"
+                      dot={false}
+                      name="Meta Plan"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="peso_real"
+                      stroke="#22c55e"
+                      strokeWidth={3}
+                      dot={{ r: 6, fill: '#22c55e', stroke: '#fff', strokeWidth: 2 }}
+                      name="Peso Real"
+                      connectNulls
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )
+            })()}
           </div>
         </div>
 
