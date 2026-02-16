@@ -60,9 +60,9 @@ let ultimosDatosFlujo = {
 
 async function inicializarDatosFlujo() {
   try {
-    // Fecha de hoy en Colombia (UTC-5)
+    // Fecha de hoy en Colombia (UTC-5), almacenada como medianoche UTC
     const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-    const hoy = new Date(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate());
+    const hoy = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate()));
 
     const consumoHoy = await WaterConsumption.findOne({
       fecha: { $gte: hoy },
@@ -356,7 +356,7 @@ const hoy = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMont
       { 
         $set: {
           litros: volumenDiarioCalculado,
-          fecha: new Date()
+          fecha: hoy
         }
       },
       { upsert: true }
@@ -442,9 +442,9 @@ exports.obtenerDatosFlujo = async (req, res) => {
 exports.obtenerHistoricoAgua = async (req, res) => {
   try {
     const dias = parseInt(req.query.dias) || 7;
-// Usar hora de Colombia
+// Usar hora de Colombia (UTC-5), almacenada como medianoche UTC
 const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-const fechaLimite = new Date(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate() - dias);
+const fechaLimite = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate() - dias));
     
     const consumos = await WaterConsumption.find({
       fecha: { $gte: fechaLimite },

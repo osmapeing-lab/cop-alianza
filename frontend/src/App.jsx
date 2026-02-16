@@ -25,6 +25,27 @@ const LAT = 9.2397
 const LON = -75.8091
 
 // ═══════════════════════════════════════════════════════════════════════
+// TABLA REFERENCIA FINCA - Programa Alimentación Levante/Ceba
+// Inicio: 70 días, 30.2 kg
+// ═══════════════════════════════════════════════════════════════════════
+const TABLA_FINCA = [
+  { semana: 11, edad: 77,  peso: 35.1, ganancia_dia: 0.697, consumo_sem: 8.70,  consumo_dia: 1.243, consumo_acum: 8.70,   conversion: 1.785, etapa: 'levante' },
+  { semana: 12, edad: 84,  peso: 40.6, ganancia_dia: 0.789, consumo_sem: 9.70,  consumo_dia: 1.386, consumo_acum: 18.40,  conversion: 1.770, etapa: 'levante' },
+  { semana: 13, edad: 91,  peso: 46.5, ganancia_dia: 0.841, consumo_sem: 10.85, consumo_dia: 1.550, consumo_acum: 29.25,  conversion: 1.796, etapa: 'levante' },
+  { semana: 14, edad: 98,  peso: 52.6, ganancia_dia: 0.881, consumo_sem: 12.08, consumo_dia: 1.725, consumo_acum: 41.33,  conversion: 1.841, etapa: 'levante' },
+  { semana: 15, edad: 105, peso: 59.1, ganancia_dia: 0.920, consumo_sem: 13.48, consumo_dia: 1.925, consumo_acum: 54.81,  conversion: 1.897, etapa: 'levante' },
+  { semana: 16, edad: 112, peso: 65.8, ganancia_dia: 0.959, consumo_sem: 14.72, consumo_dia: 2.102, consumo_acum: 69.52,  conversion: 1.953, etapa: 'levante' },
+  { semana: 17, edad: 119, peso: 72.7, ganancia_dia: 0.986, consumo_sem: 15.74, consumo_dia: 2.248, consumo_acum: 85.26,  conversion: 2.006, etapa: 'levante' },
+  { semana: 18, edad: 126, peso: 79.9, ganancia_dia: 1.025, consumo_sem: 16.47, consumo_dia: 2.353, consumo_acum: 101.73, conversion: 2.048, etapa: 'levante' },
+  { semana: 19, edad: 133, peso: 87.1, ganancia_dia: 1.038, consumo_sem: 17.94, consumo_dia: 2.563, consumo_acum: 119.67, conversion: 2.101, etapa: 'engorde' },
+  { semana: 20, edad: 140, peso: 94.6, ganancia_dia: 1.065, consumo_sem: 19.56, consumo_dia: 2.795, consumo_acum: 139.24, conversion: 2.162, etapa: 'engorde' },
+  { semana: 21, edad: 147, peso: 102.1, ganancia_dia: 1.078, consumo_sem: 20.43, consumo_dia: 2.919, consumo_acum: 159.67, conversion: 2.219, etapa: 'engorde' },
+  { semana: 22, edad: 154, peso: 109.8, ganancia_dia: 1.091, consumo_sem: 21.26, consumo_dia: 3.038, consumo_acum: 180.93, conversion: 2.274, etapa: 'engorde' },
+  { semana: 23, edad: 161, peso: 117.4, ganancia_dia: 1.091, consumo_sem: 21.36, consumo_dia: 3.052, consumo_acum: 202.30, conversion: 2.319, etapa: 'engorde' },
+  { semana: 24, edad: 168, peso: 125.1, ganancia_dia: 1.091, consumo_sem: 21.66, consumo_dia: 3.095, consumo_acum: 223.96, conversion: 2.360, etapa: 'engorde' }
+]
+
+// ═══════════════════════════════════════════════════════════════════════
 // ICONOS SVG
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -975,6 +996,7 @@ const [loteDetalle, setLoteDetalle] = useState(null)
 const [alimentacionLote, setAlimentacionLote] = useState([])
 const [graficaEvolucionLote, setGraficaEvolucionLote] = useState([])
 const [mostrarModalAlimentacion, setMostrarModalAlimentacion] = useState(false)
+const [mostrarTablaFinca, setMostrarTablaFinca] = useState(false)
 const [nuevaAlimentacion, setNuevaAlimentacion] = useState({
   tipo_alimento: 'engorde',
   cantidad_kg: '',
@@ -1884,21 +1906,17 @@ const cargarHistoricoAgua = async (periodo) => {
       const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
       
       const datosFormateados = res.data.map(d => {
-        // La fecha viene como "2026-02-14" en UTC
-        // Pero en Colombia (UTC-5) todavía es el día anterior si se guardó después de las 7pm
+        // La fecha ya viene correcta como "2026-02-14" (fecha Colombia en UTC midnight)
         const partes = d.fecha.split('-')
         const año = parseInt(partes[0])
-        const mes = parseInt(partes[1]) - 1 // Mes base 0
+        const mes = parseInt(partes[1]) - 1
         const dia = parseInt(partes[2])
-        
-        // Crear fecha y restar 1 día para ajustar a Colombia
-        const fechaUTC = new Date(año, mes, dia)
-        fechaUTC.setDate(fechaUTC.getDate() - 1) // Restar 1 día
-        
+        const fecha = new Date(año, mes, dia)
+
         return {
-          dia: `${meses[fechaUTC.getMonth()]} ${fechaUTC.getDate()}`,
+          dia: `${meses[fecha.getMonth()]} ${fecha.getDate()}`,
           litros: d.volumen_total || 0,
-          fechaOrden: fechaUTC.getTime()
+          fechaOrden: fecha.getTime()
         }
       })
       
@@ -2950,6 +2968,106 @@ const cargarDistribucionGastos = async () => {
             </div>
           )}
         </div>
+
+        {/* ═══ TABLA COMPARATIVA FINCA - Programa Alimentación ═══ */}
+        <div className="dashboard-section finca-section">
+          <div className="finca-header-row">
+            <h3><BarChart3 size={20} /> Programa Finca - Levante/Ceba</h3>
+            <button
+              className="btn-toggle-finca"
+              onClick={() => setMostrarTablaFinca(!mostrarTablaFinca)}
+            >
+              {mostrarTablaFinca ? 'Ocultar' : 'Ver Comparativa'}
+              <ChevronRight size={16} className={mostrarTablaFinca ? 'rotado' : ''} />
+            </button>
+          </div>
+
+          {/* Indicadores rápidos vs Finca */}
+          {(() => {
+            const edadLote = loteDetalle.edad_dias || 0
+            const semanaActual = Math.floor(edadLote / 7)
+            const fincaRef = TABLA_FINCA.find(f => f.semana === semanaActual) || TABLA_FINCA.find(f => f.edad <= edadLote && edadLote < f.edad + 7)
+            if (!fincaRef) return <p className="sin-datos">El lote no está en rango Finca (semana 11-24 / 77-168 días)</p>
+
+            const pesoReal = loteDetalle.peso_promedio_actual || 0
+            const diffPeso = pesoReal - fincaRef.peso
+            const convReal = parseFloat(loteDetalle.conversion_alimenticia) || 0
+            const diffConv = convReal - fincaRef.conversion
+            const consumoRealDia = loteDetalle.cantidad_cerdos > 0 && loteDetalle.alimento_total_kg > 0
+              ? (loteDetalle.alimento_total_kg / Math.max(edadLote - 70, 1)).toFixed(2)
+              : 0
+
+            return (
+              <div className="finca-indicadores">
+                <div className={`finca-indicador ${diffPeso >= 0 ? 'positivo' : 'negativo'}`}>
+                  <span className="finca-label">Peso vs Meta</span>
+                  <span className="finca-valor">{pesoReal.toFixed(1)} / {fincaRef.peso} kg</span>
+                  <span className="finca-diff">{diffPeso >= 0 ? '+' : ''}{diffPeso.toFixed(1)} kg</span>
+                </div>
+                <div className={`finca-indicador ${diffConv <= 0 ? 'positivo' : 'negativo'}`}>
+                  <span className="finca-label">Conversión vs Meta</span>
+                  <span className="finca-valor">{convReal || '—'} / {fincaRef.conversion}</span>
+                  <span className="finca-diff">{convReal ? ((diffConv >= 0 ? '+' : '') + diffConv.toFixed(3)) : '—'}</span>
+                </div>
+                <div className="finca-indicador info">
+                  <span className="finca-label">Semana</span>
+                  <span className="finca-valor">Sem {fincaRef.semana}</span>
+                  <span className="finca-diff">{fincaRef.etapa}</span>
+                </div>
+                <div className="finca-indicador info">
+                  <span className="finca-label">Consumo/día ref</span>
+                  <span className="finca-valor">{fincaRef.consumo_dia} kg</span>
+                  <span className="finca-diff">Real: {consumoRealDia} kg</span>
+                </div>
+              </div>
+            )
+          })()}
+
+          {mostrarTablaFinca && (
+            <div className="table-container tabla-finca-scroll">
+              <table className="tabla-finca">
+                <thead>
+                  <tr>
+                    <th>Etapa</th>
+                    <th>Sem</th>
+                    <th>Edad (días)</th>
+                    <th>Peso Meta (kg)</th>
+                    <th>Ganancia/día (kg)</th>
+                    <th>Consumo/sem (kg)</th>
+                    <th>Consumo/día (kg)</th>
+                    <th>Consumo Acum (kg)</th>
+                    <th>Conversión Acum</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {TABLA_FINCA.map(f => {
+                    const edadLote = loteDetalle.edad_dias || 0
+                    const esActual = f.edad <= edadLote && edadLote < f.edad + 7
+                    return (
+                      <tr key={f.semana} className={`${f.etapa} ${esActual ? 'semana-actual' : ''}`}>
+                        <td><span className={`etapa-badge ${f.etapa}`}>{f.etapa}</span></td>
+                        <td>{f.semana}</td>
+                        <td>{f.edad}</td>
+                        <td><strong>{f.peso}</strong></td>
+                        <td>{f.ganancia_dia}</td>
+                        <td>{f.consumo_sem}</td>
+                        <td>{f.consumo_dia}</td>
+                        <td>{f.consumo_acum}</td>
+                        <td>{f.conversion}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+              <div className="finca-notas">
+                <p><strong>Inicio programa:</strong> 70 días / 30.2 kg</p>
+                <p><strong>Ganancia promedio:</strong> 0.968 kg/día | <strong>Consumo promedio:</strong> 2.285 kg/día</p>
+                <p>Fuente: Finca S.A. — Programa Alimentación Línea Tecnificada Levante/Ceba</p>
+              </div>
+            </div>
+          )}
+        </div>
+
       </div>
     ) : (
       /* Vista de tarjetas de lotes */
