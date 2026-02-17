@@ -2752,19 +2752,30 @@ const cargarHistoricoPesos = async () => {
           TABLA_CRECIMIENTO.forEach(s => curvaEsperada.push({ semana: 10 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Crecimiento' }))
           TABLA_ENGORDE.forEach(s => curvaEsperada.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
 
-          // Agregar peso real de cada lote activo
+          // Agregar peso real usando pesajes históricos de cada lote activo
           const datosGrafica = curvaEsperada.map(punto => {
             const entry = { dia: punto.dia, semana: `Sem ${punto.semana}`, peso_esperado: punto.peso_esperado, fase: punto.fase }
-            lotes.filter(l => l.activo && l.peso_promedio_actual > 0).forEach(lote => {
-              const edadLote = lote.edad_dias || 0
-              if (Math.abs(edadLote - punto.dia) <= 3) {
-                entry.peso_real = lote.peso_promedio_actual
-              }
+            lotes.filter(l => l.activo).forEach(lote => {
+              const fechaInicio = lote.fecha_inicio ? new Date(lote.fecha_inicio) : null
+              if (!fechaInicio) return
+              const edadManual = lote.edad_dias_manual || 0
+              // Buscar pesaje que coincida con este punto de la curva
+              const pesajesLote = pesajes.filter(p => {
+                const loteId = p.lote?._id || p.lote
+                return String(loteId) === String(lote._id) && p.peso_promedio
+              })
+              const pesajeMatch = pesajesLote.find(p => {
+                const fechaPesaje = new Date(p.createdAt)
+                const diasDesdeInicio = Math.floor((fechaPesaje - fechaInicio) / (1000 * 60 * 60 * 24))
+                const edadEnPesaje = edadManual + diasDesdeInicio
+                return Math.abs(edadEnPesaje - punto.dia) <= 4
+              })
+              if (pesajeMatch) entry.peso_real = pesajeMatch.peso_promedio
             })
             return entry
           })
 
-          // Si ningún punto tiene peso_real, poner en el más cercano
+          // Fallback: si no hay ningún punto real, poner el peso actual en el más cercano
           const hayReal = datosGrafica.some(d => d.peso_real)
           if (!hayReal) {
             lotes.filter(l => l.activo && l.peso_promedio_actual > 0).forEach(lote => {
@@ -3090,33 +3101,36 @@ const cargarHistoricoPesos = async () => {
               TABLA_CRECIMIENTO.forEach(s => curvaEsperada.push({ semana: 10 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Crecimiento' }))
               TABLA_ENGORDE.forEach(s => curvaEsperada.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
 
-              // Datos reales de pesajes (del estado graficaEvolucionLote)
+              // Datos reales de pesajes
               const edadLote = loteDetalle.edad_dias || 0
               const fechaInicio = loteDetalle.fecha_inicio ? new Date(loteDetalle.fecha_inicio) : null
+              const edadManual = loteDetalle.edad_dias_manual || 0
+
+              // Usar pesajes globales del lote actual
+              const pesajesLote = pesajes.filter(p => {
+                const loteId = p.lote?._id || p.lote
+                return String(loteId) === String(loteDetalle._id) && p.peso_promedio
+              })
 
               // Construir datos combinados para la gráfica
               const datosGrafica = curvaEsperada.map(punto => {
                 const entry = { dia: punto.dia, semana: `Sem ${punto.semana}`, peso_esperado: punto.peso_esperado, fase: punto.fase }
-                // Si hay pesaje para este rango de días, agregar peso real
-                if (graficaEvolucionLote.length > 0 && fechaInicio) {
-                  const pesajeMatch = graficaEvolucionLote.find(p => {
-                    if (!p.peso_promedio) return false
-                    const fechaPesaje = new Date(p.fecha)
-                    const diasDesdeinicio = Math.floor((fechaPesaje - fechaInicio) / (1000 * 60 * 60 * 24))
-                    // El lote puede tener edad_dias_manual, ajustar
-                    const edadEnPesaje = (loteDetalle.edad_dias_manual || 0) + diasDesdeinicio
-                    return Math.abs(edadEnPesaje - punto.dia) <= 3
+                if (fechaInicio && pesajesLote.length > 0) {
+                  const pesajeMatch = pesajesLote.find(p => {
+                    const fechaPesaje = new Date(p.createdAt)
+                    const diasDesdeInicio = Math.floor((fechaPesaje - fechaInicio) / (1000 * 60 * 60 * 24))
+                    const edadEnPesaje = edadManual + diasDesdeInicio
+                    return Math.abs(edadEnPesaje - punto.dia) <= 4
                   })
                   if (pesajeMatch) entry.peso_real = pesajeMatch.peso_promedio
                 }
                 return entry
               })
 
-              // Agregar punto actual si no coincide con ningún punto de la curva
+              // Fallback: si no hay ningún punto real, poner peso actual en el más cercano
               if (loteDetalle.peso_promedio_actual > 0 && edadLote >= 43) {
                 const yaExiste = datosGrafica.some(d => d.peso_real)
                 if (!yaExiste) {
-                  // Encontrar el punto más cercano e insertar el peso real
                   let closest = datosGrafica.reduce((prev, curr) =>
                     Math.abs(curr.dia - edadLote) < Math.abs(prev.dia - edadLote) ? curr : prev
                   )
