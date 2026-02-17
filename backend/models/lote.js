@@ -146,6 +146,14 @@ loteSchema.virtual('edad_dias').get(function() {
   return Math.floor((Date.now() - this.fecha_inicio) / (1000 * 60 * 60 * 24));
 });
 
+// Etapa automática según edad
+loteSchema.virtual('etapa_automatica').get(function() {
+  const edad = this.edad_dias;
+  if (edad <= 42) return 'destete';
+  if (edad <= 120) return 'levante';
+  return 'engorde';
+});
+
 // Peso total del lote
 loteSchema.virtual('peso_total').get(function() {
   return (this.cantidad_cerdos || 0) * (this.peso_promedio_actual || 0);

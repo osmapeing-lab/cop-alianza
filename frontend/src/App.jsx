@@ -77,6 +77,13 @@ const FASES_PRODUCCION = [
   { nombre: 'Engorde',      edad_min: 121, edad_max: 180, peso_min: 60, peso_max: 110, ganancia_dia: '800-900 g', conversion: '2.1-2.4', tabla: TABLA_ENGORDE }
 ]
 
+// Determina la etapa automática del lote según su edad en días
+const getEtapaAutomatica = (edadDias) => {
+  if (edadDias <= 42) return 'destete'
+  if (edadDias <= 120) return 'levante'
+  return 'engorde'
+}
+
 // Función para encontrar la fase actual de un lote según su edad
 const getFaseActual = (edadDias) => {
   return FASES_PRODUCCION.find(f => edadDias >= f.edad_min && edadDias <= f.edad_max) || null
@@ -849,7 +856,7 @@ const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo }) => {
             <div key={t._id} className="tipo-card">
               <span className="tipo-nombre">{t._id}</span>
               <span className="tipo-cantidad">{t.cantidad}</span>
-              <span className="tipo-peso">~{t.peso_promedio?.toFixed(1) || 0} kg</span>
+              <span className="tipo-peso">~{t.peso_promedio?.toFixed(1) || 0} kg/cerdo</span>
             </div>
           ))}
         </div>
@@ -1052,21 +1059,13 @@ const PantallaMantenimiento = () => (
   const [nuevoLote, setNuevoLote] = useState({
     nombre: '',
     cantidad_cerdos: 0,
-    estado: 'engorde',
     peso_inicial_promedio: 0,
     notas: ''
   })
 const [loteDetalle, setLoteDetalle] = useState(null)
 const [alimentacionLote, setAlimentacionLote] = useState([])
 const [graficaEvolucionLote, setGraficaEvolucionLote] = useState([])
-const [mostrarModalAlimentacion, setMostrarModalAlimentacion] = useState(false)
 const [mostrarTablaFinca, setMostrarTablaFinca] = useState(false)
-const [nuevaAlimentacion, setNuevaAlimentacion] = useState({
-  tipo_alimento: 'engorde',
-  cantidad_kg: '',
-  precio_kg: '',
-  notas: ''
-})
   
   // Estados de pesajes
   const [pesajes, setPesajes] = useState([])
@@ -1683,7 +1682,7 @@ const verStreamCamara = (camara) => {
         headers: { Authorization: `Bearer ${token}` }
       })
       setMostrarModalLote(false)
-      setNuevoLote({ nombre: '', cantidad_cerdos: 0, estado: 'engorde', peso_inicial_promedio: 0, notas: '' })
+      setNuevoLote({ nombre: '', cantidad_cerdos: 0, peso_inicial_promedio: 0, notas: '' })
       cargarLotes()
     } catch (error) {
       alert('Error creando lote: ' + (error.response?.data?.mensaje || error.message))
@@ -1767,43 +1766,6 @@ const cargarGraficaEvolucion = async (id) => {
   } catch (error) {
     console.error('Error cargando gráfica evolución:', error)
     setGraficaEvolucionLote([])
-  }
-}
-
-const registrarAlimentacion = async () => {
-  try {
-    if (!nuevaAlimentacion.cantidad_kg || nuevaAlimentacion.cantidad_kg <= 0) {
-      alert('La cantidad debe ser mayor a 0')
-      return
-    }
-    if (!nuevaAlimentacion.precio_kg || nuevaAlimentacion.precio_kg <= 0) {
-      alert('El precio debe ser mayor a 0')
-      return
-    }
-    
-    await axios.post(`${API_URL}/api/lotes/alimentacion`, {
-      lote: loteDetalle._id,
-      tipo_alimento: nuevaAlimentacion.tipo_alimento,
-      cantidad_kg: nuevaAlimentacion.cantidad_kg,
-      precio_kg: nuevaAlimentacion.precio_kg,
-      notas: nuevaAlimentacion.notas
-    }, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    
-    alert('✓ Alimentación registrada y costo creado automáticamente')
-    setMostrarModalAlimentacion(false)
-    setNuevaAlimentacion({
-      tipo_alimento: 'engorde',
-      cantidad_kg: '',
-      precio_kg: '',
-      notas: ''
-    })
-    
-    // Recargar datos del lote
-    await verDetalleLote(loteDetalle._id)
-  } catch (error) {
-    alert('Error registrando alimentación: ' + (error.response?.data?.mensaje || error.message))
   }
 }
 
@@ -2629,11 +2591,11 @@ const cargarHistoricoPesos = async () => {
           </div>
           <div className="estado-info">
             <span className="estado-numero">
-              {lotes.filter(l => l.activo).length > 0 
+              {lotes.filter(l => l.activo).length > 0
                 ? (lotes.filter(l => l.activo).reduce((sum, l) => sum + (l.peso_promedio_actual || 0), 0) / lotes.filter(l => l.activo).length).toFixed(1)
                 : 0} kg
             </span>
-            <span className="estado-label">Peso Promedio</span>
+            <span className="estado-label">Promedio entre Lotes</span>
           </div>
         </div>
         <div className="estado-item">
@@ -2896,11 +2858,11 @@ const cargarHistoricoPesos = async () => {
               <div key={lote._id} className="lote-card-mini">
                 <div className="lote-mini-header">
                   <h4>{lote.nombre}</h4>
-                  <span className={`estado-lote ${lote.estado}`}>{lote.estado}</span>
+                  <span className={`estado-lote ${getEtapaAutomatica(lote.edad_dias || 0)}`}>{getEtapaAutomatica(lote.edad_dias || 0)}</span>
                 </div>
                 <div className="lote-info">
                   <span><PiggyBank size={14} /> {lote.cantidad_cerdos} cerdos</span>
-                  <span><Weight size={14} /> {lote.peso_promedio_actual || 0} kg prom.</span>
+                  <span><Weight size={14} /> {lote.peso_promedio_actual || 0} kg/cerdo</span>
                 </div>
                 <div className="lote-progreso">
                   <div className="progreso-label">Ganancia de peso</div>
@@ -2989,7 +2951,6 @@ const cargarHistoricoPesos = async () => {
           setNuevoLote({
             nombre: '',
             cantidad_cerdos: 0,
-            estado: 'engorde',
             peso_inicial_promedio: 0,
             fecha_nacimiento: '',
             edad_dias_manual: '',
@@ -3015,7 +2976,7 @@ const cargarHistoricoPesos = async () => {
         <div className="lote-detalle-header">
           <div className="lote-detalle-titulo">
             <h3>{loteDetalle.nombre}</h3>
-            <span className={`estado-lote ${loteDetalle.estado}`}>{loteDetalle.estado}</span>
+            <span className={`estado-lote ${getEtapaAutomatica(loteDetalle.edad_dias || 0)}`}>{getEtapaAutomatica(loteDetalle.edad_dias || 0)}</span>
           </div>
         </div>
 
@@ -3039,7 +3000,7 @@ const cargarHistoricoPesos = async () => {
             <Weight size={24} />
             <div className="stat-info">
               <span className="stat-valor">{loteDetalle.peso_promedio_actual?.toFixed(1) || 0} kg</span>
-              <span className="stat-label">Peso Promedio</span>
+              <span className="stat-label">Peso Prom. por Cerdo</span>
             </div>
           </div>
           <div className="lote-stat-card destacado">
@@ -3429,7 +3390,7 @@ const cargarHistoricoPesos = async () => {
             <div key={lote._id} className={`lote-card ${!lote.activo ? 'inactivo' : ''}`}>
               <div className="lote-header">
                 <h3>{lote.nombre}</h3>
-                <span className={`estado-lote ${lote.estado}`}>{lote.estado}</span>
+                <span className={`estado-lote ${getEtapaAutomatica(lote.edad_dias || 0)}`}>{getEtapaAutomatica(lote.edad_dias || 0)}</span>
               </div>
               <div className="lote-body">
                 <div className="lote-dato">
@@ -3441,15 +3402,15 @@ const cargarHistoricoPesos = async () => {
                   <strong>{lote.cantidad_cerdos} cerdos</strong>
                 </div>
                 <div className="lote-dato">
-                  <span>Peso Promedio</span>
+                  <span>Prom. por Cerdo</span>
                   <strong>{lote.peso_promedio_actual || 0} kg</strong>
                 </div>
                 <div className="lote-dato destacado">
-                  <span>Peso Total</span>
+                  <span>Peso Total Lote</span>
                   <strong>{((lote.cantidad_cerdos || 0) * (lote.peso_promedio_actual || 0)).toFixed(0)} kg</strong>
                 </div>
                 <div className="lote-dato">
-                  <span>Ganancia</span>
+                  <span>Ganancia/cerdo</span>
                   <strong>{((lote.peso_promedio_actual || 0) - (lote.peso_inicial_promedio || 0)).toFixed(1)} kg</strong>
                 </div>
                 <div className="lote-dato">
@@ -3468,7 +3429,6 @@ const cargarHistoricoPesos = async () => {
                       setNuevoLote({
                         nombre: lote.nombre,
                         cantidad_cerdos: lote.cantidad_cerdos,
-                        estado: lote.estado,
                         peso_inicial_promedio: lote.peso_inicial_promedio,
                         fecha_nacimiento: lote.fecha_nacimiento ? lote.fecha_nacimiento.split('T')[0] : '',
                         edad_dias_manual: lote.edad_dias_manual || '',
@@ -3524,19 +3484,6 @@ const cargarHistoricoPesos = async () => {
             </div>
             
             <div className="form-row">
-              <div className="form-group">
-                <label>Etapa/Estado</label>
-                <select
-                  value={nuevoLote.estado}
-                  onChange={e => setNuevoLote({ ...nuevoLote, estado: e.target.value })}
-                >
-                  <option value="destete">Destete</option>
-                  <option value="levante">Levante</option>
-                  <option value="engorde">Engorde</option>
-                  <option value="gestacion">Gestación</option>
-                  <option value="lactancia">Lactancia</option>
-                </select>
-              </div>
               <div className="form-group">
                 <label>Corral</label>
                 <input
@@ -3620,76 +3567,6 @@ const cargarHistoricoPesos = async () => {
       </div>
     )}
 
-    {/* Modal Registrar Alimentación */}
-    {mostrarModalAlimentacion && (
-      <div className="modal-overlay" onClick={() => setMostrarModalAlimentacion(false)}>
-        <div className="modal" onClick={e => e.stopPropagation()}>
-          <div className="modal-header">
-            <h3>Registrar Alimentación - {loteDetalle?.nombre}</h3>
-            <button className="btn-cerrar" onClick={() => setMostrarModalAlimentacion(false)}>&times;</button>
-          </div>
-          <div className="modal-body">
-            <div className="form-group">
-              <label>Tipo de Alimento</label>
-              <select
-                value={nuevaAlimentacion.tipo_alimento}
-                onChange={e => setNuevaAlimentacion({ ...nuevaAlimentacion, tipo_alimento: e.target.value })}
-              >
-                <option value="iniciador">Iniciador</option>
-                <option value="levante">Levante</option>
-                <option value="engorde">Engorde</option>
-                <option value="gestacion">Gestación</option>
-                <option value="lactancia">Lactancia</option>
-                <option value="otro">Otro</option>
-              </select>
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Cantidad (kg) *</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={nuevaAlimentacion.cantidad_kg}
-                  onChange={e => setNuevaAlimentacion({ ...nuevaAlimentacion, cantidad_kg: numVal(e.target.value, true) })}
-                />
-              </div>
-              <div className="form-group">
-                <label>Precio por kg *</label>
-                <input
-                  type="number"
-                  value={nuevaAlimentacion.precio_kg}
-                  onChange={e => setNuevaAlimentacion({ ...nuevaAlimentacion, precio_kg: numVal(e.target.value) })}
-                />
-              </div>
-            </div>
-            <div className="form-group">
-              <label>Total (calculado)</label>
-              <input
-                type="text"
-                value={formatearDinero((nuevaAlimentacion.cantidad_kg || 0) * (nuevaAlimentacion.precio_kg || 0))}
-                disabled
-              />
-              <small>Este costo se registrará automáticamente en Contabilidad</small>
-            </div>
-            <div className="form-group">
-              <label>Notas (opcional)</label>
-              <input
-                type="text"
-                value={nuevaAlimentacion.notas}
-                onChange={e => setNuevaAlimentacion({ ...nuevaAlimentacion, notas: e.target.value })}
-                placeholder="Observaciones..."
-              />
-            </div>
-          </div>
-          <div className="modal-footer">
-            <button className="btn-secondary" onClick={() => setMostrarModalAlimentacion(false)}>Cancelar</button>
-            <button className="btn-primary" onClick={registrarAlimentacion}>
-              Registrar Alimentación
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
   </div>
 )}
 {/* ════════════════════════════════════════════════════════════════ */}
@@ -3873,7 +3750,7 @@ const cargarHistoricoPesos = async () => {
                   <strong>{ultimoPeso ? `${ultimoPeso.peso} kg` : '--'}</strong>
                 </div>
                 <div className="stat-card">
-                  <span>Promedio General</span>
+                  <span>Prom. por Pesaje</span>
                   <strong>
                     {pesajes.length > 0 
                       ? (pesajes.reduce((sum, p) => sum + (p.peso_promedio || p.peso), 0) / pesajes.length).toFixed(1) 
@@ -3891,7 +3768,7 @@ const cargarHistoricoPesos = async () => {
                       <th>Lote</th>
                       <th>Peso Total</th>
                       <th>Cerdos Pesados</th>
-                      <th>Peso Promedio</th>
+                      <th>Prom./Cerdo</th>
                       <th>Notas</th>
                       <th>Acciones</th>
                     </tr>
@@ -3961,7 +3838,7 @@ const cargarHistoricoPesos = async () => {
                         />
                       </div>
                       <div className="form-group">
-                        <label>Peso Promedio (calculado)</label>
+                        <label>Prom. por Cerdo (calculado)</label>
                         <input
                           type="text"
                           value={nuevoPesaje.cantidad_cerdos_pesados > 0 ? (nuevoPesaje.peso / nuevoPesaje.cantidad_cerdos_pesados).toFixed(2) + ' kg' : '0 kg'}
@@ -4574,7 +4451,7 @@ const cargarHistoricoPesos = async () => {
                       <strong>{loteSeleccionado.cantidad_cerdos}</strong>
                     </div>
                     <div className="detalle-item">
-                      <span>Peso Promedio Actual</span>
+                      <span>Peso Prom. por Cerdo</span>
                       <strong>{loteSeleccionado.peso_promedio_actual || 0} kg</strong>
                     </div>
                     <div className="detalle-item">
