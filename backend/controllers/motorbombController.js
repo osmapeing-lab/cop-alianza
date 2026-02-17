@@ -21,8 +21,8 @@ exports.toggleMotorbomb = async (req, res) => {
     // Registrar alerta de cambio de estado
     const hora = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', hour12: true });
     const alerta = new Alert({
-      tipo: motorbomb.estado ? 'info' : 'info',
-      mensaje: `Bomba "${motorbomb.nombre}" ${motorbomb.estado ? 'ENCENDIDA' : 'APAGADA'} manualmente a las ${hora}`
+      tipo: 'info',
+      mensaje: `Bomba "${motorbomb.nombre}" ${!motorbomb.estado ? 'ENCENDIDA' : 'APAGADA'} manualmente a las ${hora}`
     });
     await alerta.save();
 

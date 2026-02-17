@@ -33,7 +33,7 @@ exports.verificarUmbrales = async (temperatura, humedad) => {
     alerta = { tipo: 'temperatura_alta', mensaje: `Temperatura ${temperatura}°C supera umbral ${config.umbral_temp_max}°C` };
     
     if (config.bomba_automatica) {
-      await Motorbomb.updateMany({}, { estado: true, fecha_cambio: Date.now() });
+      await Motorbomb.updateMany({ conectado: true }, { estado: false, fecha_cambio: Date.now() });
     }
   }
 

@@ -2603,10 +2603,10 @@ const cargarHistoricoPesos = async () => {
         </div>
         <div className="estado-item">
           <div className="estado-icono">
-            {bombas.filter(b => b.estado).length > 0 ? <Power size={32} className="icono-verde" /> : <PowerOff size={32} className="icono-gris" />}
+            {bombas.filter(b => !b.estado).length > 0 ? <Power size={32} className="icono-verde" /> : <PowerOff size={32} className="icono-gris" />}
           </div>
           <div className="estado-info">
-            <span className="estado-numero">{bombas.filter(b => b.estado).length}/{bombas.length}</span>
+            <span className="estado-numero">{bombas.filter(b => !b.estado).length}/{bombas.length}</span>
             <span className="estado-label">Bombas Activas</span>
           </div>
         </div>

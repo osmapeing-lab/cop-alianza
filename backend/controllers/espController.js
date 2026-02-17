@@ -148,8 +148,8 @@ exports.recibirRiego = async (req, res) => {
         await alerta.save();
         
         if (config.bomba_automatica) {
-          await Motorbomb.updateMany({ conectada: true }, { estado: true });
-          console.log('[ALERTA] Temperatura critica - Bombas activadas');
+          await Motorbomb.updateMany({ conectado: true }, { estado: false, fecha_cambio: Date.now() });
+          console.log('[ALERTA] Temperatura critica - Bombas activadas (estado=false=ON)');
         }
       } else if (temperatura >= config.umbral_temp_max) {
         const alerta = new Alert({
