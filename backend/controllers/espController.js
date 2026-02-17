@@ -410,6 +410,41 @@ const hoy = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMont
   }
 };
 // ═══════════════════════════════════════════════════════════════════════
+// CORREGIR CONSUMO DIARIO MANUALMENTE
+// PUT /api/esp/flujo/corregir
+// ═══════════════════════════════════════════════════════════════════════
+
+exports.corregirConsumo = async (req, res) => {
+  try {
+    const { litros } = req.body;
+    if (litros === undefined || litros < 0) {
+      return res.status(400).json({ mensaje: 'Litros requerido y >= 0' });
+    }
+
+    const ahoraCol = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+    const hoy = new Date(Date.UTC(ahoraCol.getFullYear(), ahoraCol.getMonth(), ahoraCol.getDate()));
+
+    const result = await WaterConsumption.findOneAndUpdate(
+      { fecha: { $gte: hoy }, tipo: 'diario' },
+      { $set: { litros, fecha: hoy } },
+      { upsert: true, new: true }
+    );
+
+    // Actualizar cache en memoria para que no se pierda
+    ultimosDatosFlujo.volumen_diario = litros;
+    ultimosDatosFlujo.fecha_inicio_dia = hoy;
+    // Forzar recalibración en la próxima lectura ESP
+    ultimosDatosFlujo.volumen_inicio_dia = null;
+
+    console.log('[FLUJO] Consumo corregido manualmente a', litros, 'L');
+
+    res.json({ ok: true, litros: result.litros, fecha: result.fecha });
+  } catch (error) {
+    res.status(400).json({ mensaje: error.message });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
 // OBTENER DATOS DE FLUJO
 // GET /api/esp/flujo
 // ═══════════════════════════════════════════════════════════════════════

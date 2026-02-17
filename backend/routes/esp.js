@@ -7,12 +7,13 @@
 const express = require('express');
 const router = express.Router();
 
-const { 
+const {
   recibirRiego,
   obtenerDatosPorqueriza,
   obtenerHistoricoTemperatura,
   recibirFlujo,
   obtenerDatosFlujo,
+  corregirConsumo,
   obtenerHistoricoAgua,
   recibirPeso,
   recibirPesoLive,        // ✅ NUEVO: Peso en tiempo real
@@ -35,6 +36,7 @@ router.get('/porqueriza/historico', obtenerHistoricoTemperatura);
 // ═══════════════════════════════════════════════════════════════════════
 router.post('/flujo', recibirFlujo);
 router.get('/flujo', obtenerDatosFlujo);
+router.put('/flujo/corregir', corregirConsumo);
 router.get('/flujo/historico', obtenerHistoricoAgua);
 
 // ═══════════════════════════════════════════════════════════════════════
