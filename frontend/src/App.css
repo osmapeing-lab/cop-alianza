@@ -369,7 +369,7 @@ body {
 }
 
 .btn-menu {
-  display: none;
+  display: flex;
   flex-direction: column;
   gap: 4px;
   background: none;
@@ -464,6 +464,16 @@ body {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  transition: transform 0.3s ease, width 0.3s ease;
+  z-index: 100;
+}
+
+.sidebar.colapsado {
+  transform: translateX(-100%);
+}
+
+.sidebar-overlay {
+  display: none;
 }
 
 .sidebar nav {
@@ -557,6 +567,11 @@ body {
   padding: 24px;
   background: var(--gray-100);
   min-height: calc(100vh - 60px);
+  transition: margin-left 0.3s ease;
+}
+
+.content.sidebar-colapsado {
+  margin-left: 0;
 }
 
 .page-header {
@@ -1655,21 +1670,23 @@ table td.sin-datos {
    ═══════════════════════════════════════════════════════════════════════ */
 
 @media (max-width: 1024px) {
-  .sidebar {
-    transform: translateX(-100%);
-    transition: transform 0.3s;
-  }
-  
-  .sidebar.abierto {
-    transform: translateX(0);
-  }
-  
   .content {
-    margin-left: 0;
+    margin-left: 0 !important;
   }
-  
-  .btn-menu {
-    display: flex;
+
+  .sidebar.abierto {
+    box-shadow: 4px 0 20px rgba(0,0,0,0.3);
+  }
+
+  .sidebar-overlay {
+    display: block;
+    position: fixed;
+    top: 60px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 99;
   }
 }
 @media (max-width: 768px) {

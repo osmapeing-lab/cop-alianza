@@ -1060,7 +1060,7 @@ const PantallaMantenimiento = () => (
   
   // Estados de navegación
   const [pagina, setPagina] = useState('dashboard')
-  const [menuAbierto, setMenuAbierto] = useState(false)
+  const [menuAbierto, setMenuAbierto] = useState(window.innerWidth > 1024)
   
   // Estados de datos
   const [clima, setClima] = useState({ temp: null, humedad: null })
@@ -2385,8 +2385,10 @@ const cargarHistoricoPesos = async () => {
 </header>
 
       <div className="main-container">
+        {/* Overlay para cerrar sidebar en móvil */}
+        {menuAbierto && <div className="sidebar-overlay" onClick={() => setMenuAbierto(false)} />}
         {/* Sidebar */}
-        <aside className={`sidebar ${menuAbierto ? 'abierto' : ''}`}>
+        <aside className={`sidebar ${menuAbierto ? 'abierto' : 'colapsado'}`}>
           <nav>
             <button 
               className={`nav-item ${pagina === 'dashboard' ? 'activo' : ''}`}
@@ -2497,7 +2499,7 @@ const cargarHistoricoPesos = async () => {
         </aside>
 
         {/* Contenido principal */}
-        <main className="content">
+        <main className={`content ${!menuAbierto ? 'sidebar-colapsado' : ''}`}>
          {/* ════════════════════════════════════════════════════════════════ */}
 {/* PÁGINA: DASHBOARD */}
 {/* ════════════════════════════════════════════════════════════════ */}
