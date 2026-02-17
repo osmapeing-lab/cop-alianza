@@ -2584,16 +2584,18 @@ const cargarHistoricoPesos = async () => {
         </div>
       </div>
 
-      {/* Último peso */}
+      {/* Peso Total Lotes */}
       <div className="card">
         <div className="card-header">
           <Weight size={20} />
-          <h3>Último Pesaje</h3>
+          <h3>Peso Total Granja</h3>
         </div>
         <div className="card-body">
-          <div className="dato-principal">{ultimoPeso ? `${ultimoPeso.peso} kg` : '--'}</div>
+          <div className="dato-principal">
+            {lotes.filter(l => l.activo).reduce((sum, l) => sum + ((l.peso_promedio_actual || 0) * (l.cantidad_cerdos || 0)), 0).toFixed(1)} kg
+          </div>
           <div className="dato-secundario">
-            {ultimoPeso?.lote?.nombre || 'Sin lote'}
+            {lotes.filter(l => l.activo).length} lotes activos — {lotes.filter(l => l.activo).reduce((sum, l) => sum + (l.cantidad_cerdos || 0), 0)} cerdos
           </div>
         </div>
       </div>
@@ -2777,43 +2779,74 @@ const cargarHistoricoPesos = async () => {
 </div>
     </div>
 
-    {/* Gráfica de Evolución de Peso - estilo bolsa */}
+    {/* Gráfica Peso Real vs Plan de Producción - Dashboard */}
     <div className="dashboard-section grafica-section grafica-full">
-      <h3><TrendingUp size={20} /> Evolución de Peso por Lote</h3>
+      <h3><TrendingUp size={20} /> Peso Real vs Plan de Producción</h3>
       <div className="grafica-container">
-        <ResponsiveContainer width="100%" height={300}>
-          <AreaChart data={historicoPesos}>
-            <defs>
-              {lotes.filter(l => l.activo).slice(0, 5).map((lote, i) => (
-                <linearGradient key={lote._id} id={`gradPeso${i}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2'][i]} stopOpacity={0.4}/>
-                  <stop offset="95%" stopColor={['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2'][i]} stopOpacity={0.02}/>
-                </linearGradient>
-              ))}
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="fecha" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" />
-            <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" unit=" kg" />
-            <Tooltip
-              contentStyle={{ backgroundColor: 'rgba(255,255,255,0.96)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)', backdropFilter: 'blur(8px)' }}
-              formatter={(value) => [`${value} kg`, '']}
-            />
-            <Legend />
-            {lotes.filter(l => l.activo).slice(0, 5).map((lote, i) => (
-              <Area
-                key={lote._id}
-                type="monotone"
-                dataKey={lote.nombre}
-                stroke={['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2'][i]}
-                strokeWidth={2.5}
-                fillOpacity={1}
-                fill={`url(#gradPeso${i})`}
-                dot={{ r: 3, fill: '#fff', stroke: ['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2'][i], strokeWidth: 2 }}
-                activeDot={{ r: 6, fill: ['#2d6a4f', '#40916c', '#52b788', '#74c69d', '#95d5b2'][i], stroke: '#fff', strokeWidth: 2 }}
-              />
-            ))}
-          </AreaChart>
-        </ResponsiveContainer>
+        {(() => {
+          const curvaEsperada = []
+          curvaEsperada.push({ semana: 6, dia: 43, peso_esperado: 12, fase: 'Inicio' })
+          TABLA_INICIO.forEach(s => curvaEsperada.push({ semana: 6 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Inicio' }))
+          TABLA_CRECIMIENTO.forEach(s => curvaEsperada.push({ semana: 10 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Crecimiento' }))
+          TABLA_ENGORDE.forEach(s => curvaEsperada.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
+
+          // Agregar peso real de cada lote activo
+          const datosGrafica = curvaEsperada.map(punto => {
+            const entry = { dia: punto.dia, semana: `Sem ${punto.semana}`, peso_esperado: punto.peso_esperado, fase: punto.fase }
+            lotes.filter(l => l.activo && l.peso_promedio_actual > 0).forEach(lote => {
+              const edadLote = lote.edad_dias || 0
+              if (Math.abs(edadLote - punto.dia) <= 3) {
+                entry.peso_real = lote.peso_promedio_actual
+              }
+            })
+            return entry
+          })
+
+          // Si ningún punto tiene peso_real, poner en el más cercano
+          const hayReal = datosGrafica.some(d => d.peso_real)
+          if (!hayReal) {
+            lotes.filter(l => l.activo && l.peso_promedio_actual > 0).forEach(lote => {
+              const edadLote = lote.edad_dias || 0
+              if (edadLote >= 43) {
+                const closest = datosGrafica.reduce((prev, curr) =>
+                  Math.abs(curr.dia - edadLote) < Math.abs(prev.dia - edadLote) ? curr : prev
+                )
+                closest.peso_real = lote.peso_promedio_actual
+              }
+            })
+          }
+
+          return (
+            <ResponsiveContainer width="100%" height={300}>
+              <AreaChart data={datosGrafica}>
+                <defs>
+                  <linearGradient id="gradMetaDash" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                <XAxis dataKey="semana" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" />
+                <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" unit=" kg" domain={[0, 120]} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: 'rgba(255,255,255,0.96)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}
+                  formatter={(value, name) => {
+                    if (name === 'peso_esperado') return [`${value} kg`, 'Meta Plan']
+                    if (name === 'peso_real') return [`${value} kg`, 'Peso Real']
+                    return [value, name]
+                  }}
+                  labelFormatter={(label) => {
+                    const p = datosGrafica.find(d => d.semana === label)
+                    return p ? `${label} — Día ${p.dia} (${p.fase})` : label
+                  }}
+                />
+                <Legend />
+                <Area type="monotone" dataKey="peso_esperado" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6 3" fill="url(#gradMetaDash)" dot={false} name="Meta Plan" />
+                <Line type="monotone" dataKey="peso_real" stroke="#22c55e" strokeWidth={3} dot={{ r: 6, fill: '#22c55e', stroke: '#fff', strokeWidth: 2 }} name="Peso Real" connectNulls />
+              </AreaChart>
+            </ResponsiveContainer>
+          )
+        })()}
       </div>
     </div>
 
@@ -2984,11 +3017,6 @@ const cargarHistoricoPesos = async () => {
             <h3>{loteDetalle.nombre}</h3>
             <span className={`estado-lote ${loteDetalle.estado}`}>{loteDetalle.estado}</span>
           </div>
-          {loteDetalle.activo && (
-            <button className="btn-primary" onClick={() => setMostrarModalAlimentacion(true)}>
-              <Plus size={16} /> Registrar Alimentación
-            </button>
-          )}
         </div>
 
         {/* Tarjetas de datos calculados */}
@@ -3184,47 +3212,6 @@ const cargarHistoricoPesos = async () => {
               )
             })()}
           </div>
-        </div>
-
-        {/* Historial de Alimentación */}
-        <div className="dashboard-section">
-          <h3><Archive size={20} /> Historial de Alimentación</h3>
-          {alimentacionLote.length === 0 ? (
-            <p className="sin-datos">No hay registros de alimentación</p>
-          ) : (
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Fecha</th>
-                    <th>Tipo</th>
-                    <th>Cantidad</th>
-                    <th>Precio/kg</th>
-                    <th>Total</th>
-                    <th>Notas</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {alimentacionLote.map(a => (
-                    <tr key={a._id}>
-                      <td>{new Date(a.fecha).toLocaleDateString()}</td>
-                      <td><span className={`tipo-badge ${a.tipo_alimento}`}>{a.tipo_alimento}</span></td>
-                      <td><strong>{a.cantidad_kg} kg</strong></td>
-                      <td>{formatearDinero(a.precio_kg)}</td>
-                      <td><strong>{formatearDinero(a.total)}</strong></td>
-                      <td>{a.notas || '-'}</td>
-                      <td>
-                        <button className="btn-icon btn-danger" onClick={() => eliminarAlimentacion(a._id)}>
-                          <Trash2 size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
         </div>
 
         {/* ═══ TABLA COMPARATIVA FINCA - Programa Alimentación ═══ */}
