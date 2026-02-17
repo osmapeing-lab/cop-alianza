@@ -5,13 +5,15 @@ const {
   getPesajesPorLote,
   createPesaje,
   deletePesaje,
-  getEstadisticasPesajes
+  getEstadisticasPesajes,
+  insertarPesajesHistoricos
 } = require('../controllers/pesajeController');
 
 router.get('/', getPesajes);
 router.get('/estadisticas', getEstadisticasPesajes);
 router.get('/lote/:loteId', getPesajesPorLote);
 router.post('/', createPesaje);
+router.post('/historicos', insertarPesajesHistoricos);
 router.delete('/:id', deletePesaje);
 
 module.exports = router;

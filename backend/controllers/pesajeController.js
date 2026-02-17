@@ -55,6 +55,41 @@ exports.deletePesaje = async (req, res) => {
   }
 };
 
+// Insertar pesajes históricos con fecha específica (no dispara middleware)
+exports.insertarPesajesHistoricos = async (req, res) => {
+  try {
+    const { lote_id, pesajes, fecha } = req.body;
+    // pesajes = [{ peso, cantidad_cerdos_pesados }]
+    if (!lote_id || !pesajes || !fecha) {
+      return res.status(400).json({ mensaje: 'lote_id, pesajes[] y fecha requeridos' });
+    }
+
+    const docs = pesajes.map(p => ({
+      lote: lote_id,
+      peso: p.peso,
+      cantidad_cerdos_pesados: p.cantidad_cerdos_pesados || 1,
+      peso_promedio: p.peso / (p.cantidad_cerdos_pesados || 1),
+      unidad: 'kg',
+      sensor_id: 'manual',
+      validado: true,
+      notas: p.notas || 'Peso inicial',
+      createdAt: new Date(fecha),
+      updatedAt: new Date(fecha)
+    }));
+
+    // insertMany NO dispara pre/post save middlewares
+    const resultado = await Pesaje.insertMany(docs);
+
+    res.status(201).json({
+      ok: true,
+      insertados: resultado.length,
+      pesajes: resultado
+    });
+  } catch (error) {
+    res.status(400).json({ mensaje: error.message });
+  }
+};
+
 // Estadísticas de pesajes
 exports.getEstadisticasPesajes = async (req, res) => {
   try {
