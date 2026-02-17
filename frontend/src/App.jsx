@@ -1141,6 +1141,7 @@ const [estadisticasInventario, setEstadisticasInventario] = useState({})
 const [historicoTemperatura, setHistoricoTemperatura] = useState([])
 const [historicoAgua, setHistoricoAgua] = useState([])
 const [periodoAgua, setPeriodoAgua] = useState('semanal')
+const periodoAguaRef = useRef('semanal')
 const [historicoContable, setHistoricoContable] = useState([])
 const [historicoPesos, setHistoricoPesos] = useState([])
 
@@ -2029,7 +2030,7 @@ const cargarHistoricoTemperatura = async () => {
 }
 const cargarHistoricoAgua = async (periodo) => {
   try {
-    const periodoActual = periodo || periodoAgua
+    const periodoActual = periodo || periodoAguaRef.current
     let dias = 7
     if (periodoActual === 'diario') dias = 1
     if (periodoActual === 'mensual') dias = 30
@@ -2674,24 +2675,27 @@ const cargarHistoricoPesos = async () => {
         className={`periodo-btn ${periodoAgua === 'diario' ? 'activo' : ''}`}
         onClick={() => {
           setPeriodoAgua('diario')
+          periodoAguaRef.current = 'diario'
           cargarHistoricoAgua('diario')
         }}
       >
         Hoy
       </button>
-      <button 
+      <button
         className={`periodo-btn ${periodoAgua === 'semanal' ? 'activo' : ''}`}
         onClick={() => {
           setPeriodoAgua('semanal')
+          periodoAguaRef.current = 'semanal'
           cargarHistoricoAgua('semanal')
         }}
       >
         Semanal
       </button>
-      <button 
+      <button
         className={`periodo-btn ${periodoAgua === 'mensual' ? 'activo' : ''}`}
         onClick={() => {
           setPeriodoAgua('mensual')
+          periodoAguaRef.current = 'mensual'
           cargarHistoricoAgua('mensual')
         }}
       >
