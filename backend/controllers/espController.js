@@ -85,8 +85,8 @@ async function inicializarDatosFlujo() {
   }
 }
 
-// Ejecutar al cargar el módulo
-inicializarDatosFlujo();
+// Ejecutar al cargar el módulo - guardar promesa para esperar en requests
+let flujoInitPromise = inicializarDatosFlujo();
 
 let pesoEnTiempoReal = {
   peso: 0,
@@ -280,6 +280,12 @@ exports.obtenerHistoricoTemperatura = async (req, res) => {
 
 exports.recibirFlujo = async (req, res) => {
   try {
+    // Esperar inicialización antes de procesar cualquier lectura
+    if (flujoInitPromise) {
+      await flujoInitPromise;
+      flujoInitPromise = null;
+    }
+
     const { sensor_id, caudal_l_min, volumen_l, rssi } = req.body;
     
     const caudal = parseFloat(caudal_l_min) || 0;
@@ -451,6 +457,12 @@ exports.corregirConsumo = async (req, res) => {
 
 exports.obtenerDatosFlujo = async (req, res) => {
   try {
+    // Esperar inicialización
+    if (flujoInitPromise) {
+      await flujoInitPromise;
+      flujoInitPromise = null;
+    }
+
     // Buscar última lectura de flujo
     const ultimaLectura = await Reading.findOne({ tipo: 'flujo_agua' })
       .sort({ createdAt: -1 });
