@@ -46,7 +46,7 @@ let ultimosDatosFlujo = {
   caudal: 0,
   volumen_total: 0,
   volumen_diario: 0,
-  volumen_inicio_dia: 0,
+  volumen_inicio_dia: null,  // null = necesita recalibrar tras reinicio
   fecha_inicio_dia: null,
   ultima_lectura_guardada: null,
   sensor_id: null,
@@ -68,12 +68,16 @@ async function inicializarDatosFlujo() {
       fecha: { $gte: hoy },
       tipo: 'diario'
     });
-    
+
+    // SIEMPRE marcar fecha_inicio_dia como hoy para evitar reset falso
+    ultimosDatosFlujo.fecha_inicio_dia = hoy;
+
     if (consumoHoy) {
       ultimosDatosFlujo.volumen_diario = consumoHoy.litros;
-      ultimosDatosFlujo.fecha_inicio_dia = hoy;
-      console.log('[FLUJO] ✓ Datos recuperados del día:', consumoHoy.litros, 'L');
+      // volumen_inicio_dia queda null → se recalibrará con la primera lectura ESP
+      console.log('[FLUJO] ✓ Datos recuperados del día:', consumoHoy.litros, 'L (pendiente recalibrar base)');
     } else {
+      ultimosDatosFlujo.volumen_diario = 0;
       console.log('[FLUJO] Nuevo día sin registros previos');
     }
   } catch (error) {
@@ -293,19 +297,25 @@ exports.recibirFlujo = async (req, res) => {
     // ═══════════════════════════════════════════════════════════════════
     
     let volumenDiarioCalculado = 0;
-    
+
     // Verificar si es un nuevo día
     if (esNuevoDia(ultimosDatosFlujo.fecha_inicio_dia)) {
+      // Nuevo día: resetear base
       ultimosDatosFlujo.volumen_inicio_dia = volumen;
       ultimosDatosFlujo.fecha_inicio_dia = new Date();
       volumenDiarioCalculado = 0;
       console.log('[FLUJO] Nuevo día. Volumen inicial:', volumen, 'L');
-    } else if (volumen >= (ultimosDatosFlujo.volumen_inicio_dia || 0)) {
-      // Calcular diferencia solo si el volumen actual es mayor o igual
-      volumenDiarioCalculado = volumen - (ultimosDatosFlujo.volumen_inicio_dia || 0);
+    } else if (ultimosDatosFlujo.volumen_inicio_dia === null) {
+      // Servidor se reinició: recalibrar base usando lo ya acumulado en BD
+      // base = volumen_actual_ESP - lo_que_ya_llevamos_hoy
+      ultimosDatosFlujo.volumen_inicio_dia = volumen - (ultimosDatosFlujo.volumen_diario || 0);
+      volumenDiarioCalculado = ultimosDatosFlujo.volumen_diario || 0;
+      console.log('[FLUJO] Recalibrado tras reinicio. Base:', ultimosDatosFlujo.volumen_inicio_dia, 'L. Diario:', volumenDiarioCalculado, 'L');
+    } else if (volumen >= ultimosDatosFlujo.volumen_inicio_dia) {
+      // Operación normal: calcular diferencia
+      volumenDiarioCalculado = volumen - ultimosDatosFlujo.volumen_inicio_dia;
     } else {
-      // ESP se reinició - el nuevo volumen es menor que el inicial
-      // Acumular lo que teníamos + el nuevo volumen
+      // ESP se reinició: el volumen total bajó → acumular
       const volumenPrevio = ultimosDatosFlujo.volumen_diario || 0;
       ultimosDatosFlujo.volumen_inicio_dia = 0;
       volumenDiarioCalculado = volumenPrevio + volumen;
