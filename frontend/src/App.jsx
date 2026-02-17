@@ -2752,8 +2752,8 @@ const cargarHistoricoPesos = async () => {
           // Edad máxima de lotes activos
           const edadMax = Math.max(...lotes.filter(l => l.activo).map(l => l.edad_dias || 0), 50)
 
-          // Mapear pesajes de todos los lotes activos a su edad
-          const puntosPesaje = []
+          // Mapear pesajes de todos los lotes activos a su edad, agrupando por día
+          const pesajesPorDia = {}
           lotes.filter(l => l.activo).forEach(lote => {
             const fechaInicio = lote.fecha_inicio ? new Date(lote.fecha_inicio) : null
             if (!fechaInicio) return
@@ -2763,11 +2763,17 @@ const cargarHistoricoPesos = async () => {
               return String(loteId) === String(lote._id) && p.peso_promedio
             }).forEach(p => {
               const fechaPesaje = new Date(p.createdAt)
-              const diasDesdeInicio = Math.floor((fechaPesaje - fechaInicio) / (1000 * 60 * 60 * 24))
-              puntosPesaje.push({ dia: edadManual + diasDesdeInicio, peso: p.peso_promedio })
+              const diasDesdeInicio = Math.round((fechaPesaje - fechaInicio) / (1000 * 60 * 60 * 24))
+              const dia = edadManual + diasDesdeInicio
+              if (!pesajesPorDia[dia]) pesajesPorDia[dia] = []
+              pesajesPorDia[dia].push(p.peso_promedio)
             })
           })
-          puntosPesaje.sort((a, b) => a.dia - b.dia)
+          // Promediar pesajes del mismo día
+          const puntosPesaje = Object.entries(pesajesPorDia).map(([dia, pesos]) => ({
+            dia: parseInt(dia),
+            peso: Math.round((pesos.reduce((a, b) => a + b, 0) / pesos.length) * 100) / 100
+          })).sort((a, b) => a.dia - b.dia)
 
           // Curva esperada recortada hasta edad actual + 4 semanas
           const limDia = Math.min(edadMax + 28, 180)
@@ -2781,12 +2787,14 @@ const cargarHistoricoPesos = async () => {
           const pesoInicial = Math.max(...lotes.filter(l => l.activo).map(l => l.peso_inicial_promedio || 0), 0)
           let lastReal = pesoInicial > 0 ? pesoInicial : null
           const datosGrafica = curvaRecortada.map(punto => {
+            const pesajeEnDia = puntosPesaje.find(p => p.dia <= punto.dia && p.dia > (punto.dia - 7))
             puntosPesaje.forEach(p => { if (p.dia <= punto.dia) lastReal = p.peso })
             return {
               dia: punto.dia,
               semana: `Sem ${punto.semana}`,
               peso_esperado: punto.peso_esperado,
               peso_real: (punto.dia <= edadMax && lastReal !== null) ? lastReal : null,
+              tienePesaje: !!puntosPesaje.find(p => Math.abs(p.dia - punto.dia) <= 3),
               fase: punto.fase
             }
           })
@@ -2823,7 +2831,11 @@ const cargarHistoricoPesos = async () => {
                 />
                 <Legend />
                 <Area type="monotone" dataKey="peso_esperado" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6 3" fill="url(#gradMetaDash)" dot={false} name="Meta Plan" />
-                <Area type="monotone" dataKey="peso_real" stroke="#22c55e" strokeWidth={3} fill="url(#gradReal)" dot={{ r: 5, fill: '#22c55e', stroke: '#fff', strokeWidth: 2 }} name="Peso Real" connectNulls />
+                <Area type="monotone" dataKey="peso_real" stroke="#22c55e" strokeWidth={3} fill="url(#gradReal)" dot={(props) => {
+                  const { cx, cy, payload } = props
+                  if (!payload.peso_real || !payload.tienePesaje) return null
+                  return <circle cx={cx} cy={cy} r={5} fill="#22c55e" stroke="#fff" strokeWidth={2} />
+                }} name="Peso Real" connectNulls />
               </AreaChart>
             </ResponsiveContainer>
           )
@@ -3105,16 +3117,25 @@ const cargarHistoricoPesos = async () => {
               const fechaInicio = loteDetalle.fecha_inicio ? new Date(loteDetalle.fecha_inicio) : null
               const edadManual = loteDetalle.edad_dias_manual || 0
 
-              // Mapear pesajes a edad del cerdo
+              // Mapear pesajes a edad del cerdo, agrupando por día
               const pesajesLote = pesajes.filter(p => {
                 const loteId = p.lote?._id || p.lote
                 return String(loteId) === String(loteDetalle._id) && p.peso_promedio
               })
-              const puntosPesaje = fechaInicio ? pesajesLote.map(p => {
-                const fechaPesaje = new Date(p.createdAt)
-                const diasDesdeInicio = Math.floor((fechaPesaje - fechaInicio) / (1000 * 60 * 60 * 24))
-                return { dia: edadManual + diasDesdeInicio, peso: p.peso_promedio, fecha: p.createdAt }
-              }).sort((a, b) => a.dia - b.dia) : []
+              const pesajesPorDia = {}
+              if (fechaInicio) {
+                pesajesLote.forEach(p => {
+                  const fechaPesaje = new Date(p.createdAt)
+                  const diasDesdeInicio = Math.round((fechaPesaje - fechaInicio) / (1000 * 60 * 60 * 24))
+                  const dia = edadManual + diasDesdeInicio
+                  if (!pesajesPorDia[dia]) pesajesPorDia[dia] = []
+                  pesajesPorDia[dia].push(p.peso_promedio)
+                })
+              }
+              const puntosPesaje = Object.entries(pesajesPorDia).map(([dia, pesos]) => ({
+                dia: parseInt(dia),
+                peso: Math.round((pesos.reduce((a, b) => a + b, 0) / pesos.length) * 100) / 100
+              })).sort((a, b) => a.dia - b.dia)
 
               // Curva esperada recortada hasta edad actual + 4 semanas
               const limDia = Math.min(edadLote + 28, 180)
@@ -3133,6 +3154,7 @@ const cargarHistoricoPesos = async () => {
                   semana: `Sem ${punto.semana}`,
                   peso_esperado: punto.peso_esperado,
                   peso_real: (punto.dia <= edadLote && lastReal !== null) ? lastReal : null,
+                  tienePesaje: !!puntosPesaje.find(p => Math.abs(p.dia - punto.dia) <= 3),
                   fase: punto.fase
                 }
               })
@@ -3173,7 +3195,11 @@ const cargarHistoricoPesos = async () => {
                     />
                     <Legend />
                     <Area type="monotone" dataKey="peso_esperado" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6 3" fill="url(#gradMetaLote)" dot={false} name="Meta Plan" />
-                    <Area type="monotone" dataKey="peso_real" stroke="#22c55e" strokeWidth={3} fill="url(#gradRealLote)" dot={{ r: 5, fill: '#22c55e', stroke: '#fff', strokeWidth: 2 }} name="Peso Real" connectNulls />
+                    <Area type="monotone" dataKey="peso_real" stroke="#22c55e" strokeWidth={3} fill="url(#gradRealLote)" dot={(props) => {
+                      const { cx, cy, payload } = props
+                      if (!payload.peso_real || !payload.tienePesaje) return null
+                      return <circle cx={cx} cy={cy} r={5} fill="#22c55e" stroke="#fff" strokeWidth={2} />
+                    }} name="Peso Real" connectNulls />
                   </AreaChart>
                 </ResponsiveContainer>
               )
