@@ -98,6 +98,23 @@ const getRefSemana = (edadDias) => {
   return null
 }
 
+// Interpola el peso esperado para cualquier día específico
+const getPesoEsperadoDia = (dia) => {
+  for (const fase of FASES_PRODUCCION) {
+    for (let i = 0; i < fase.tabla.length; i++) {
+      const entry = fase.tabla[i]
+      if (dia >= entry.edad_inicio && dia <= entry.edad_fin) {
+        const pesoInicio = i === 0 ? fase.peso_min : fase.tabla[i - 1].peso_final
+        const progreso = (dia - entry.edad_inicio) / (entry.edad_fin - entry.edad_inicio)
+        return Math.round((pesoInicio + (entry.peso_final - pesoInicio) * progreso) * 10) / 10
+      }
+    }
+  }
+  if (dia < 43) return null
+  if (dia > 180) return 110
+  return null
+}
+
 // Calcula el consumo diario estimado y acumulado por cerdo según la edad
 const getConsumoEstimado = (edadDias, cantidadCerdos = 1) => {
   let consumoDiario = 0
@@ -1063,6 +1080,7 @@ const PantallaMantenimiento = () => (
     notas: ''
   })
 const [loteDetalle, setLoteDetalle] = useState(null)
+const [chartZoomDia, setChartZoomDia] = useState(null)
 const [alimentacionLote, setAlimentacionLote] = useState([])
 const [graficaEvolucionLote, setGraficaEvolucionLote] = useState([])
 const [mostrarTablaFinca, setMostrarTablaFinca] = useState(false)
@@ -2752,42 +2770,29 @@ const cargarHistoricoPesos = async () => {
           TABLA_CRECIMIENTO.forEach(s => curvaEsperada.push({ semana: 10 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Crecimiento' }))
           TABLA_ENGORDE.forEach(s => curvaEsperada.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
 
-          // Agregar peso real usando pesajes históricos de cada lote activo
+          // Mapear pesajes a edad para cada lote activo (carry-forward)
+          let lastReal = null
           const datosGrafica = curvaEsperada.map(punto => {
             const entry = { dia: punto.dia, semana: `Sem ${punto.semana}`, peso_esperado: punto.peso_esperado, fase: punto.fase }
             lotes.filter(l => l.activo).forEach(lote => {
               const fechaInicio = lote.fecha_inicio ? new Date(lote.fecha_inicio) : null
               if (!fechaInicio) return
               const edadManual = lote.edad_dias_manual || 0
-              // Buscar pesaje que coincida con este punto de la curva
+              const edadLote = lote.edad_dias || 0
               const pesajesLote = pesajes.filter(p => {
                 const loteId = p.lote?._id || p.lote
                 return String(loteId) === String(lote._id) && p.peso_promedio
-              })
-              const pesajeMatch = pesajesLote.find(p => {
+              }).map(p => {
                 const fechaPesaje = new Date(p.createdAt)
                 const diasDesdeInicio = Math.floor((fechaPesaje - fechaInicio) / (1000 * 60 * 60 * 24))
-                const edadEnPesaje = edadManual + diasDesdeInicio
-                return Math.abs(edadEnPesaje - punto.dia) <= 4
-              })
-              if (pesajeMatch) entry.peso_real = pesajeMatch.peso_promedio
+                return { dia: edadManual + diasDesdeInicio, peso: p.peso_promedio }
+              }).sort((a, b) => a.dia - b.dia)
+              // Carry-forward: usar último pesaje hasta este día
+              pesajesLote.forEach(p => { if (p.dia <= punto.dia) lastReal = p.peso })
+              if (punto.dia <= edadLote && lastReal !== null) entry.peso_real = lastReal
             })
             return entry
           })
-
-          // Fallback: si no hay ningún punto real, poner el peso actual en el más cercano
-          const hayReal = datosGrafica.some(d => d.peso_real)
-          if (!hayReal) {
-            lotes.filter(l => l.activo && l.peso_promedio_actual > 0).forEach(lote => {
-              const edadLote = lote.edad_dias || 0
-              if (edadLote >= 43) {
-                const closest = datosGrafica.reduce((prev, curr) =>
-                  Math.abs(curr.dia - edadLote) < Math.abs(prev.dia - edadLote) ? curr : prev
-                )
-                closest.peso_real = lote.peso_promedio_actual
-              }
-            })
-          }
 
           return (
             <ResponsiveContainer width="100%" height={300}>
@@ -2815,7 +2820,7 @@ const cargarHistoricoPesos = async () => {
                 />
                 <Legend />
                 <Area type="monotone" dataKey="peso_esperado" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6 3" fill="url(#gradMetaDash)" dot={false} name="Meta Plan" />
-                <Line type="monotone" dataKey="peso_real" stroke="#22c55e" strokeWidth={3} dot={{ r: 6, fill: '#22c55e', stroke: '#fff', strokeWidth: 2 }} name="Peso Real" connectNulls />
+                <Line type="stepAfter" dataKey="peso_real" stroke="#22c55e" strokeWidth={3} dot={{ r: 4, fill: '#22c55e', stroke: '#fff', strokeWidth: 2 }} name="Peso Real" connectNulls />
               </AreaChart>
             </ResponsiveContainer>
           )
@@ -3088,70 +3093,111 @@ const cargarHistoricoPesos = async () => {
           )}
         </div>
 
-        {/* Gráfica Comparativa: Peso Real vs Esperado */}
+        {/* Gráfica Comparativa: Peso Real vs Esperado (con zoom) */}
         <div className="dashboard-section grafica-section">
-          <h3><LineChartIcon size={20} /> Peso Real vs Plan de Producción</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <h3 style={{ margin: 0 }}><LineChartIcon size={20} /> Peso Real vs Plan de Producción</h3>
+            {chartZoomDia !== null && (
+              <button className="btn-secondary" style={{ padding: '4px 12px', fontSize: 12 }} onClick={() => setChartZoomDia(null)}>
+                ← Vista completa
+              </button>
+            )}
+          </div>
+          {chartZoomDia === null && <small style={{ color: '#94a3b8' }}>Clic en la gráfica para ver detalle diario</small>}
           <div className="grafica-container">
             {(() => {
-              // Generar curva esperada completa desde las tablas de producción
-              const curvaEsperada = []
-              // Punto inicial
-              curvaEsperada.push({ semana: 6, dia: 43, peso_esperado: 12, fase: 'Inicio' })
-              TABLA_INICIO.forEach(s => curvaEsperada.push({ semana: 6 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Inicio' }))
-              TABLA_CRECIMIENTO.forEach(s => curvaEsperada.push({ semana: 10 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Crecimiento' }))
-              TABLA_ENGORDE.forEach(s => curvaEsperada.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
-
-              // Datos reales de pesajes
               const edadLote = loteDetalle.edad_dias || 0
               const fechaInicio = loteDetalle.fecha_inicio ? new Date(loteDetalle.fecha_inicio) : null
               const edadManual = loteDetalle.edad_dias_manual || 0
 
-              // Usar pesajes globales del lote actual
+              // Mapear pesajes a edad del cerdo
               const pesajesLote = pesajes.filter(p => {
                 const loteId = p.lote?._id || p.lote
                 return String(loteId) === String(loteDetalle._id) && p.peso_promedio
               })
+              const puntosPesaje = fechaInicio ? pesajesLote.map(p => {
+                const fechaPesaje = new Date(p.createdAt)
+                const diasDesdeInicio = Math.floor((fechaPesaje - fechaInicio) / (1000 * 60 * 60 * 24))
+                return { dia: edadManual + diasDesdeInicio, peso: p.peso_promedio, fecha: p.createdAt }
+              }).sort((a, b) => a.dia - b.dia) : []
 
-              // Construir datos combinados para la gráfica
-              const datosGrafica = curvaEsperada.map(punto => {
-                const entry = { dia: punto.dia, semana: `Sem ${punto.semana}`, peso_esperado: punto.peso_esperado, fase: punto.fase }
-                if (fechaInicio && pesajesLote.length > 0) {
-                  const pesajeMatch = pesajesLote.find(p => {
-                    const fechaPesaje = new Date(p.createdAt)
-                    const diasDesdeInicio = Math.floor((fechaPesaje - fechaInicio) / (1000 * 60 * 60 * 24))
-                    const edadEnPesaje = edadManual + diasDesdeInicio
-                    return Math.abs(edadEnPesaje - punto.dia) <= 4
+              let datosGrafica = []
+
+              if (chartZoomDia !== null) {
+                // ══ VISTA ZOOM: diario ±10 días ══
+                const inicio = Math.max(43, chartZoomDia - 10)
+                const fin = Math.min(180, chartZoomDia + 10)
+                let lastReal = null
+                puntosPesaje.forEach(p => { if (p.dia <= inicio) lastReal = p.peso })
+
+                for (let dia = inicio; dia <= fin; dia++) {
+                  const pesaje = puntosPesaje.find(p => p.dia === dia)
+                  if (pesaje) lastReal = pesaje.peso
+                  datosGrafica.push({
+                    dia,
+                    semana: `Día ${dia}`,
+                    peso_esperado: getPesoEsperadoDia(dia),
+                    peso_real: (dia <= edadLote && lastReal !== null) ? lastReal : null,
+                    esPesaje: !!pesaje,
+                    fase: getFaseActual(dia)?.nombre || ''
                   })
-                  if (pesajeMatch) entry.peso_real = pesajeMatch.peso_promedio
                 }
-                return entry
-              })
+              } else {
+                // ══ VISTA COMPLETA: semanal con carry-forward ══
+                const curvaEsperada = []
+                curvaEsperada.push({ semana: 6, dia: 43, peso_esperado: 12, fase: 'Inicio' })
+                TABLA_INICIO.forEach(s => curvaEsperada.push({ semana: 6 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Inicio' }))
+                TABLA_CRECIMIENTO.forEach(s => curvaEsperada.push({ semana: 10 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Crecimiento' }))
+                TABLA_ENGORDE.forEach(s => curvaEsperada.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
 
-              // Fallback: si no hay ningún punto real, poner peso actual en el más cercano
-              if (loteDetalle.peso_promedio_actual > 0 && edadLote >= 43) {
-                const yaExiste = datosGrafica.some(d => d.peso_real)
-                if (!yaExiste) {
-                  let closest = datosGrafica.reduce((prev, curr) =>
-                    Math.abs(curr.dia - edadLote) < Math.abs(prev.dia - edadLote) ? curr : prev
-                  )
-                  closest.peso_real = loteDetalle.peso_promedio_actual
-                }
+                let lastReal = null
+                datosGrafica = curvaEsperada.map(punto => {
+                  // Carry-forward: actualizar con pesajes hasta este día
+                  puntosPesaje.forEach(p => { if (p.dia <= punto.dia) lastReal = p.peso })
+                  return {
+                    dia: punto.dia,
+                    semana: `Sem ${punto.semana}`,
+                    peso_esperado: punto.peso_esperado,
+                    peso_real: (punto.dia <= edadLote && lastReal !== null) ? lastReal : null,
+                    fase: punto.fase
+                  }
+                })
               }
 
               return (
                 <ResponsiveContainer width="100%" height={320}>
-                  <AreaChart data={datosGrafica}>
+                  <AreaChart
+                    data={datosGrafica}
+                    onClick={(data) => {
+                      if (chartZoomDia === null && data?.activePayload?.[0]) {
+                        setChartZoomDia(data.activePayload[0].payload.dia)
+                      }
+                    }}
+                    style={{ cursor: chartZoomDia === null ? 'zoom-in' : 'default' }}
+                  >
                     <defs>
                       <linearGradient id="colorEsperado" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
                         <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-                    <XAxis dataKey="semana" tick={{ fontSize: 10 }} stroke="#666" />
-                    <YAxis tick={{ fontSize: 11 }} stroke="#666" unit=" kg" domain={[0, 120]} />
+                    <CartesianGrid
+                      strokeDasharray={chartZoomDia !== null ? "1 2" : "3 3"}
+                      stroke={chartZoomDia !== null ? "#e8ecf0" : "#e0e0e0"}
+                      verticalPoints={chartZoomDia !== null ? undefined : undefined}
+                    />
+                    <XAxis
+                      dataKey="semana"
+                      tick={{ fontSize: chartZoomDia !== null ? 9 : 10 }}
+                      stroke="#666"
+                      interval={chartZoomDia !== null ? 0 : undefined}
+                      angle={chartZoomDia !== null ? -45 : 0}
+                      textAnchor={chartZoomDia !== null ? "end" : "middle"}
+                      height={chartZoomDia !== null ? 45 : 30}
+                    />
+                    <YAxis tick={{ fontSize: 11 }} stroke="#666" unit=" kg" domain={chartZoomDia !== null ? ['auto', 'auto'] : [0, 120]} />
                     <Tooltip
-                      contentStyle={{ backgroundColor: '#fff', border: '1px solid #e0e0e0', borderRadius: '8px' }}
+                      contentStyle={{ backgroundColor: 'rgba(255,255,255,0.97)', border: 'none', borderRadius: '10px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}
                       formatter={(value, name) => {
                         if (name === 'peso_esperado') return [`${value} kg`, 'Meta Plan']
                         if (name === 'peso_real') return [`${value} kg`, 'Peso Real']
@@ -3159,7 +3205,12 @@ const cargarHistoricoPesos = async () => {
                       }}
                       labelFormatter={(label) => {
                         const punto = datosGrafica.find(d => d.semana === label)
-                        return punto ? `${label} — Día ${punto.dia} (${punto.fase})` : label
+                        if (!punto) return label
+                        const pesaje = puntosPesaje.find(p => p.dia === punto.dia)
+                        let texto = `Día ${punto.dia}`
+                        if (punto.fase) texto += ` (${punto.fase})`
+                        if (pesaje) texto += ' — Pesaje registrado'
+                        return texto
                       }}
                     />
                     <Legend />
@@ -3174,11 +3225,19 @@ const cargarHistoricoPesos = async () => {
                       name="Meta Plan"
                     />
                     <Line
-                      type="monotone"
+                      type="stepAfter"
                       dataKey="peso_real"
                       stroke="#22c55e"
                       strokeWidth={3}
-                      dot={{ r: 6, fill: '#22c55e', stroke: '#fff', strokeWidth: 2 }}
+                      dot={(props) => {
+                        const { cx, cy, payload } = props
+                        if (!payload.peso_real) return null
+                        const pesaje = puntosPesaje.find(p => p.dia === payload.dia)
+                        if (pesaje || chartZoomDia !== null && payload.esPesaje) {
+                          return <circle cx={cx} cy={cy} r={6} fill="#22c55e" stroke="#fff" strokeWidth={2} />
+                        }
+                        return <circle cx={cx} cy={cy} r={2} fill="#22c55e" stroke="none" />
+                      }}
                       name="Peso Real"
                       connectNulls
                     />
