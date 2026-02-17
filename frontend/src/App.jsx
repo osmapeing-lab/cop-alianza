@@ -2777,8 +2777,9 @@ const cargarHistoricoPesos = async () => {
           TABLA_ENGORDE.forEach(s => curva.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
           const curvaRecortada = curva.filter(p => p.dia <= limDia)
 
-          // Construir datos con carry-forward
-          let lastReal = null
+          // Construir datos con carry-forward (iniciar con peso inicial)
+          const pesoInicial = Math.max(...lotes.filter(l => l.activo).map(l => l.peso_inicial_promedio || 0), 0)
+          let lastReal = pesoInicial > 0 ? pesoInicial : null
           const datosGrafica = curvaRecortada.map(punto => {
             puntosPesaje.forEach(p => { if (p.dia <= punto.dia) lastReal = p.peso })
             return {
@@ -3123,8 +3124,8 @@ const cargarHistoricoPesos = async () => {
               TABLA_ENGORDE.forEach(s => curvaEsperada.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
               const curvaRecortada = curvaEsperada.filter(p => p.dia <= limDia)
 
-              // Construir datos con carry-forward
-              let lastReal = null
+              // Construir datos con carry-forward (iniciar con peso inicial)
+              let lastReal = (loteDetalle.peso_inicial_promedio || 0) > 0 ? loteDetalle.peso_inicial_promedio : null
               const datosGrafica = curvaRecortada.map(punto => {
                 puntosPesaje.forEach(p => { if (p.dia <= punto.dia) lastReal = p.peso })
                 return {
