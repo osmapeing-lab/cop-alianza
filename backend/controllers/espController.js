@@ -69,8 +69,9 @@ async function inicializarDatosFlujo() {
       tipo: 'diario'
     });
 
-    // SIEMPRE marcar fecha_inicio_dia como hoy para evitar reset falso
-    ultimosDatosFlujo.fecha_inicio_dia = hoy;
+    // Usar new Date() (hora real UTC) para que esNuevoDia() compare correctamente
+    // NO usar hoy (midnight UTC) porque al convertir a Colombia queda en el día anterior
+    ultimosDatosFlujo.fecha_inicio_dia = new Date();
 
     if (consumoHoy) {
       ultimosDatosFlujo.volumen_diario = consumoHoy.litros;
@@ -438,7 +439,7 @@ exports.corregirConsumo = async (req, res) => {
 
     // Actualizar cache en memoria para que no se pierda
     ultimosDatosFlujo.volumen_diario = litros;
-    ultimosDatosFlujo.fecha_inicio_dia = hoy;
+    ultimosDatosFlujo.fecha_inicio_dia = new Date(); // Hora real, no midnight UTC
     // Forzar recalibración en la próxima lectura ESP
     ultimosDatosFlujo.volumen_inicio_dia = null;
 
