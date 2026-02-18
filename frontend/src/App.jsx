@@ -27,7 +27,12 @@ const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '6Ldn320sA
 // Helper: permite borrar, escribir decimales y editar inputs numéricos sin problemas
 const numVal = (v, dec = false) => {
   if (v === '' || v === '-') return ''
-  const n = dec ? parseFloat(v) : parseInt(v)
+  const clean = String(v).replace(',', '.')
+  if (dec) {
+    if (/^-?\d*\.?\d*$/.test(clean)) return clean
+    return ''
+  }
+  const n = parseInt(clean)
   return isNaN(n) ? '' : n
 }
 
@@ -1791,7 +1796,7 @@ const eliminarAlimentacion = async (id) => {
 
   const crearPesaje = async () => {
     try {
-      await axios.post(`${API_URL}/api/pesajes`, nuevoPesaje, {
+      await axios.post(`${API_URL}/api/pesajes`, { ...nuevoPesaje, peso: parseFloat(nuevoPesaje.peso) || 0 }, {
         headers: { Authorization: `Bearer ${token}` }
       })
       setMostrarModalPesaje(false)
@@ -3859,8 +3864,9 @@ const cargarHistoricoPesos = async () => {
                       <div className="form-group">
                         <label>Peso Total (kg)</label>
                         <input
-                          type="number"
-                          step="0.1"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.0"
                           value={nuevoPesaje.peso}
                           onChange={e => setNuevoPesaje({ ...nuevoPesaje, peso: numVal(e.target.value, true) })}
                         />

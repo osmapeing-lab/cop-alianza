@@ -89,6 +89,62 @@ async function inicializarDatosFlujo() {
 // Ejecutar al cargar el módulo - guardar promesa para esperar en requests
 let flujoInitPromise = inicializarDatosFlujo();
 
+// ═══════════════════════════════════════════════════════════════════════
+// CICLO AUTOMÁTICO DE BOMBAS (45s ON → OFF → 30min cooldown)
+// ═══════════════════════════════════════════════════════════════════════
+
+let cicloBomba = {
+  enCiclo: false,
+  ultimaActivacion: null,
+  timeoutApagado: null
+};
+
+const BOMBA_DURACION_MS = 45 * 1000;      // 45 segundos encendida
+const BOMBA_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutos entre activaciones
+
+async function activarCicloBomba() {
+  // Si ya hay un ciclo activo, no duplicar
+  if (cicloBomba.enCiclo) {
+    console.log('[BOMBA] Ciclo ya activo, ignorando');
+    return;
+  }
+
+  // Verificar cooldown de 30 minutos
+  const ahora = Date.now();
+  if (cicloBomba.ultimaActivacion && (ahora - cicloBomba.ultimaActivacion) < BOMBA_COOLDOWN_MS) {
+    const restanteMin = Math.round((BOMBA_COOLDOWN_MS - (ahora - cicloBomba.ultimaActivacion)) / 60000);
+    console.log(`[BOMBA] En cooldown, faltan ${restanteMin} min para siguiente ciclo`);
+    return;
+  }
+
+  cicloBomba.enCiclo = true;
+  cicloBomba.ultimaActivacion = ahora;
+
+  // Encender bombas (estado: false = ON para relé invertido)
+  await Motorbomb.updateMany({ conectado: true }, { estado: false, fecha_cambio: Date.now() });
+  console.log('[BOMBA] Ciclo iniciado - Bombas ON por 45 segundos');
+
+  // Registrar alerta
+  const hora = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', hour12: true });
+  const alerta = new Alert({
+    tipo: 'info',
+    mensaje: `Bombas activadas automáticamente por temperatura crítica (45s) a las ${hora}`
+  });
+  await alerta.save();
+
+  // Programar apagado automático después de 45 segundos
+  cicloBomba.timeoutApagado = setTimeout(async () => {
+    try {
+      await Motorbomb.updateMany({ conectado: true }, { estado: true, fecha_cambio: Date.now() });
+      cicloBomba.enCiclo = false;
+      console.log('[BOMBA] Ciclo completado - Bombas OFF. Cooldown 30 min');
+    } catch (err) {
+      console.error('[BOMBA] Error apagando bombas:', err);
+      cicloBomba.enCiclo = false;
+    }
+  }, BOMBA_DURACION_MS);
+}
+
 let pesoEnTiempoReal = {
   peso: 0,
   unidad: 'kg',
@@ -153,8 +209,7 @@ exports.recibirRiego = async (req, res) => {
         await alerta.save();
         
         if (config.bomba_automatica) {
-          await Motorbomb.updateMany({ conectado: true }, { estado: false, fecha_cambio: Date.now() });
-          console.log('[ALERTA] Temperatura critica - Bombas activadas (estado=false=ON)');
+          await activarCicloBomba();
         }
       } else if (temperatura >= config.umbral_temp_max) {
         const alerta = new Alert({

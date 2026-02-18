@@ -31,10 +31,7 @@ exports.verificarUmbrales = async (temperatura, humedad) => {
 
   if (temperatura > config.umbral_temp_max) {
     alerta = { tipo: 'temperatura_alta', mensaje: `Temperatura ${temperatura}°C supera umbral ${config.umbral_temp_max}°C` };
-    
-    if (config.bomba_automatica) {
-      await Motorbomb.updateMany({ conectado: true }, { estado: false, fecha_cambio: Date.now() });
-    }
+    // Activación de bombas se maneja con ciclo automático en espController
   }
 
   if (temperatura < config.umbral_temp_min) {
