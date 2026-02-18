@@ -3057,27 +3057,27 @@ const cargarHistoricoPesos = async () => {
               <span className="stat-label">Ganancia Promedio</span>
             </div>
           </div>
-          <div className="lote-stat-card">
-            <BarChart3 size={24} />
-            <div className="stat-info">
-              <span className="stat-valor">{loteDetalle.conversion_alimenticia || '0.00'}</span>
-              <span className="stat-label">Conversión Alimenticia</span>
-            </div>
-          </div>
-          <div className="lote-stat-card">
-            <DollarSign size={24} />
-            <div className="stat-info">
-              <span className="stat-valor">{formatearDinero(loteDetalle.costo_por_cerdo || 0)}</span>
-              <span className="stat-label">Costo por Cerdo</span>
-            </div>
-          </div>
-          <div className="lote-stat-card">
-            <Wallet size={24} />
-            <div className="stat-info">
-              <span className="stat-valor">{formatearDinero(loteDetalle.costo_alimento_total || 0)}</span>
-              <span className="stat-label">Costo Total Alimento</span>
-            </div>
-          </div>
+          {(() => {
+            const consumo = getConsumoEstimado(loteDetalle.edad_dias || 0, loteDetalle.cantidad_cerdos || 1)
+            return (
+              <>
+                <div className="lote-stat-card">
+                  <BarChart3 size={24} />
+                  <div className="stat-info">
+                    <span className="stat-valor">{consumo.consumo_dia_total} kg/día</span>
+                    <span className="stat-label">Alimento Diario (plan)</span>
+                  </div>
+                </div>
+                <div className="lote-stat-card">
+                  <Activity size={24} />
+                  <div className="stat-info">
+                    <span className="stat-valor" style={{textTransform:'capitalize'}}>{loteDetalle.etapa_automatica || 'destete'}</span>
+                    <span className="stat-label">Etapa Actual</span>
+                  </div>
+                </div>
+              </>
+            )
+          })()}
         </div>
 
         {/* Info adicional */}
@@ -3086,20 +3086,16 @@ const cargarHistoricoPesos = async () => {
             <span className="info-label">Corral:</span>
             <span className="info-valor">{loteDetalle.corral || 'No asignado'}</span>
           </div>
-          <div className="info-item">
-            <span className="info-label">Alimento Registrado:</span>
-            <span className="info-valor">{loteDetalle.alimento_total_kg?.toFixed(1) || 0} kg</span>
-          </div>
           {(() => {
             const consumo = getConsumoEstimado(loteDetalle.edad_dias || 0, loteDetalle.cantidad_cerdos || 1)
             return consumo.consumo_acum_total > 0 ? (
               <>
                 <div className="info-item">
-                  <span className="info-label">Alimento Estimado (plan):</span>
+                  <span className="info-label">Alimento Acumulado (plan):</span>
                   <span className="info-valor">{consumo.consumo_acum_total.toFixed(1)} kg total ({consumo.consumo_acum_cerdo.toFixed(1)} kg/cerdo)</span>
                 </div>
                 <div className="info-item">
-                  <span className="info-label">Consumo Hoy (plan):</span>
+                  <span className="info-label">Consumo Diario (plan):</span>
                   <span className="info-valor">{consumo.consumo_dia_cerdo} kg/cerdo × {loteDetalle.cantidad_cerdos} = {consumo.consumo_dia_total} kg/día</span>
                 </div>
               </>
@@ -3155,6 +3151,8 @@ const cargarHistoricoPesos = async () => {
               const curvaRecortada = curvaEsperada.filter(p => p.dia <= limDia)
 
               // Construir datos con carry-forward (iniciar con peso inicial)
+              // Extender línea real hasta el siguiente punto de curva para que se vea la evolución
+              const limReal = edadLote + 7
               let lastReal = (loteDetalle.peso_inicial_promedio || 0) > 0 ? loteDetalle.peso_inicial_promedio : null
               const datosGrafica = curvaRecortada.map(punto => {
                 puntosPesaje.forEach(p => { if (p.dia <= punto.dia) lastReal = p.peso })
@@ -3162,7 +3160,7 @@ const cargarHistoricoPesos = async () => {
                   dia: punto.dia,
                   semana: `Sem ${punto.semana}`,
                   peso_esperado: punto.peso_esperado,
-                  peso_real: (punto.dia <= edadLote && lastReal !== null) ? lastReal : null,
+                  peso_real: (punto.dia <= limReal && lastReal !== null) ? lastReal : null,
                   tienePesaje: !!puntosPesaje.find(p => Math.abs(p.dia - punto.dia) <= 3),
                   fase: punto.fase
                 }
