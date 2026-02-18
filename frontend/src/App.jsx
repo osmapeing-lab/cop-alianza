@@ -85,8 +85,10 @@ const FASES_PRODUCCION = [
 // Determina la etapa automática del lote según su edad en días
 const getEtapaAutomatica = (edadDias) => {
   if (edadDias <= 42) return 'destete'
-  if (edadDias <= 120) return 'levante'
-  return 'engorde'
+  if (edadDias <= 70) return 'inicio'
+  if (edadDias <= 120) return 'crecimiento'
+  if (edadDias <= 180) return 'engorde'
+  return 'finalizado'
 }
 
 // Función para encontrar la fase actual de un lote según su edad
