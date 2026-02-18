@@ -899,6 +899,13 @@ body {
   color: var(--white);
 }
 
+.estado-lote.inicio {
+  background: #F59E0B;
+}
+
+.estado-lote.crecimiento {
+  background: #10B981;
+}
 .estado-lote.engorde {
   background: rgba(255,255,255,0.25);
 }
