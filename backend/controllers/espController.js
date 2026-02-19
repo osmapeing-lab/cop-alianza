@@ -158,26 +158,26 @@ async function activarCicloBomba() {
   cicloBomba.enCiclo = true;
   cicloBomba.ultimaActivacion = ahora;
 
-  // Encender bombas (estado: false = ON para relé invertido)
-  await Motorbomb.updateMany({ conectado: true }, { estado: false, fecha_cambio: Date.now() });
-  console.log('[BOMBA] Ciclo iniciado - Bombas ON por 45 segundos');
+  // Encender SOLO bomba de riego MB002 (estado: false = ON para relé invertido)
+  await Motorbomb.updateOne({ codigo_bomba: 'MB002' }, { estado: false, fecha_cambio: Date.now() });
+  console.log('[BOMBA] Ciclo iniciado - Bomba Riego (MB002) ON por 45 segundos');
 
   // Registrar alerta
   const hora = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', hour12: true });
   const alerta = new Alert({
     tipo: 'info',
-    mensaje: `Bombas activadas automáticamente por temperatura crítica (45s) a las ${hora}`
+    mensaje: `Bomba de riego activada automáticamente por temperatura crítica (45s) a las ${hora}`
   });
   await alerta.save();
 
   // Programar apagado automático después de 45 segundos
   cicloBomba.timeoutApagado = setTimeout(async () => {
     try {
-      await Motorbomb.updateMany({ conectado: true }, { estado: true, fecha_cambio: Date.now() });
+      await Motorbomb.updateOne({ codigo_bomba: 'MB002' }, { estado: true, fecha_cambio: Date.now() });
       cicloBomba.enCiclo = false;
-      console.log('[BOMBA] Ciclo completado - Bombas OFF. Cooldown 30 min');
+      console.log('[BOMBA] Ciclo completado - Bomba Riego (MB002) OFF. Cooldown 30 min');
     } catch (err) {
-      console.error('[BOMBA] Error apagando bombas:', err);
+      console.error('[BOMBA] Error apagando bomba:', err);
       cicloBomba.enCiclo = false;
     }
   }, BOMBA_DURACION_MS);
