@@ -385,6 +385,16 @@ exports.recibirFlujo = async (req, res) => {
     }
     
     volumenDiarioCalculado = Math.round(volumenDiarioCalculado * 100) / 100;
+
+    // ═══════════════════════════════════════════════════════════════════
+    // PROTECCIÓN: El consumo diario NUNCA puede disminuir
+    // Si el cálculo da menos que lo que ya teníamos, usar el valor anterior
+    // ═══════════════════════════════════════════════════════════════════
+    const volumenPrevioEnMemoria = ultimosDatosFlujo.volumen_diario || 0;
+    if (volumenDiarioCalculado < volumenPrevioEnMemoria && !esNuevoDia(ultimosDatosFlujo.fecha_inicio_dia)) {
+      console.log(`[FLUJO] PROTECCIÓN: Cálculo ${volumenDiarioCalculado}L < anterior ${volumenPrevioEnMemoria}L → manteniendo anterior`);
+      volumenDiarioCalculado = volumenPrevioEnMemoria;
+    }
     
     // ═══════════════════════════════════════════════════════════════════
     // GUARDAR EN READING (Solo cada 5 minutos para no saturar)
@@ -420,16 +430,16 @@ exports.recibirFlujo = async (req, res) => {
 const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
 const hoy = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate()));
     
+    // Usar $max para que MongoDB NUNCA sobreescriba con un valor menor
+    // El consumo de agua solo puede subir durante el día, nunca bajar
     await WaterConsumption.findOneAndUpdate(
-      { 
-        fecha: { $gte: hoy }, 
-        tipo: 'diario' 
+      {
+        fecha: { $gte: hoy },
+        tipo: 'diario'
       },
-      { 
-        $set: {
-          litros: volumenDiarioCalculado,
-          fecha: hoy
-        }
+      {
+        $max: { litros: volumenDiarioCalculado },
+        $setOnInsert: { fecha: hoy, tipo: 'diario' }
       },
       { upsert: true }
     );
