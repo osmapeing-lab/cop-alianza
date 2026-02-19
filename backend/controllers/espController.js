@@ -488,25 +488,37 @@ const hoy = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMont
 
 exports.corregirConsumo = async (req, res) => {
   try {
-    const { litros } = req.body;
+    const { litros, fecha } = req.body;
     if (litros === undefined || litros < 0) {
       return res.status(400).json({ mensaje: 'Litros requerido y >= 0' });
     }
 
-    const ahoraCol = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-    const hoy = new Date(Date.UTC(ahoraCol.getFullYear(), ahoraCol.getMonth(), ahoraCol.getDate()));
+    let targetDate;
+    if (fecha) {
+      // Fecha específica proporcionada (para correcciones históricas)
+      const parts = fecha.split('-');
+      targetDate = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
+    } else {
+      const ahoraCol = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+      targetDate = new Date(Date.UTC(ahoraCol.getFullYear(), ahoraCol.getMonth(), ahoraCol.getDate()));
+    }
+
+    const nextDay = new Date(targetDate.getTime() + 24 * 60 * 60 * 1000);
 
     const result = await WaterConsumption.findOneAndUpdate(
-      { fecha: { $gte: hoy }, tipo: 'diario' },
-      { $set: { litros, fecha: hoy } },
+      { fecha: { $gte: targetDate, $lt: nextDay }, tipo: 'diario' },
+      { $set: { litros, fecha: targetDate } },
       { upsert: true, new: true }
     );
 
-    // Actualizar cache en memoria para que no se pierda
-    ultimosDatosFlujo.volumen_diario = litros;
-    ultimosDatosFlujo.fecha_inicio_dia = new Date(); // Hora real, no midnight UTC
-    // Forzar recalibración en la próxima lectura ESP
-    ultimosDatosFlujo.volumen_inicio_dia = null;
+    // Si es corrección de hoy, actualizar cache en memoria
+    const ahoraCol = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+    const hoy = new Date(Date.UTC(ahoraCol.getFullYear(), ahoraCol.getMonth(), ahoraCol.getDate()));
+    if (targetDate.getTime() === hoy.getTime()) {
+      ultimosDatosFlujo.volumen_diario = litros;
+      ultimosDatosFlujo.fecha_inicio_dia = new Date();
+      ultimosDatosFlujo.volumen_inicio_dia = null;
+    }
 
     console.log('[FLUJO] Consumo corregido manualmente a', litros, 'L');
 
