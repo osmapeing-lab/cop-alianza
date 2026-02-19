@@ -44,9 +44,10 @@ let ultimosDatosPorqueriza = {
 
 let ultimosDatosFlujo = {
   caudal: 0,
-  volumen_total: 0,
-  volumen_diario: 0,
-  volumen_inicio_dia: null,  // null = necesita recalibrar tras reinicio
+  volumen_total: 0,           // Último volumen_l recibido del ESP
+  volumen_diario: 0,          // Consumo diario total calculado
+  volumen_offset: 0,          // Acumulado de sesiones ESP anteriores (persiste entre reinicios ESP)
+  volumen_inicio_sesion: null, // Primer volumen_l de la sesión ESP actual (null = necesita calibrar)
   fecha_inicio_dia: null,
   ultima_lectura_guardada: null,
   sensor_id: null,
@@ -76,9 +77,12 @@ async function inicializarDatosFlujo(intento = 1) {
 
     if (consumoHoy) {
       ultimosDatosFlujo.volumen_diario = consumoHoy.litros;
+      ultimosDatosFlujo.volumen_offset = consumoHoy.litros;
+      // volumen_inicio_sesion queda null → se calibrará con la primera lectura ESP
       console.log(`[FLUJO] ✓ Datos recuperados del día: ${consumoHoy.litros}L (intento ${intento})`);
     } else {
       ultimosDatosFlujo.volumen_diario = 0;
+      ultimosDatosFlujo.volumen_offset = 0;
       console.log('[FLUJO] Nuevo día sin registros previos');
     }
     flujoInicializado = true;
@@ -389,33 +393,44 @@ exports.recibirFlujo = async (req, res) => {
     console.log('========================================');
     
     // ═══════════════════════════════════════════════════════════════════
-    // CÁLCULO DE VOLUMEN DIARIO
+    // CÁLCULO DE VOLUMEN DIARIO (modelo offset + sesión)
+    //
+    // volumen_diario = volumen_offset + (volumen_ESP - volumen_inicio_sesion)
+    //
+    // - volumen_offset: acumulado de sesiones ESP anteriores del día
+    // - volumen_inicio_sesion: primer volumen_l de la sesión ESP actual
+    // - Cuando ESP se reinicia: offset += lo acumulado, nueva sesión
+    // - Cuando servidor se reinicia: offset = valor guardado en BD
     // ═══════════════════════════════════════════════════════════════════
-    
-    let volumenDiarioCalculado = 0;
 
-    // Verificar si es un nuevo día
+    let volumenDiarioCalculado = 0;
+    const prevVolumenTotal = ultimosDatosFlujo.volumen_total || 0;
+
     if (esNuevoDia(ultimosDatosFlujo.fecha_inicio_dia)) {
-      // Nuevo día: resetear base
-      ultimosDatosFlujo.volumen_inicio_dia = volumen;
+      // ── NUEVO DÍA: reset completo ──
+      ultimosDatosFlujo.volumen_offset = 0;
+      ultimosDatosFlujo.volumen_inicio_sesion = volumen;
       ultimosDatosFlujo.fecha_inicio_dia = new Date();
       volumenDiarioCalculado = 0;
-      console.log('[FLUJO] Nuevo día. Volumen inicial:', volumen, 'L');
-    } else if (ultimosDatosFlujo.volumen_inicio_dia === null) {
-      // Servidor se reinició: recalibrar base usando lo ya acumulado en BD
-      // base = volumen_actual_ESP - lo_que_ya_llevamos_hoy
-      ultimosDatosFlujo.volumen_inicio_dia = volumen - (ultimosDatosFlujo.volumen_diario || 0);
-      volumenDiarioCalculado = ultimosDatosFlujo.volumen_diario || 0;
-      console.log('[FLUJO] Recalibrado tras reinicio. Base:', ultimosDatosFlujo.volumen_inicio_dia, 'L. Diario:', volumenDiarioCalculado, 'L');
-    } else if (volumen >= ultimosDatosFlujo.volumen_inicio_dia) {
-      // Operación normal: calcular diferencia
-      volumenDiarioCalculado = volumen - ultimosDatosFlujo.volumen_inicio_dia;
+      console.log('[FLUJO] Nuevo día. Sesión inicia en:', volumen, 'L');
+
+    } else if (ultimosDatosFlujo.volumen_inicio_sesion === null) {
+      // ── SERVIDOR SE REINICIÓ: calibrar con valor guardado ──
+      ultimosDatosFlujo.volumen_inicio_sesion = volumen;
+      // offset ya tiene el valor de BD (seteado en inicializarDatosFlujo)
+      volumenDiarioCalculado = ultimosDatosFlujo.volumen_offset;
+      console.log('[FLUJO] Servidor reiniciado. Offset:', ultimosDatosFlujo.volumen_offset, 'L. Sesión inicia en:', volumen, 'L');
+
+    } else if (volumen < prevVolumenTotal - 0.5) {
+      // ── ESP SE REINICIÓ: contador bajó → guardar acumulado y nueva sesión ──
+      ultimosDatosFlujo.volumen_offset = ultimosDatosFlujo.volumen_diario;
+      ultimosDatosFlujo.volumen_inicio_sesion = volumen;
+      volumenDiarioCalculado = ultimosDatosFlujo.volumen_offset;
+      console.log('[FLUJO] ESP reiniciado. Offset guardado:', ultimosDatosFlujo.volumen_offset, 'L. Nueva sesión en:', volumen, 'L');
+
     } else {
-      // ESP se reinició: el volumen total bajó → acumular
-      const volumenPrevio = ultimosDatosFlujo.volumen_diario || 0;
-      ultimosDatosFlujo.volumen_inicio_dia = 0;
-      volumenDiarioCalculado = volumenPrevio + volumen;
-      console.log('[FLUJO] ESP reiniciado. Acumulando:', volumenDiarioCalculado, 'L');
+      // ── OPERACIÓN NORMAL: offset + diferencia de sesión ──
+      volumenDiarioCalculado = ultimosDatosFlujo.volumen_offset + (volumen - ultimosDatosFlujo.volumen_inicio_sesion);
     }
     
     volumenDiarioCalculado = Math.round(volumenDiarioCalculado * 100) / 100;
@@ -568,8 +583,10 @@ exports.corregirConsumo = async (req, res) => {
     const hoy = new Date(Date.UTC(ahoraCol.getFullYear(), ahoraCol.getMonth(), ahoraCol.getDate()));
     if (targetDate.getTime() === hoy.getTime()) {
       ultimosDatosFlujo.volumen_diario = litros;
+      ultimosDatosFlujo.volumen_offset = litros;
       ultimosDatosFlujo.fecha_inicio_dia = new Date();
-      ultimosDatosFlujo.volumen_inicio_dia = null;
+      // Recalibrar sesión ESP en la próxima lectura
+      ultimosDatosFlujo.volumen_inicio_sesion = null;
     }
 
     console.log('[FLUJO] Consumo corregido manualmente a', litros, 'L');
