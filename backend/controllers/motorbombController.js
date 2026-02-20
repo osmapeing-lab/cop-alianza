@@ -1,5 +1,6 @@
 const Motorbomb = require('../models/Motorbomb');
 const Alert = require('../models/Alert');
+const { notificarBomba } = require('../utils/notificationManager');
 
 exports.getAllMotorbombs = async (req, res) => {
   try {
@@ -25,6 +26,11 @@ exports.toggleMotorbomb = async (req, res) => {
       mensaje: `Bomba "${motorbomb.nombre}" ${!motorbomb.estado ? 'ENCENDIDA' : 'APAGADA'} manualmente a las ${hora}`
     });
     await alerta.save();
+
+    // WhatsApp: mensaje contextual por horario + timer bomba olvidada
+    notificarBomba(motorbomb).catch(e =>
+      console.error('[NOTIF] Error WhatsApp bomba:', e.message)
+    );
 
     res.json(motorbomb);
   } catch (error) {

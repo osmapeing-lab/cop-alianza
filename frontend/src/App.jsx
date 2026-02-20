@@ -91,6 +91,7 @@ const getEtapaAutomatica = (edadDias) => {
   return 'finalizado'
 }
 
+
 // Función para encontrar la fase actual de un lote según su edad
 const getFaseActual = (edadDias) => {
   return FASES_PRODUCCION.find(f => edadDias >= f.edad_min && edadDias <= f.edad_max) || null
@@ -3531,7 +3532,7 @@ const cargarHistoricoPesos = async () => {
                   type="text"
                   value={nuevoLote.corral}
                   onChange={e => setNuevoLote({ ...nuevoLote, corral: e.target.value })}
-                  placeholder="Ej: Corral 1, Galpón Norte"
+                  placeholder="Ej: Corral 1, Chiquero Norte"
                 />
               </div>
             </div>
@@ -4354,7 +4355,7 @@ const cargarHistoricoPesos = async () => {
                 type="text"
                 value={nuevaBomba.ubicacion}
                 onChange={e => setNuevaBomba({ ...nuevaBomba, ubicacion: e.target.value })}
-                placeholder="Ej: Galpón Norte, Área de Engorde"
+                placeholder="Ej: Chiquero Norte, Área de Engorde"
               />
             </div>
             <div className="form-group">

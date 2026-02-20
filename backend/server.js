@@ -186,6 +186,12 @@
   // TAREAS PROGRAMADAS
   // ═══════════════════════════════════════════════════════════════════════
 
+  const {
+    revisarTareasDiarias,
+    enviarResumenDiarioAgua,
+    resetearNotificacionesDiarias
+  } = require('./utils/notificationManager');
+
   // Limpiar sesiones expiradas cada 5 minutos
   setInterval(async () => {
     try {
@@ -200,6 +206,43 @@
       console.error('❌ Error limpiando sesiones:', error.message);
     }
   }, 5 * 60 * 1000);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // CRON: Tareas diarias de salud/etapas y resumen de agua
+  // Revisa cada 30 minutos si hay algo que notificar
+  // ═══════════════════════════════════════════════════════════════════════
+
+  let tareaDiariaEjecutada = null;   // Fecha de última ejecución
+  let resumenAguaEnviado = null;     // Fecha de último resumen
+
+  setInterval(async () => {
+    try {
+      const ahora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+      const hoy = ahora.toDateString();
+      const hora = ahora.getHours();
+
+      // Tareas de salud: ejecutar una vez al día a las 7 AM
+      if (hora >= 7 && hora < 8 && tareaDiariaEjecutada !== hoy) {
+        tareaDiariaEjecutada = hoy;
+        console.log('[CRON] Ejecutando tareas diarias de salud...');
+        await revisarTareasDiarias();
+      }
+
+      // Resumen de agua: enviar una vez al día a las 7 PM
+      if (hora >= 19 && hora < 20 && resumenAguaEnviado !== hoy) {
+        resumenAguaEnviado = hoy;
+        console.log('[CRON] Enviando resumen diario de agua...');
+        await enviarResumenDiarioAgua();
+      }
+
+      // Reset de cooldowns a medianoche
+      if (hora === 0 && tareaDiariaEjecutada && tareaDiariaEjecutada !== hoy) {
+        resetearNotificacionesDiarias();
+      }
+    } catch (error) {
+      console.error('[CRON] Error:', error.message);
+    }
+  }, 30 * 60 * 1000); // Cada 30 minutos
 
   // ═══════════════════════════════════════════════════════════════════════
   // WEBSOCKET

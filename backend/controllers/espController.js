@@ -29,6 +29,8 @@ const Pesaje = require('../models/pesaje');
 const Lote = require('../models/lote');
 const WaterConsumption = require('../models/WaterConsumption');
 const Config = require('../models/Config');
+const { evaluarTemperatura, notificarBomba } = require('../utils/notificationManager');
+const { enviarWhatsApp } = require('../utils/whatsappService');
 
 // ═══════════════════════════════════════════════════════════════════════
 // CACHE EN MEMORIA PARA DATOS EN TIEMPO REAL
@@ -170,6 +172,11 @@ async function activarCicloBomba() {
   });
   await alerta.save();
 
+  // WhatsApp: notificar activación automática
+  enviarWhatsApp(
+    `🚿 *BOMBA RIEGO AUTOMÁTICA*\nActivada por temperatura crítica en chiquero (45s)\nHora: ${hora}`
+  ).catch(() => {});
+
   // Programar apagado automático después de 45 segundos
   cicloBomba.timeoutApagado = setTimeout(async () => {
     try {
@@ -257,6 +264,11 @@ exports.recibirRiego = async (req, res) => {
         });
         await alerta.save();
       }
+
+      // WhatsApp: evalúa con umbral dinámico según etapa del lote y cooldown 60min
+      evaluarTemperatura(temperatura, humedad).catch(e =>
+        console.error('[NOTIF] Error WhatsApp temp:', e.message)
+      );
     }
     
     if (humedad !== undefined) {
