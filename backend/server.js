@@ -189,7 +189,11 @@
   const {
     revisarTareasDiarias,
     enviarResumenDiarioAgua,
-    resetearNotificacionesDiarias
+    resetearNotificacionesDiarias,
+    getTareaDiariaEjecutada,
+    setTareaDiariaEjecutada,
+    getResumenAguaEnviado,
+    setResumenAguaEnviado
   } = require('./utils/notificationManager');
 
   // Limpiar sesiones expiradas cada 5 minutos
@@ -212,8 +216,7 @@
   // Revisa cada 30 minutos si hay algo que notificar
   // ═══════════════════════════════════════════════════════════════════════
 
-  let tareaDiariaEjecutada = null;   // Fecha de última ejecución
-  let resumenAguaEnviado = null;     // Fecha de último resumen
+  // Estado de cron ahora persistido en BD (sobrevive reinicios de Render)
 
   setInterval(async () => {
     try {
@@ -222,22 +225,24 @@
       const hora = ahora.getHours();
 
       // Tareas de salud: ejecutar una vez al día a las 7 AM
+      const tareaDiariaEjecutada = await getTareaDiariaEjecutada();
       if (hora >= 7 && hora < 8 && tareaDiariaEjecutada !== hoy) {
-        tareaDiariaEjecutada = hoy;
+        await setTareaDiariaEjecutada(hoy);
         console.log('[CRON] Ejecutando tareas diarias de salud...');
         await revisarTareasDiarias();
       }
 
       // Resumen de agua: enviar una vez al día a las 7 PM
+      const resumenAguaEnviado = await getResumenAguaEnviado();
       if (hora >= 19 && hora < 20 && resumenAguaEnviado !== hoy) {
-        resumenAguaEnviado = hoy;
+        await setResumenAguaEnviado(hoy);
         console.log('[CRON] Enviando resumen diario de agua...');
         await enviarResumenDiarioAgua();
       }
 
       // Reset de cooldowns a medianoche
       if (hora === 0 && tareaDiariaEjecutada && tareaDiariaEjecutada !== hoy) {
-        resetearNotificacionesDiarias();
+        await resetearNotificacionesDiarias();
       }
     } catch (error) {
       console.error('[CRON] Error:', error.message);
