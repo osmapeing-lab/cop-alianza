@@ -2051,7 +2051,6 @@ const cargarHistoricoAgua = async (periodo) => {
       const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic']
       
       const datosFormateados = res.data.map(d => {
-        // La fecha ya viene correcta como "2026-02-14" (fecha Colombia en UTC midnight)
         const partes = d.fecha.split('-')
         const año = parseInt(partes[0])
         const mes = parseInt(partes[1]) - 1
@@ -2060,7 +2059,7 @@ const cargarHistoricoAgua = async (periodo) => {
 
         return {
           dia: `${meses[fecha.getMonth()]} ${fecha.getDate()}`,
-          litros: d.volumen_total || 0,
+          litros: d.litros,  // ✅ Ya coincide con el backend
           fechaOrden: fecha.getTime()
         }
       })
@@ -2068,13 +2067,8 @@ const cargarHistoricoAgua = async (periodo) => {
       // Ordenar por fecha
       datosFormateados.sort((a, b) => a.fechaOrden - b.fechaOrden)
       
-      // Si es "Hoy", filtrar solo el último día
-      if (periodoActual === 'diario') {
-        const ultimoDato = datosFormateados[datosFormateados.length - 1]
-        setHistoricoAgua(ultimoDato ? [ultimoDato] : [])
-      } else {
-        setHistoricoAgua(datosFormateados)
-      }
+      // ✅ SIMPLIFICADO: El backend ya filtra por días
+      setHistoricoAgua(datosFormateados)
     } else {
       setHistoricoAgua([])
     }
