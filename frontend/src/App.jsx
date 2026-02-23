@@ -1145,6 +1145,18 @@ const [bombaEditando, setBombaEditando] = useState(null)
 const [inventario, setInventario] = useState([])
 const [estadisticasInventario, setEstadisticasInventario] = useState({})
 
+// Estados de inventario de alimento (concentrado)
+const [inventarioAlimento, setInventarioAlimento] = useState([])
+const [resumenInventarioAlimento, setResumenInventarioAlimento] = useState({})
+const [mostrarModalAlimento, setMostrarModalAlimento] = useState(false)
+const [nuevaMovimientoAlimento, setNuevaMovimientoAlimento] = useState({
+  tipo: 'entrada',
+  cantidad_bultos: 0,
+  precio_bulto: 0,
+  descripcion: '',
+  lote_id: ''
+})
+
 // Estados para gráficas
 const [historicoTemperatura, setHistoricoTemperatura] = useState([])
 const [historicoAgua, setHistoricoAgua] = useState([])
@@ -1246,6 +1258,18 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
       cargarBombas();
     });
 
+    // Alerta de stock bajo de alimento (tiempo real)
+    socket.on('alerta_stock', (data) => {
+      setAlertas(prev => [data, ...prev.slice(0, 49)]);
+      setMostrarNotificaciones(true);
+    });
+
+    // Alerta crítica general (tiempo real)
+    socket.on('alerta_critica', (data) => {
+      setAlertas(prev => [data, ...prev.slice(0, 49)]);
+      setMostrarNotificaciones(true);
+    });
+
     // Limpieza de todos los eventos al cerrar el componente
     return () => {
       socket.off('lectura_actualizada');
@@ -1253,6 +1277,8 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
       socket.off('bomba_actualizada');
       socket.off('peso_live');
       socket.off('flujo_actualizado');
+      socket.off('alerta_stock');
+      socket.off('alerta_critica');
     };
   }, []); // El array vacío asegura que esto solo se ejecute una vez
   // ═══════════════════════════════════════════════════════════════════════
@@ -1365,7 +1391,7 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
   // FUNCIONES DE CARGA DE DATOS
   // ═══════════════════════════════════════════════════════════════════════
 
-  const cargarDatos = async () => {
+const cargarDatos = async () => {
   await Promise.all([
     cargarClima(),
     cargarPorqueriza(),
@@ -1379,7 +1405,8 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
     cargarCamaras(),
     cargarVentas(),
     cargarCostos(),
-    cargarInventario()
+    cargarInventario(),
+    cargarInventarioAlimento()
   ])
   
   // Cargar datos para gráficas después de tener los datos base
@@ -1458,6 +1485,42 @@ const cargarInventario = async () => {
     setEstadisticasInventario(statsRes.data)
   } catch (error) {
     console.error('Error cargando inventario:', error)
+  }
+}
+
+const cargarInventarioAlimento = async () => {
+  try {
+    const res = await axios.get(`${API_URL}/api/inventario-alimento`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setInventarioAlimento(res.data)
+    
+    const resumenRes = await axios.get(`${API_URL}/api/inventario-alimento/resumen`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setResumenInventarioAlimento(resumenRes.data)
+  } catch (error) {
+    console.error('Error cargando inventario de alimento:', error)
+  }
+}
+
+const registrarMovimientoAlimento = async () => {
+  try {
+    await axios.post(`${API_URL}/api/inventario-alimento`, nuevaMovimientoAlimento, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setMostrarModalAlimento(false)
+    setNuevaMovimientoAlimento({
+      tipo: 'entrada',
+      cantidad_bultos: 0,
+      precio_bulto: 0,
+      descripcion: '',
+      lote_id: ''
+    })
+    cargarInventarioAlimento()
+    alert('Movimiento registrado correctamente')
+  } catch (error) {
+    alert('Error: ' + (error.response?.data?.mensaje || error.message))
   }
 }
 
@@ -1908,34 +1971,49 @@ const anularVenta = async (id) => {
   // ═══════════════════════════════════════════════════════════════════════
 
   const toggleBomba = async (id) => {
-  try {
-    // Buscar la bomba para saber su estado actual y nombre
-    const bomba = bombas.find(b => b._id === id)
-    if (!bomba) {
-      alert('Bomba no encontrada')
-      return
+    try {
+      const bomba = bombas.find(b => b._id === id)
+      if (!bomba) {
+        alert('Bomba no encontrada')
+        return
+      }
+
+      // estado true = apagada, false = encendida (lógica invertida del modelo)
+      const accion      = bomba.estado ? 'ENCENDER' : 'APAGAR'
+      const nombreBomba = bomba.nombre || bomba.codigo_bomba || 'la motobomba'
+
+      const confirmado = confirm(
+        `¿Estás seguro de ${accion} ${nombreBomba}?\n\n` +
+        `Sistema: ${bomba.ubicacion || 'Sistema de riego/distribución'}\n` +
+        `Estado actual: ${bomba.estado ? 'Apagada' : 'Encendida'}`
+      )
+
+      if (!confirmado) return
+
+      await axios.put(`${API_URL}/api/motorbombs/${id}/toggle`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+
+      cargarBombas()
+      alert(`✓ ${nombreBomba} ${accion === 'ENCENDER' ? 'encendida' : 'apagada'} correctamente`)
+
+    } catch (error) {
+      const datos  = error.response?.data
+      const codigo = datos?.codigo
+      let mensaje  = datos?.mensaje || error.message
+
+      // Mensaje enriquecido según el código de error del servidor
+      if (codigo === 'LIMITE_AGUA') {
+        const actual = datos.consumo_actual?.toFixed(1) ?? '?'
+        const limite = datos.limite ?? 600
+        mensaje = `🚫 No se puede encender la bomba.\nLímite diario alcanzado: ${actual}L / ${limite}L`
+      } else if (codigo === 'HORARIO_NO_PERMITIDO') {
+        const horarios = datos.horarios_permitidos?.join(' y ') ?? '6:00-12:00 y 12:00-15:00'
+        mensaje = `⏰ Horario no permitido.\nLa bomba solo puede encenderse entre:\n${horarios}\n\nHora actual: ${datos.hora_actual}`
+      }
+
+      alert('Error controlando bomba:\n' + mensaje)
     }
-    
-    // Determinar acción (recordar: estado invertido - false = encendida, true = apagada)
-    const accion = bomba.estado ? 'ENCENDER' : 'APAGAR'
-    const nombreBomba = bomba.nombre || bomba.codigo_bomba || 'la motobomba'
-    
-    // Confirmar acción
-    const confirmado = confirm(
-      `¿Estás seguro de ${accion} ${nombreBomba}?\n\n` +
-      `Sistema: ${bomba.ubicacion || 'Sistema de riego/distribución'}\n` +
-      `Estado actual: ${bomba.estado ? 'Apagada' : 'Encendida'}`
-    )
-    
-    if (!confirmado) return
-    
-    await axios.put(`${API_URL}/api/motorbombs/${id}/toggle`, {}, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-    cargarBombas()
-    alert(`✓ ${nombreBomba} ${accion === 'ENCENDER' ? 'encendida' : 'apagada'} correctamente`)
-  } catch (error) {
-    alert('Error controlando bomba: ' + (error.response?.data?.mensaje || error.message))
   }
 }
 const crearBomba = async () => {
@@ -2458,6 +2536,14 @@ const cargarHistoricoPesos = async () => {
   <IconInventario />
   <span>Inventario</span>
 </button>
+
+<button 
+  className={`nav-item ${pagina === 'inventario-alimento' ? 'activo' : ''}`}
+  onClick={() => { setPagina('inventario-alimento'); setMenuAbierto(false) }}
+>
+  <Package />
+  <span>Alimento</span>
+</button>
             <button 
               className={`nav-item ${pagina === 'reportes' ? 'activo' : ''}`}
               onClick={() => { setPagina('reportes'); setMenuAbierto(false) }}
@@ -2533,11 +2619,11 @@ const cargarHistoricoPesos = async () => {
         </div>
       </div>
 
-      {/* Porqueriza */}
+{/* Granja Porcina */}
       <div className={`card ${getEstadoTemp(porqueriza.temp).clase}`}>
         <div className="card-header">
           <Thermometer size={20} />
-          <h3>Porqueriza</h3>
+          <h3>Granja Porcina</h3>
           <span className={`estado-badge ${porqueriza.conectado ? 'conectado' : 'desconectado'}`}>
             {porqueriza.conectado ? <><Wifi size={12} /> Conectado</> : <><WifiOff size={12} /> Desconectado</>}
           </span>
@@ -2637,9 +2723,9 @@ const cargarHistoricoPesos = async () => {
 
     {/* GRÁFICAS PRINCIPALES */}
     <div className="graficas-grid">
-      {/* Gráfica de Temperatura 24h */}
+{/* Gráfica de Temperatura 24h */}
       <div className="dashboard-section grafica-section">
-        <h3><Thermometer size={20} /> Temperatura Porqueriza - Últimas 24h</h3>
+        <h3><Thermometer size={20} /> Temperatura Granja Porcina - Últimas 24h</h3>
         <div className="grafica-container">
           <ResponsiveContainer width="100%" height={250}>
             <AreaChart data={historicoTemperatura}>
@@ -4678,6 +4764,76 @@ const cargarHistoricoPesos = async () => {
       estadisticas={estadisticasInventario}
       onNuevoCerdo={crearCerdo}
     />
+  </div>
+)}
+
+{pagina === 'inventario-alimento' && (
+  <div className="page-inventario-alimento">
+    <div className="page-header">
+      <h2><Package size={24} /> Inventario de Alimento</h2>
+      <button className="btn-primary" onClick={() => setMostrarModalAlimento(true)}>
+        <Plus size={18} /> Movimiento
+      </button>
+    </div>
+    <div className="resumen-cards">
+      <div className="resumen-card">
+        <span>Bultos: {resumenInventarioAlimento?.total_bultos || 0}</span>
+      </div>
+      <div className="resumen-card">
+        <span>Peso: {resumenInventarioAlimento?.peso_total_kg || 0} kg</span>
+      </div>
+      <div className="resumen-card">
+        <span>Valor: ${(resumenInventarioAlimento?.valor_total || 0).toLocaleString()}</span>
+      </div>
+    </div>
+    <div className="table-container">
+      <table>
+        <thead><tr><th>Fecha</th><th>Tipo</th><th>Cant</th><th>Precio</th><th>Total</th><th>Descripción</th></tr></thead>
+        <tbody>
+          {inventarioAlimento.length === 0 ? <tr><td colSpan="6">Sin datos</td></tr> : 
+            inventarioAlimento.map(m => (
+              <tr key={m._id}>
+                <td>{new Date(m.fecha).toLocaleDateString()}</td>
+                <td><span className={`tipo-badge ${m.tipo}`}>{m.tipo}</span></td>
+                <td>{m.cantidad_bultos}</td>
+                <td>${m.precio_bulto}</td>
+                <td>${((m.cantidad_bultos||0)*(m.precio_bulto||0)).toLocaleString()}</td>
+                <td>{m.descripcion}</td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+    </div>
+    {mostrarModalAlimento && (
+      <div className="modal-overlay" onClick={() => setMostrarModalAlimento(false)}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header"><h3>Movimiento</h3><button onClick={() => setMostrarModalAlimento(false)}>&times;</button></div>
+          <div className="modal-body">
+            <div className="form-group"><label>Tipo</label>
+              <select value={nuevaMovimientoAlimento.tipo} onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, tipo: e.target.value})}>
+                <option value="entrada">Entrada</option><option value="salida">Salida</option>
+              </select>
+            </div>
+            <div className="form-row">
+              <div className="form-group"><label>Bultos</label>
+                <input type="number" value={nuevaMovimientoAlimento.cantidad_bultos} onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, cantidad_bultos: numVal(e.target.value)})} />
+              </div>
+              <div className="form-group"><label>Precio</label>
+                <input type="number" value={nuevaMovimientoAlimento.precio_bulto} onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, precio_bulto: numVal(e.target.value)})} />
+              </div>
+            </div>
+            <div className="form-group"><label>Descripción</label>
+              <input type="text" value={nuevaMovimientoAlimento.descripcion} onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, descripcion: e.target.value})} />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button className="btn-secondary" onClick={() => setMostrarModalAlimento(false)}>Cancelar</button>
+            <button className="btn-primary" onClick={registrarMovimientoAlimento}>Guardar</button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
   </div>
 )}
           {/* ════════════════════════════════════════════════════════════════ */}
