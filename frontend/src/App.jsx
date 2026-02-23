@@ -1195,47 +1195,66 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
     if (pesajes.length > 0) cargarHistoricoPesos()
   }, [pesajes])
 
-  // WebSocket
+// WebSocket
   useEffect(() => {
+    // 1. Escuchar actualizaciones generales (Sensores de Porqueriza y Agua)
     socket.on('lectura_actualizada', (data) => {
+      // Manejo de Temperatura/Humedad
       if (data.temperatura) {
-        setPorqueriza(prev => ({ ...prev, temp: data.temperatura, humedad: data.humedad, conectado: true }))
+        setPorqueriza(prev => ({ 
+          ...prev, 
+          temp: data.temperatura, 
+          humedad: data.humedad, 
+          conectado: true 
+        }));
       }
-      if (data.caudal_l_min !== undefined) {
-        setFlujo(prev => ({ ...prev, caudal: data.caudal_l_min, volumen_diario: data.volumen_diario_l, conectado: true }))
+      
+      // Manejo de Flujo de Agua (CORREGIDO: volumen_diario sin la "L")
+      if (data.volumen_diario !== undefined || data.caudal_l_min !== undefined) {
+        setFlujo(prev => ({ 
+          ...prev, 
+          caudal: data.caudal_l_min, 
+          volumen_diario: data.volumen_diario, 
+          conectado: true 
+        }));
       }
-    })
-socket.on('flujo_actualizado', (data) => {
-  setFlujo({
-    caudal: data.caudal,
-    volumen_diario: data.volumen_diario,
-    conectado: true
-  })
-})
+    });
+
+    // 2. Otros eventos del sistema
+    socket.on('flujo_actualizado', (data) => {
+      setFlujo({
+        caudal: data.caudal,
+        volumen_diario: data.volumen_diario,
+        conectado: true
+      });
+    });
+
     socket.on('nuevo_peso', (data) => {
-      setUltimoPeso(data)
-      cargarPesajes()
-    })
-socket.on('peso_live', (data) => {
+      setUltimoPeso(data);
+      cargarPesajes();
+    });
+
+    socket.on('peso_live', (data) => {
       setPesoLive({
         peso: data.peso,
         estable: data.estable,
         conectado: true
-      })
-    })
+      });
+    });
+
     socket.on('bomba_actualizada', (data) => {
-      cargarBombas()
-    })
+      cargarBombas();
+    });
 
+    // Limpieza de todos los eventos al cerrar el componente
     return () => {
-  socket.off('lectura_actualizada')
-  socket.off('nuevo_peso')
-  socket.off('bomba_actualizada')
-  socket.off('peso_live')
-  socket.off('flujo_actualizado')
-}
-  }, [])
-
+      socket.off('lectura_actualizada');
+      socket.off('nuevo_peso');
+      socket.off('bomba_actualizada');
+      socket.off('peso_live');
+      socket.off('flujo_actualizado');
+    };
+  }, []); // El array vacío asegura que esto solo se ejecute una vez
   // ═══════════════════════════════════════════════════════════════════════
   // FUNCIONES DE AUTENTICACIÓN
   // ═══════════════════════════════════════════════════════════════════════
