@@ -96,6 +96,38 @@ const loteSchema = new mongoose.Schema({
     min: 0
   },
   
+  // Gastos semanales manuales
+  gastos_semanales: [{
+    semana: Number,
+    ano: Number,
+    descripcion: String,
+    monto: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    categoria: {
+      type: String,
+      enum: ['alimento', 'medicamento', 'mantenimiento', 'servicio', 'otro'],
+      default: 'otro'
+    },
+    fecha: {
+      type: Date,
+      default: Date.now
+    },
+    registrado_por: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }
+  }],
+  
+  // Total de gastos del lote
+  total_gastos: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  
   // ═══════════════════════════════════════════════════════════════════
   // RELACIONES
   // ═══════════════════════════════════════════════════════════════════

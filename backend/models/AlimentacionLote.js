@@ -1,10 +1,14 @@
 /*
  * ═══════════════════════════════════════════════════════════════════════
- * COO ALIANZAS - MODELO ALIMENTACIÓN POR LOTE
+ * COO ALIANZAS - MODELO ALIMENTACIÓN POR LOTE (CORREGIDO)
  * ═══════════════════════════════════════════════════════════════════════
- * 
- * Registra alimentación diaria y sincroniza con Costos automáticamente
- * 
+ *
+ * CORRECCIONES:
+ * - Middleware pre('save') robusto: valida lote activo antes de crear costo
+ * - Lanza error si el lote no existe o está finalizado (falla el save)
+ * - Usa lote.save() directo en lugar de actualizarAlimentacion() para evitar
+ *   doble guardado y race conditions
+ * - Post findOneAndDelete mantiene paridad con la corrección del middleware
  * ═══════════════════════════════════════════════════════════════════════
  */
 
@@ -20,7 +24,7 @@ const alimentacionLoteSchema = new mongoose.Schema({
     required: true,
     index: true
   },
-  
+
   // ═══════════════════════════════════════════════════════════════════
   // DATOS DE ALIMENTACIÓN
   // ═══════════════════════════════════════════════════════════════════
@@ -29,30 +33,30 @@ const alimentacionLoteSchema = new mongoose.Schema({
     default: Date.now,
     index: true
   },
-  
+
   tipo_alimento: {
     type: String,
     enum: ['iniciador', 'levante', 'engorde', 'gestacion', 'lactancia', 'otro'],
     default: 'engorde'
   },
-  
+
   cantidad_kg: {
     type: Number,
     required: true,
     min: 0
   },
-  
+
   precio_kg: {
     type: Number,
     required: true,
     min: 0
   },
-  
+
   total: {
     type: Number,
     default: 0
   },
-  
+
   // ═══════════════════════════════════════════════════════════════════
   // REFERENCIA AL COSTO CREADO (para trazabilidad)
   // ═══════════════════════════════════════════════════════════════════
@@ -60,7 +64,7 @@ const alimentacionLoteSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Costo'
   },
-  
+
   // ═══════════════════════════════════════════════════════════════════
   // NOTAS
   // ═══════════════════════════════════════════════════════════════════
@@ -68,7 +72,7 @@ const alimentacionLoteSchema = new mongoose.Schema({
     type: String,
     default: ''
   },
-  
+
   // ═══════════════════════════════════════════════════════════════════
   // REGISTRO
   // ═══════════════════════════════════════════════════════════════════
@@ -83,23 +87,37 @@ const alimentacionLoteSchema = new mongoose.Schema({
 
 // ═══════════════════════════════════════════════════════════════════════
 // MIDDLEWARE PRE-SAVE: Calcular total y sincronizar con Costos
+// CORRECCIONES:
+//  1. Valida que el lote exista y esté activo antes de continuar
+//  2. Lanza error explícito para que Mongoose cancele el save
+//  3. Actualiza lote directamente (sin llamar a actualizarAlimentacion)
+//     para evitar un segundo save que puede producir race conditions
 // ═══════════════════════════════════════════════════════════════════════
 
 alimentacionLoteSchema.pre('save', async function() {
-  // Calcular total
+  // 1. Calcular total
   this.total = (this.cantidad_kg || 0) * (this.precio_kg || 0);
-  
-  // Solo crear costo si es documento nuevo y no tiene costo_ref
+
+  // 2. Solo crear costo si es documento nuevo y aún no tiene costo_ref
   if (this.isNew && !this.costo_ref) {
+    const Costo = mongoose.model('Costo');
+    const Lote  = mongoose.model('Lote');
+
+    // ── VALIDAR LOTE ──────────────────────────────────────────────
+    const lote = await Lote.findById(this.lote);
+
+    if (!lote) {
+      throw new Error('Lote no encontrado al registrar alimentación');
+    }
+
+    if (!lote.activo) {
+      throw new Error('No se puede registrar alimentación en un lote finalizado');
+    }
+
+    const nombreLote = lote.nombre;
+
+    // ── CREAR COSTO ───────────────────────────────────────────────
     try {
-      const Costo = mongoose.model('Costo');
-      const Lote = mongoose.model('Lote');
-      
-      // Obtener nombre del lote
-      const lote = await Lote.findById(this.lote);
-      const nombreLote = lote ? lote.nombre : 'Sin nombre';
-      
-      // Crear costo automáticamente
       const nuevoCosto = new Costo({
         tipo_costo: 'directo',
         categoria: 'alimento_concentrado',
@@ -114,25 +132,26 @@ alimentacionLoteSchema.pre('save', async function() {
         estado: 'registrado',
         metodo_pago: 'efectivo'
       });
-      
+
       await nuevoCosto.save();
       this.costo_ref = nuevoCosto._id;
-      
-      console.log(`[ALIMENTACIÓN] Costo creado automáticamente: $${this.total} para lote ${nombreLote}`);
-      
-      // Actualizar totales en el lote
-      if (lote) {
-        await lote.actualizarAlimentacion(this.cantidad_kg, this.total);
-      }
-      
+
+      console.log(`[ALIMENTACIÓN] ✓ Costo creado: $${this.total} para lote ${nombreLote}`);
     } catch (error) {
-      console.error('[ALIMENTACIÓN] Error creando costo:', error.message);
+      console.error('[ALIMENTACIÓN] ✗ Error creando costo:', error.message);
+      throw error; // Cancela el save de AlimentacionLote
     }
+
+    // ── ACTUALIZAR TOTALES EN EL LOTE ────────────────────────────
+    // Se hace aquí (no en post save) para que todo sea atómico
+    lote.alimento_total_kg   = (lote.alimento_total_kg   || 0) + this.cantidad_kg;
+    lote.costo_alimento_total = (lote.costo_alimento_total || 0) + this.total;
+    await lote.save();
   }
 });
 
 // ═══════════════════════════════════════════════════════════════════════
-// MIDDLEWARE POST-REMOVE: Eliminar costo asociado si se borra alimentación
+// MIDDLEWARE POST-REMOVE: Eliminar costo asociado si se borra la alimentación
 // ═══════════════════════════════════════════════════════════════════════
 
 alimentacionLoteSchema.post('findOneAndDelete', async function(doc) {
@@ -141,12 +160,12 @@ alimentacionLoteSchema.post('findOneAndDelete', async function(doc) {
       const Costo = mongoose.model('Costo');
       await Costo.findByIdAndDelete(doc.costo_ref);
       console.log('[ALIMENTACIÓN] Costo eliminado automáticamente');
-      
+
       // Restar del lote
       const Lote = mongoose.model('Lote');
       const lote = await Lote.findById(doc.lote);
       if (lote) {
-        lote.alimento_total_kg = Math.max(0, (lote.alimento_total_kg || 0) - doc.cantidad_kg);
+        lote.alimento_total_kg   = Math.max(0, (lote.alimento_total_kg   || 0) - doc.cantidad_kg);
         lote.costo_alimento_total = Math.max(0, (lote.costo_alimento_total || 0) - doc.total);
         await lote.save();
       }
@@ -186,7 +205,7 @@ alimentacionLoteSchema.statics.getTotalPorLote = async function(loteId) {
       }
     }
   ]);
-  
+
   return result[0] || { total_kg: 0, total_costo: 0 };
 };
 
@@ -194,7 +213,7 @@ alimentacionLoteSchema.statics.getTotalPorLote = async function(loteId) {
 alimentacionLoteSchema.statics.getAlimentacionDiaria = function(loteId, dias = 30) {
   const fechaLimite = new Date();
   fechaLimite.setDate(fechaLimite.getDate() - dias);
-  
+
   return this.aggregate([
     {
       $match: {

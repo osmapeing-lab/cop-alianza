@@ -47,6 +47,33 @@ const configSchema = new mongoose.Schema({
     type: String,
     enum: ['diario', 'semanal', 'quincenal', 'mensual', 'desactivado'],
     default: 'quincenal'
+  },
+  // Configuración de bombas
+  limite_consumo_bomba_1: {
+    type: Number,
+    default: 600,
+    description: 'Límite de consumo diario en litros para bomba 1'
+  },
+  hora_inicio_bombas: {
+    type: Number,
+    default: 6,
+    description: 'Hora de inicio permitido para bombas (0-23)'
+  },
+  hora_fin_bombas: {
+    type: Number,
+    default: 12,
+    description: 'Hora de fin permitido para bombas (0-23)'
+  },
+  // Configuración de inventario de alimento
+  alerta_stock_alimento: {
+    type: Boolean,
+    default: true,
+    description: 'Activar alertas cuando el inventario de alimento esté bajo'
+  },
+  stock_minimo_alimento_bultos: {
+    type: Number,
+    default: 5,
+    description: 'Cantidad mínima de bultos para alertar'
   }
 }, {
   timestamps: true

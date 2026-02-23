@@ -32,7 +32,8 @@
   const grabacionesRoutes = require('./routes/grabaciones');
   const ventasRoutes = require('./routes/ventas');
   const costosRoutes = require('./routes/costos');
-  const inventarioRoutes = require('./routes/inventario');
+const inventarioRoutes = require('./routes/inventario');
+const inventarioAlimentoRoutes = require('./routes/inventarioAlimento');
 
   // ═══════════════════════════════════════════════════════════════════════
   // INICIALIZAR EXPRESS Y WEBSOCKET
@@ -89,7 +90,8 @@
   app.use('/api/grabaciones', grabacionesRoutes);
   app.use('/api/ventas', ventasRoutes);
   app.use('/api/costos', costosRoutes);
-  app.use('/api/inventario', inventarioRoutes);
+app.use('/api/inventario', inventarioRoutes);
+app.use('/api/inventario-alimento', inventarioAlimentoRoutes);
 
   // ═══════════════════════════════════════════════════════════════════════
   // RUTA RAÍZ (Información de la API)
