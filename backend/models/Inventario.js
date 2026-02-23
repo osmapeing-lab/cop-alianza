@@ -165,36 +165,35 @@ const inventarioSchema = new mongoose.Schema({
  * - Calcula edad
  * - Genera código automático seguro
  */
-inventarioSchema.pre('save', async function (next) {
-  try {
-    // Calcular edad en días
-    if (this.fecha_nacimiento) {
-      const hoy = new Date();
-      const diffTime = hoy - this.fecha_nacimiento;
-      this.edad_dias = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+inventarioSchema.pre('save', async function () {
+
+  // Calcular edad
+  if (this.fecha_nacimiento) {
+    const hoy = new Date();
+    const diffTime = hoy - this.fecha_nacimiento;
+    this.edad_dias = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  }
+
+  // Generar código automático
+  if (!this.codigo) {
+    if (!this.sexo) {
+      throw new Error('Sexo es obligatorio para generar código');
     }
 
-    // Generar código automático
-    if (!this.codigo) {
-      const prefijo = this.sexo === 'macho' ? 'M' : 'H';
+    const prefijo = this.sexo === 'macho' ? 'M' : 'H';
 
-      const ultimo = await mongoose.model('Inventario')
-        .findOne({ codigo: new RegExp(`^${prefijo}-`) })
-        .sort({ createdAt: -1 });
+    const ultimo = await mongoose.model('Inventario')
+      .findOne({ codigo: new RegExp(`^${prefijo}-`) })
+      .sort({ createdAt: -1 });
 
-      let consecutivo = 1;
+    let consecutivo = 1;
 
-      if (ultimo && ultimo.codigo) {
-        const numero = parseInt(ultimo.codigo.split('-')[1]);
-        consecutivo = numero + 1;
-      }
-
-      this.codigo = `${prefijo}-${String(consecutivo).padStart(4, '0')}`;
+    if (ultimo?.codigo?.includes('-')) {
+      const numero = parseInt(ultimo.codigo.split('-')[1]) || 0;
+      consecutivo = numero + 1;
     }
 
-    next();
-  } catch (error) {
-    next(error);
+    this.codigo = `${prefijo}-${String(consecutivo).padStart(4, '0')}`;
   }
 });
 
