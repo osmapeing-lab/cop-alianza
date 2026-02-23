@@ -75,7 +75,9 @@ async function inicializarDatosFlujo(intento = 1) {
       tipo: 'diario'
     });
 
-    ultimosDatosFlujo.fecha_inicio_dia = new Date();
+    // ✅ FIX 1: Guardar en hora Colombia para que esNuevoDia() detecte correctamente el cambio de día
+    // ANTES: new Date() → UTC, causaba desfase de 5h y no detectaba el nuevo día a medianoche Colombia
+    ultimosDatosFlujo.fecha_inicio_dia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
 
     if (consumoHoy) {
       ultimosDatosFlujo.volumen_diario = consumoHoy.litros;
@@ -128,6 +130,29 @@ setInterval(async () => {
     console.error('[FLUJO] Error en respaldo periódico:', err.message);
   }
 }, 2 * 60 * 1000); // Cada 2 minutos
+
+// ═══════════════════════════════════════════════════════════════════════
+// ✅ FIX 2: RESET AUTOMÁTICO A MEDIANOCHE COLOMBIA
+// Sin esto el volumen_diario nunca se resetea si el servidor no se reinicia
+// Se verifica cada minuto y ejecuta SOLO entre 00:00 y 00:02 hora Colombia
+// ═══════════════════════════════════════════════════════════════════════
+
+setInterval(() => {
+  const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+  const horas = ahoraColombia.getHours();
+  const minutos = ahoraColombia.getMinutes();
+
+  if (horas === 0 && minutos <= 2) {
+    // Solo resetear si aún no se reseteó (evitar múltiples resets en el mismo minuto)
+    if (ultimosDatosFlujo.volumen_diario > 0 || ultimosDatosFlujo.volumen_offset > 0) {
+      ultimosDatosFlujo.volumen_offset = 0;
+      ultimosDatosFlujo.volumen_inicio_sesion = null;
+      ultimosDatosFlujo.volumen_diario = 0;
+      ultimosDatosFlujo.fecha_inicio_dia = ahoraColombia;
+      console.log('[FLUJO] ✓ Reset diario ejecutado a medianoche Colombia');
+    }
+  }
+}, 60 * 1000); // Verificar cada minuto
 
 // ═══════════════════════════════════════════════════════════════════════
 // CICLO AUTOMÁTICO DE BOMBAS (45s ON → OFF → 30min cooldown)
@@ -422,7 +447,8 @@ exports.recibirFlujo = async (req, res) => {
       // ── NUEVO DÍA: reset completo ──
       ultimosDatosFlujo.volumen_offset = 0;
       ultimosDatosFlujo.volumen_inicio_sesion = volumen;
-      ultimosDatosFlujo.fecha_inicio_dia = new Date();
+      // ✅ FIX 3: Usar hora Colombia también aquí para consistencia
+      ultimosDatosFlujo.fecha_inicio_dia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
       volumenDiarioCalculado = 0;
       console.log('[FLUJO] Nuevo día. Sesión inicia en:', volumen, 'L');
 
@@ -596,7 +622,8 @@ exports.corregirConsumo = async (req, res) => {
     if (targetDate.getTime() === hoy.getTime()) {
       ultimosDatosFlujo.volumen_diario = litros;
       ultimosDatosFlujo.volumen_offset = litros;
-      ultimosDatosFlujo.fecha_inicio_dia = new Date();
+      // ✅ FIX 4: Usar hora Colombia también aquí para consistencia
+      ultimosDatosFlujo.fecha_inicio_dia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
       // Recalibrar sesión ESP en la próxima lectura
       ultimosDatosFlujo.volumen_inicio_sesion = null;
     }
