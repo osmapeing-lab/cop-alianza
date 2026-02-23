@@ -1,9 +1,29 @@
 /*
  * ═══════════════════════════════════════════════════════════════════════
- * COO ALIANZAS - ESP CONTROLLER
+ * COO ALIANZAS - ESP CONTROLLER (REFACTORIZADO - VERSIÓN BLINDADA)
  * ═══════════════════════════════════════════════════════════════════════
  * 
- * Controlador para recibir datos de sensores ESP32
+ * CAMBIOS CRÍTICOS EN ESTA VERSIÓN:
+ * 
+ * 1. ✅ ATOMICIDAD GARANTIZADA:
+ *    - recibirFlujo() usa {new: true} en findOneAndUpdate
+ *    - Espera confirmación de MongoDB antes de emitir socket
+ *    - Actualiza memoria solo con valores verificados
+ * 
+ * 2. ✅ ELIMINACIÓN DE RACE CONDITION:
+ *    - Respaldo periódico (setInterval) ELIMINADO
+ *    - Cada lectura se guarda inmediatamente en BD
+ *    - No hay competencia entre escrituras
+ * 
+ * 3. ✅ FUENTE ÚNICA DE VERDAD:
+ *    - MongoDB es la autoridad, memoria es caché
+ *    - obtenerDatosFlujo() prioriza BD sobre memoria
+ *    - Frontend siempre recibe datos verificados
+ * 
+ * 4. ✅ PROTECCIÓN CONTRA REINICIOS:
+ *    - ESP32 reinicia → $max protege en BD
+ *    - Servidor reinicia → recupera de BD
+ *    - Frontend nunca ve valores "0" incorrectos
  * 
  * Endpoints:
  *   POST /api/esp/riego                      -> Temperatura/humedad porqueriza
@@ -12,6 +32,7 @@
  *   POST /api/esp/flujo                      -> Datos de flujo de agua
  *   GET  /api/esp/flujo                      -> Obtener ultimos datos flujo
  *   GET  /api/esp/flujo/historico            -> Historial 7 días agua
+ *   PUT  /api/esp/flujo/corregir             -> Corrección manual consumo
  *   POST /api/esp/peso                       -> Guardar peso en BD
  *   POST /api/esp/peso/live                  -> Peso en tiempo real (NO guarda)
  *   GET  /api/esp/peso/actual                -> Obtener peso actual en memoria
@@ -46,10 +67,10 @@ let ultimosDatosPorqueriza = {
 
 let ultimosDatosFlujo = {
   caudal: 0,
-  volumen_total: 0,           // Último volumen_l recibido del ESP
-  volumen_diario: 0,          // Consumo diario total calculado
-  volumen_offset: 0,          // Acumulado de sesiones ESP anteriores (persiste entre reinicios ESP)
-  volumen_inicio_sesion: null, // Primer volumen_l de la sesión ESP actual (null = necesita calibrar)
+  volumen_total: 0,
+  volumen_diario: 0,
+  volumen_offset: 0,
+  volumen_inicio_sesion: null,
   fecha_inicio_dia: null,
   ultima_lectura_guardada: null,
   sensor_id: null,
@@ -59,7 +80,6 @@ let ultimosDatosFlujo = {
 
 // ═══════════════════════════════════════════════════════════════════════
 // INICIALIZAR DATOS DE FLUJO DESDE BD (PERSISTENCIA)
-// Con reintentos automáticos si la BD no está lista
 // ═══════════════════════════════════════════════════════════════════════
 
 let flujoInicializado = false;
@@ -75,14 +95,11 @@ async function inicializarDatosFlujo(intento = 1) {
       tipo: 'diario'
     });
 
-    // ✅ FIX 1: Guardar en hora Colombia para que esNuevoDia() detecte correctamente el cambio de día
-    // ANTES: new Date() → UTC, causaba desfase de 5h y no detectaba el nuevo día a medianoche Colombia
     ultimosDatosFlujo.fecha_inicio_dia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
 
     if (consumoHoy) {
       ultimosDatosFlujo.volumen_diario = consumoHoy.litros;
       ultimosDatosFlujo.volumen_offset = consumoHoy.litros;
-      // volumen_inicio_sesion queda null → se calibrará con la primera lectura ESP
       console.log(`[FLUJO] ✓ Datos recuperados del día: ${consumoHoy.litros}L (intento ${intento})`);
     } else {
       ultimosDatosFlujo.volumen_diario = 0;
@@ -93,48 +110,33 @@ async function inicializarDatosFlujo(intento = 1) {
   } catch (error) {
     console.error(`[FLUJO] Error inicializando (intento ${intento}/${MAX_INTENTOS}):`, error.message);
     if (intento < MAX_INTENTOS) {
-      const espera = intento * 3000; // 3s, 6s, 9s, 12s
+      const espera = intento * 3000;
       console.log(`[FLUJO] Reintentando en ${espera / 1000}s...`);
       await new Promise(r => setTimeout(r, espera));
       return inicializarDatosFlujo(intento + 1);
     }
-    console.error('[FLUJO] ⚠️ No se pudo inicializar tras', MAX_INTENTOS, 'intentos. $max en MongoDB protegerá los datos.');
+    console.error('[FLUJO] ⚠️ No se pudo inicializar tras', MAX_INTENTOS, 'intentos.');
   }
 }
 
-// Ejecutar al cargar el módulo - guardar promesa para esperar en requests
 let flujoInitPromise = inicializarDatosFlujo();
 
 // ═══════════════════════════════════════════════════════════════════════
-// RESPALDO PERIÓDICO: Cada 2 minutos guardar en BD con $max
-// Garantiza que si el servidor se apaga, el último valor queda persistido
+// ⚡ RESPALDO PERIÓDICO ELIMINADO
+// ═══════════════════════════════════════════════════════════════════════
+// 
+// ANTES: setInterval cada 2 minutos guardaba en BD
+// AHORA: Cada lectura se guarda inmediatamente con confirmación atómica
+// 
+// JUSTIFICACIÓN:
+// - Elimina race condition entre setInterval y recibirFlujo()
+// - No hay riesgo de pérdida de datos (se guarda en cada lectura)
+// - Mejora consistencia entre memoria y BD
+// 
 // ═══════════════════════════════════════════════════════════════════════
 
-setInterval(async () => {
-  try {
-    if (!flujoInicializado || ultimosDatosFlujo.volumen_diario <= 0) return;
-
-    const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-    const hoy = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate()));
-
-    await WaterConsumption.findOneAndUpdate(
-      { fecha: { $gte: hoy }, tipo: 'diario' },
-      {
-        $max: { litros: ultimosDatosFlujo.volumen_diario },
-        $setOnInsert: { fecha: hoy, tipo: 'diario' }
-      },
-      { upsert: true }
-    );
-    console.log(`[FLUJO] Respaldo periódico: ${ultimosDatosFlujo.volumen_diario}L guardado en BD`);
-  } catch (err) {
-    console.error('[FLUJO] Error en respaldo periódico:', err.message);
-  }
-}, 2 * 60 * 1000); // Cada 2 minutos
-
 // ═══════════════════════════════════════════════════════════════════════
-// ✅ FIX 2: RESET AUTOMÁTICO A MEDIANOCHE COLOMBIA
-// Sin esto el volumen_diario nunca se resetea si el servidor no se reinicia
-// Se verifica cada minuto y ejecuta SOLO entre 00:00 y 00:02 hora Colombia
+// RESET AUTOMÁTICO A MEDIANOCHE COLOMBIA
 // ═══════════════════════════════════════════════════════════════════════
 
 setInterval(() => {
@@ -143,7 +145,6 @@ setInterval(() => {
   const minutos = ahoraColombia.getMinutes();
 
   if (horas === 0 && minutos <= 2) {
-    // Solo resetear si aún no se reseteó (evitar múltiples resets en el mismo minuto)
     if (ultimosDatosFlujo.volumen_diario > 0 || ultimosDatosFlujo.volumen_offset > 0) {
       ultimosDatosFlujo.volumen_offset = 0;
       ultimosDatosFlujo.volumen_inicio_sesion = null;
@@ -152,7 +153,7 @@ setInterval(() => {
       console.log('[FLUJO] ✓ Reset diario ejecutado a medianoche Colombia');
     }
   }
-}, 60 * 1000); // Verificar cada minuto
+}, 60 * 1000);
 
 // ═══════════════════════════════════════════════════════════════════════
 // CICLO AUTOMÁTICO DE BOMBAS (45s ON → OFF → 30min cooldown)
@@ -168,13 +169,11 @@ const BOMBA_DURACION_MS = 45 * 1000;      // 45 segundos encendida
 const BOMBA_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutos entre activaciones
 
 async function activarCicloBomba() {
-  // Si ya hay un ciclo activo, no duplicar
   if (cicloBomba.enCiclo) {
     console.log('[BOMBA] Ciclo ya activo, ignorando');
     return;
   }
 
-  // Verificar cooldown de 30 minutos
   const ahora = Date.now();
   if (cicloBomba.ultimaActivacion && (ahora - cicloBomba.ultimaActivacion) < BOMBA_COOLDOWN_MS) {
     const restanteMin = Math.round((BOMBA_COOLDOWN_MS - (ahora - cicloBomba.ultimaActivacion)) / 60000);
@@ -185,11 +184,9 @@ async function activarCicloBomba() {
   cicloBomba.enCiclo = true;
   cicloBomba.ultimaActivacion = ahora;
 
-  // Encender SOLO bomba de riego MB002 (estado: false = ON para relé invertido)
   await Motorbomb.updateOne({ codigo_bomba: 'MB002' }, { estado: false, fecha_cambio: Date.now() });
   console.log('[BOMBA] Ciclo iniciado - Bomba Riego (MB002) ON por 45 segundos');
 
-  // Registrar alerta
   const hora = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', hour12: true });
   const alerta = new Alert({
     tipo: 'info',
@@ -197,12 +194,10 @@ async function activarCicloBomba() {
   });
   await alerta.save();
 
-  // WhatsApp: notificar activación automática
   enviarWhatsApp(
     `🚿 *BOMBA RIEGO AUTOMÁTICA*\nActivada por temperatura crítica en chiquero (45s)\nHora: ${hora}`
   ).catch(() => {});
 
-  // Programar apagado automático después de 45 segundos
   cicloBomba.timeoutApagado = setTimeout(async () => {
     try {
       await Motorbomb.updateOne({ codigo_bomba: 'MB002' }, { estado: true, fecha_cambio: Date.now() });
@@ -232,7 +227,6 @@ let pesoEnTiempoReal = {
 function esNuevoDia(fechaAnterior) {
   if (!fechaAnterior) return true;
   
-  // Usar hora de Colombia (UTC-5)
   const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
   const anteriorColombia = new Date(new Date(fechaAnterior).toLocaleString('en-US', { timeZone: 'America/Bogota' }));
   
@@ -290,7 +284,6 @@ exports.recibirRiego = async (req, res) => {
         await alerta.save();
       }
 
-      // WhatsApp: evalúa con umbral dinámico según etapa del lote y cooldown 60min
       evaluarTemperatura(temperatura, humedad).catch(e =>
         console.error('[NOTIF] Error WhatsApp temp:', e.message)
       );
@@ -404,21 +397,21 @@ exports.obtenerHistoricoTemperatura = async (req, res) => {
     res.status(500).json({ mensaje: error.message });
   }
 };
+
 // ═══════════════════════════════════════════════════════════════════════
-// RECIBIR DATOS DE FLUJO DE AGUA (YF-S201)
+// ⚡ RECIBIR DATOS DE FLUJO DE AGUA (VERSIÓN REFACTORIZADA)
 // POST /api/esp/flujo
 // ═══════════════════════════════════════════════════════════════════════
 
 exports.recibirFlujo = async (req, res) => {
   try {
-    // Esperar inicialización antes de procesar cualquier lectura
+    // 1. Esperar inicialización
     if (flujoInitPromise) {
       await flujoInitPromise;
       flujoInitPromise = null;
     }
 
     const { sensor_id, caudal_l_min, volumen_l, rssi } = req.body;
-    
     const caudal = parseFloat(caudal_l_min) || 0;
     const volumen = parseFloat(volumen_l) || 0;
     
@@ -426,95 +419,89 @@ exports.recibirFlujo = async (req, res) => {
     console.log('[ESP32] Datos flujo de agua recibidos');
     console.log('  Sensor:', sensor_id);
     console.log('  Caudal:', caudal, 'L/min');
-    console.log('  Volumen total:', volumen, 'L');
+    console.log('  Volumen ESP:', volumen, 'L');
     console.log('========================================');
     
-    // ═══════════════════════════════════════════════════════════════════
-    // CÁLCULO DE VOLUMEN DIARIO (modelo offset + sesión)
-    //
-    // volumen_diario = volumen_offset + (volumen_ESP - volumen_inicio_sesion)
-    //
-    // - volumen_offset: acumulado de sesiones ESP anteriores del día
-    // - volumen_inicio_sesion: primer volumen_l de la sesión ESP actual
-    // - Cuando ESP se reinicia: offset += lo acumulado, nueva sesión
-    // - Cuando servidor se reinicia: offset = valor guardado en BD
-    // ═══════════════════════════════════════════════════════════════════
-
+    // 2. Calcular volumen diario usando modelo offset + sesión
     let volumenDiarioCalculado = 0;
     const prevVolumenTotal = ultimosDatosFlujo.volumen_total || 0;
 
     if (esNuevoDia(ultimosDatosFlujo.fecha_inicio_dia)) {
-      // ── NUEVO DÍA: reset completo ──
+      // Nuevo día: reset completo
       ultimosDatosFlujo.volumen_offset = 0;
       ultimosDatosFlujo.volumen_inicio_sesion = volumen;
-      // ✅ FIX 3: Usar hora Colombia también aquí para consistencia
       ultimosDatosFlujo.fecha_inicio_dia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
       volumenDiarioCalculado = 0;
       console.log('[FLUJO] Nuevo día. Sesión inicia en:', volumen, 'L');
 
     } else if (ultimosDatosFlujo.volumen_inicio_sesion === null) {
-      // ── SERVIDOR SE REINICIÓ: calibrar con valor guardado ──
+      // Servidor reinició: calibrar con valor de BD
       ultimosDatosFlujo.volumen_inicio_sesion = volumen;
-      // offset ya tiene el valor de BD (seteado en inicializarDatosFlujo)
       volumenDiarioCalculado = ultimosDatosFlujo.volumen_offset;
-      console.log('[FLUJO] Servidor reiniciado. Offset:', ultimosDatosFlujo.volumen_offset, 'L. Sesión inicia en:', volumen, 'L');
+      console.log('[FLUJO] Servidor reiniciado. Offset:', ultimosDatosFlujo.volumen_offset, 'L');
 
     } else if (volumen < prevVolumenTotal - 0.5) {
-      // ── ESP SE REINICIÓ: contador bajó → guardar acumulado y nueva sesión ──
+      // ESP32 reinició: guardar acumulado y nueva sesión
       ultimosDatosFlujo.volumen_offset = ultimosDatosFlujo.volumen_diario;
       ultimosDatosFlujo.volumen_inicio_sesion = volumen;
       volumenDiarioCalculado = ultimosDatosFlujo.volumen_offset;
-      console.log('[FLUJO] ESP reiniciado. Offset guardado:', ultimosDatosFlujo.volumen_offset, 'L. Nueva sesión en:', volumen, 'L');
+      console.log('[FLUJO] ESP reiniciado. Offset:', ultimosDatosFlujo.volumen_offset, 'L');
 
     } else {
-      // ── OPERACIÓN NORMAL: offset + diferencia de sesión ──
+      // Operación normal
       volumenDiarioCalculado = ultimosDatosFlujo.volumen_offset + (volumen - ultimosDatosFlujo.volumen_inicio_sesion);
     }
     
     volumenDiarioCalculado = Math.round(volumenDiarioCalculado * 100) / 100;
 
-    // ═══════════════════════════════════════════════════════════════════
-    // TRIPLE PROTECCIÓN: El consumo diario NUNCA puede disminuir
-    // 1. Comparar con valor en memoria
-    // 2. Comparar con valor en BD (por si la memoria está corrupta)
-    // 3. $max en MongoDB como última barrera
-    // ═══════════════════════════════════════════════════════════════════
+    // 3. Protección en memoria (primera capa)
     const noEsDiaNuevo = !esNuevoDia(ultimosDatosFlujo.fecha_inicio_dia);
-
-    // Capa 1: Protección en memoria
     const volumenPrevioEnMemoria = ultimosDatosFlujo.volumen_diario || 0;
+    
     if (volumenDiarioCalculado < volumenPrevioEnMemoria && noEsDiaNuevo) {
       console.log(`[FLUJO] PROTECCIÓN MEMORIA: ${volumenDiarioCalculado}L < ${volumenPrevioEnMemoria}L → manteniendo`);
       volumenDiarioCalculado = volumenPrevioEnMemoria;
     }
 
-    // Capa 2: Protección desde BD (contra memoria corrupta tras reinicio)
-    if (noEsDiaNuevo) {
-      try {
-        const ahoraColCheck = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-        const hoyCheck = new Date(Date.UTC(ahoraColCheck.getFullYear(), ahoraColCheck.getMonth(), ahoraColCheck.getDate()));
-        const consumoActualBD = await WaterConsumption.findOne({ fecha: { $gte: hoyCheck }, tipo: 'diario' }).lean();
-        if (consumoActualBD && consumoActualBD.litros > volumenDiarioCalculado) {
-          console.log(`[FLUJO] PROTECCIÓN BD: ${volumenDiarioCalculado}L < BD ${consumoActualBD.litros}L → usando BD`);
-          volumenDiarioCalculado = consumoActualBD.litros;
-        }
-      } catch (e) { /* Si falla la lectura, $max en MongoDB protegerá */ }
+    // ════════════════════════════════════════════════════════════════════
+    // ⚡ GUARDAR EN BD Y ESPERAR CONFIRMACIÓN (ATÓMICO)
+    // ════════════════════════════════════════════════════════════════════
+    
+    const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+    const hoy = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate()));
+    
+    // 4. GUARDAR EN BD Y OBTENER DOCUMENTO ACTUALIZADO
+    const resultadoBD = await WaterConsumption.findOneAndUpdate(
+      { fecha: { $gte: hoy }, tipo: 'diario' },
+      {
+        $max: { litros: volumenDiarioCalculado },
+        $setOnInsert: { fecha: hoy, tipo: 'diario' }
+      },
+      { 
+        upsert: true,
+        new: true  // ⚡ CRÍTICO: Devuelve el documento DESPUÉS del update
+      }
+    );
+    
+    // 5. OBTENER EL VALOR REAL QUE ESTÁ EN LA BASE DE DATOS
+    const volumenRealEnBD = resultadoBD.litros;
+    
+    if (volumenDiarioCalculado !== volumenRealEnBD) {
+      console.log(`[FLUJO] ⚠️ MongoDB protegió: BD=${volumenRealEnBD}L > Calculado=${volumenDiarioCalculado}L`);
+    } else {
+      console.log(`[FLUJO] ✓ BD confirmó: ${volumenRealEnBD}L`);
     }
     
-    // ═══════════════════════════════════════════════════════════════════
-    // GUARDAR EN READING (Solo cada 5 minutos para no saturar)
-    // ═══════════════════════════════════════════════════════════════════
-    
+    // 6. Guardar en Reading (opcional, cada 5 min o si hay flujo)
     const ahora = new Date();
     const ultimaLectura = ultimosDatosFlujo.ultima_lectura_guardada;
     const minutosPasados = ultimaLectura ? (ahora - ultimaLectura) / 60000 : 999;
     
     if (minutosPasados >= 5 || caudal > 0) {
-      // Guardar solo si pasaron 5 min O si hay flujo activo
       const lectura = new Reading({
         sensor: sensor_id || 'esp_flujo',
         tipo: 'flujo_agua',
-        valor: volumenDiarioCalculado,
+        valor: volumenRealEnBD,  // ⚡ Usar valor confirmado por BD
         unidad: 'L',
         metadata: {
           caudal: caudal,
@@ -525,77 +512,92 @@ exports.recibirFlujo = async (req, res) => {
       ultimosDatosFlujo.ultima_lectura_guardada = ahora;
     }
     
-    // ═══════════════════════════════════════════════════════════════════
-    // GUARDAR/ACTUALIZAR CONSUMO DIARIO EN WATERCONSUMPTION
-    // ═══════════════════════════════════════════════════════════════════
-    
-    // Ajustar a zona horaria Colombia (UTC-5)
-
-// Fecha de hoy en Colombia (UTC-5)
-const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-const hoy = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate()));
-    
-    // Usar $max para que MongoDB NUNCA sobreescriba con un valor menor
-    // El consumo de agua solo puede subir durante el día, nunca bajar
-    await WaterConsumption.findOneAndUpdate(
-      {
-        fecha: { $gte: hoy },
-        tipo: 'diario'
-      },
-      {
-        $max: { litros: volumenDiarioCalculado },
-        $setOnInsert: { fecha: hoy, tipo: 'diario' }
-      },
-      { upsert: true }
-    );
-    
-    // ... (vienes del await WaterConsumption.findOneAndUpdate)
-
-    // ═══════════════════════════════════════════════════════════════════
-    // ACTUALIZAR CACHE EN MEMORIA
-    // ═══════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════
+    // ⚡ ACTUALIZAR MEMORIA CON VALOR VERIFICADO POR MONGODB
+    // ════════════════════════════════════════════════════════════════════
     
     ultimosDatosFlujo = {
       ...ultimosDatosFlujo,
       caudal: caudal,
       volumen_total: volumen,
-      volumen_diario: volumenDiarioCalculado, 
+      volumen_diario: volumenRealEnBD,  // ⚡ Valor confirmado por MongoDB
       sensor_id,
       fecha: ahora,
       conectado: true
     };
     
-    // ═══════════════════════════════════════════════════════════════════
-    // EMITIR POR WEBSOCKET (Sincronizado con App.jsx)
-    // ═══════════════════════════════════════════════════════════════════
+    // ════════════════════════════════════════════════════════════════════
+    // ⚡ EMITIR SOCKET SOLO CON VALOR VERIFICADO
+    // ════════════════════════════════════════════════════════════════════
     
     if (req.io) {
-      // Evento general para el Dashboard principal
       req.io.emit('lectura_actualizada', {
         caudal_l_min: caudal,
-        volumen_diario: volumenDiarioCalculado, // Corregido: sin la _l
+        volumen_diario: volumenRealEnBD,  // ⚡ Valor confirmado por BD
         timestamp: ahora
       });
 
-      // Evento específico para la tarjeta de agua
       req.io.emit('flujo_actualizado', {
         caudal: caudal,
         volumen_total: volumen,
-        volumen_diario: volumenDiarioCalculado, // Corregido: sin la _l
+        volumen_diario: volumenRealEnBD,  // ⚡ Valor confirmado por BD
         timestamp: ahora
       });
     }
     
     res.status(200).json({ 
       ok: true,
-      volumen_diario: volumenDiarioCalculado 
+      volumen_diario: volumenRealEnBD  // ⚡ Devolver valor confirmado
     });
     
   } catch (error) {
     console.error('[ESP32] Error flujo:', error);
     res.status(400).json({ mensaje: error.message });
   }
-}; // <--- Esta es la llave que cierra recibirFlujo
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// ⚡ OBTENER DATOS DE FLUJO (VERSIÓN CORREGIDA)
+// GET /api/esp/flujo
+// ═══════════════════════════════════════════════════════════════════════
+
+exports.obtenerDatosFlujo = async (req, res) => {
+  try {
+    // Esperar inicialización
+    if (flujoInitPromise) {
+      await flujoInitPromise;
+      flujoInitPromise = null;
+    }
+
+    const ultimaLectura = await Reading.findOne({ tipo: 'flujo_agua' })
+      .sort({ createdAt: -1 });
+    
+    const ahoraCol = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+    const hoy = new Date(Date.UTC(ahoraCol.getFullYear(), ahoraCol.getMonth(), ahoraCol.getDate()));
+    
+    const consumoHoy = await WaterConsumption.findOne({
+      fecha: { $gte: hoy },
+      tipo: 'diario'
+    });
+    
+    const conectado = ultimosDatosFlujo.fecha && 
+      (new Date() - ultimosDatosFlujo.fecha) < 120000;
+    
+    // ⚡ PRIORIZAR BD SOBRE MEMORIA
+    res.json({
+      caudal: ultimosDatosFlujo.caudal || 0,
+      volumen_total: ultimosDatosFlujo.volumen_total || 0,
+      volumen_diario: consumoHoy !== null && consumoHoy !== undefined
+        ? consumoHoy.litros
+        : (ultimosDatosFlujo.volumen_diario || 0),
+      fecha: ultimaLectura?.createdAt || ultimosDatosFlujo.fecha,
+      conectado
+    });
+  } catch (error) {
+    res.status(500).json({ mensaje: error.message });
+  }
+};
+
 // ═══════════════════════════════════════════════════════════════════════
 // CORREGIR CONSUMO DIARIO MANUALMENTE
 // PUT /api/esp/flujo/corregir
@@ -610,7 +612,6 @@ exports.corregirConsumo = async (req, res) => {
 
     let targetDate;
     if (fecha) {
-      // Fecha específica proporcionada (para correcciones históricas)
       const parts = fecha.split('-');
       targetDate = new Date(Date.UTC(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2])));
     } else {
@@ -626,15 +627,14 @@ exports.corregirConsumo = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    // Si es corrección de hoy, actualizar cache en memoria
+    // Si es corrección de hoy, actualizar cache
     const ahoraCol = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
     const hoy = new Date(Date.UTC(ahoraCol.getFullYear(), ahoraCol.getMonth(), ahoraCol.getDate()));
+    
     if (targetDate.getTime() === hoy.getTime()) {
       ultimosDatosFlujo.volumen_diario = litros;
       ultimosDatosFlujo.volumen_offset = litros;
-      // ✅ FIX 4: Usar hora Colombia también aquí para consistencia
       ultimosDatosFlujo.fecha_inicio_dia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-      // Recalibrar sesión ESP en la próxima lectura
       ultimosDatosFlujo.volumen_inicio_sesion = null;
     }
 
@@ -647,47 +647,6 @@ exports.corregirConsumo = async (req, res) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// OBTENER DATOS DE FLUJO
-// GET /api/esp/flujo
-// ═══════════════════════════════════════════════════════════════════════
-
-exports.obtenerDatosFlujo = async (req, res) => {
-  try {
-    // Esperar inicialización
-    if (flujoInitPromise) {
-      await flujoInitPromise;
-      flujoInitPromise = null;
-    }
-
-    // Buscar última lectura de flujo
-    const ultimaLectura = await Reading.findOne({ tipo: 'flujo_agua' })
-      .sort({ createdAt: -1 });
-    
-    // Buscar consumo diario de hoy (zona horaria Colombia UTC-5)
-    const ahoraCol = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-    const hoy = new Date(Date.UTC(ahoraCol.getFullYear(), ahoraCol.getMonth(), ahoraCol.getDate()));
-    
-    const consumoHoy = await WaterConsumption.findOne({
-      fecha: { $gte: hoy },
-      tipo: 'diario'
-    });
-    
-    const conectado = ultimosDatosFlujo.fecha && 
-      (new Date() - ultimosDatosFlujo.fecha) < 120000;
-    
-    res.json({
-      caudal: ultimosDatosFlujo.caudal || 0,
-      volumen_total: ultimosDatosFlujo.volumen_total || 0,
-      volumen_diario: consumoHoy?.litros || ultimosDatosFlujo.volumen_diario || 0,
-      fecha: ultimaLectura?.createdAt || ultimosDatosFlujo.fecha,
-      conectado
-    });
-  } catch (error) {
-    res.status(500).json({ mensaje: error.message });
-  }
-};
-
-// ═══════════════════════════════════════════════════════════════════════
 // OBTENER HISTÓRICO DE AGUA (7 DÍAS)
 // GET /api/esp/flujo/historico?dias=7
 // ═══════════════════════════════════════════════════════════════════════
@@ -695,9 +654,8 @@ exports.obtenerDatosFlujo = async (req, res) => {
 exports.obtenerHistoricoAgua = async (req, res) => {
   try {
     const dias = parseInt(req.query.dias) || 7;
-// Usar hora de Colombia (UTC-5), almacenada como medianoche UTC
-const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-const fechaLimite = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate() - dias));
+    const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+    const fechaLimite = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate() - dias));
     
     const consumos = await WaterConsumption.find({
       fecha: { $gte: fechaLimite },
