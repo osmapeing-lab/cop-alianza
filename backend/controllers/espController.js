@@ -549,6 +549,8 @@ const hoy = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMont
       { upsert: true }
     );
     
+    // ... (vienes del await WaterConsumption.findOneAndUpdate)
+
     // ═══════════════════════════════════════════════════════════════════
     // ACTUALIZAR CACHE EN MEMORIA
     // ═══════════════════════════════════════════════════════════════════
@@ -557,35 +559,43 @@ const hoy = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMont
       ...ultimosDatosFlujo,
       caudal: caudal,
       volumen_total: volumen,
-      volumen_diario: volumenDiarioCalculado,
+      volumen_diario: volumenDiarioCalculado, 
       sensor_id,
       fecha: ahora,
       conectado: true
     };
     
     // ═══════════════════════════════════════════════════════════════════
-    // EMITIR POR WEBSOCKET (Siempre, para tiempo real)
+    // EMITIR POR WEBSOCKET (Sincronizado con App.jsx)
     // ═══════════════════════════════════════════════════════════════════
     
     if (req.io) {
+      // Evento general para el Dashboard principal
+      req.io.emit('lectura_actualizada', {
+        caudal_l_min: caudal,
+        volumen_diario: volumenDiarioCalculado, // Corregido: sin la _l
+        timestamp: ahora
+      });
+
+      // Evento específico para la tarjeta de agua
       req.io.emit('flujo_actualizado', {
         caudal: caudal,
         volumen_total: volumen,
-        volumen_diario: volumenDiarioCalculado,
+        volumen_diario: volumenDiarioCalculado, // Corregido: sin la _l
         timestamp: ahora
       });
     }
     
     res.status(200).json({ 
       ok: true,
-      volumen_diario: volumenDiarioCalculado
+      volumen_diario: volumenDiarioCalculado 
     });
     
   } catch (error) {
     console.error('[ESP32] Error flujo:', error);
     res.status(400).json({ mensaje: error.message });
   }
-};
+}; // <--- Esta es la llave que cierra recibirFlujo
 // ═══════════════════════════════════════════════════════════════════════
 // CORREGIR CONSUMO DIARIO MANUALMENTE
 // PUT /api/esp/flujo/corregir
