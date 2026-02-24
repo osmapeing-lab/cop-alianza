@@ -2015,7 +2015,7 @@ const anularVenta = async (id) => {
       alert('Error controlando bomba:\n' + mensaje)
     }
   }
-}
+
 const crearBomba = async () => {
   try {
     await axios.post(`${API_URL}/api/motorbombs`, nuevaBomba, {
@@ -4834,89 +4834,86 @@ const cargarHistoricoPesos = async () => {
       </div>
     )}
   </div>
-  </div>
-)}
-          {/* ════════════════════════════════════════════════════════════════ */}
-          {/* PÁGINA: CONFIGURACIÓN */}
-          {/* ════════════════════════════════════════════════════════════════ */}
-          {pagina === 'config' && (
-            <div className="page-config">
-              <div className="page-header">
-                <h2>Configuración</h2>
-              </div>
 
-              <div className="config-sections">
-                {/* Precios */}
-                <div className="config-section">
-                  <h3>Precios</h3>
-                  <div className="config-grid">
-                    <div className="form-group">
-                      <label>Precio Agua (por litro)</label>
-                      <input
-                        type="number"
-                        value={config.precio_agua_litro}
-                        onChange={e => setConfig({ ...config, precio_agua_litro: numVal(e.target.value, true) })}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>Precio Alimento (por kg)</label>
-                      <input
-                        type="number"
-                        value={config.precio_alimento_kg}
-                        onChange={e => setConfig({ ...config, precio_alimento_kg: numVal(e.target.value, true) })}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>Precio Venta Cerdo (por kg en pie)</label>
-                      <input
-                        type="number"
-                        value={config.precio_venta_kg}
-                        onChange={e => setConfig({ ...config, precio_venta_kg: numVal(e.target.value, true) })}
-                      />
-                    </div>
-                  </div>
+)}{/* ════════════════════════════════════════════════════════════════ */}
+      {/* PÁGINA: CONFIGURACIÓN */}
+      {/* ════════════════════════════════════════════════════════════════ */}
+      {pagina === 'config' && (
+        <div className="page-config">
+          <div className="page-header">
+            <h2>Configuración</h2>
+          </div>
+
+          <div className="config-sections">
+            {/* Precios */}
+            <div className="config-section">
+              <h3>Precios</h3>
+              <div className="config-grid">
+                <div className="form-group">
+                  <label>Precio Agua (por litro)</label>
+                  <input
+                    type="number"
+                    value={config.precio_agua_litro}
+                    onChange={e => setConfig({ ...config, precio_agua_litro: numVal(e.target.value, true) })}
+                  />
                 </div>
-
-                {/* Umbrales */}
-                <div className="config-section">
-                  <h3>Umbrales de Temperatura</h3>
-                  <div className="config-grid">
-                    <div className="form-group">
-                      <label>Temperatura Alerta (°C)</label>
-                      <input
-                        type="number"
-                        value={config.umbral_temp_max}
-                        onChange={e => setConfig({ ...config, umbral_temp_max: numVal(e.target.value, true) })}
-                      />
-                      <small>Se genera alerta cuando supera este valor</small>
-                    </div>
-                    <div className="form-group">
-                      <label>Temperatura Crítica (°C)</label>
-                      <input
-                        type="number"
-                        value={config.umbral_temp_critico}
-                        onChange={e => setConfig({ ...config, umbral_temp_critico: numVal(e.target.value, true) })}
-                      />
-                      <small>Se activan bombas automáticamente</small>
-                    </div>
-                  </div>
+                <div className="form-group">
+                  <label>Precio Alimento (por kg)</label>
+                  <input
+                    type="number"
+                    value={config.precio_alimento_kg}
+                    onChange={e => setConfig({ ...config, precio_alimento_kg: numVal(e.target.value, true) })}
+                  />
                 </div>
-
-                {/* Botón guardar */}
-                <div className="config-actions">
-                  <button className="btn-primary" onClick={guardarConfig}>
-                    Guardar Configuración
-                  </button>
+                <div className="form-group">
+                  <label>Precio Venta Cerdo (por kg en pie)</label>
+                  <input
+                    type="number"
+                    value={config.precio_venta_kg}
+                    onChange={e => setConfig({ ...config, precio_venta_kg: numVal(e.target.value, true) })}
+                  />
                 </div>
               </div>
             </div>
-          )}
-        </main>
+
+            {/* Umbrales */}
+            <div className="config-section">
+              <h3>Umbrales de Temperatura</h3>
+              <div className="config-grid">
+                <div className="form-group">
+                  <label>Temperatura Alerta (°C)</label>
+                  <input
+                    type="number"
+                    value={config.umbral_temp_max}
+                    onChange={e => setConfig({ ...config, umbral_temp_max: numVal(e.target.value, true) })}
+                  />
+                  <small>Se genera alerta cuando supera este valor</small>
+                </div>
+                <div className="form-group">
+                  <label>Temperatura Crítica (°C)</label>
+                  <input
+                    type="number"
+                    value={config.umbral_temp_critico}
+                    onChange={e => setConfig({ ...config, umbral_temp_critico: numVal(e.target.value, true) })}
+                  />
+                  <small>Se activan bombas automáticamente</small>
+                </div>
+              </div>
+            </div>
+
+            {/* Botón guardar */}
+            <div className="config-actions">
+              <button className="btn-primary" onClick={guardarConfig}>
+                Guardar Configuración
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+   </main>
       </div>
     </div>
   )
+}
 
-
-} 
-
-export default App      
+export default App
