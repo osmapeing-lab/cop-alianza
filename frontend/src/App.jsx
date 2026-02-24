@@ -2282,6 +2282,8 @@ const cargarHistoricoPesos = async () => {
 
   const [emailReporte, setEmailReporte] = useState('')
   const [enviandoReporte, setEnviandoReporte] = useState(false)
+  const [testEmailResult, setTestEmailResult] = useState(null)
+  const [testandoEmail, setTestandoEmail] = useState(false)
 
   const getSugerenciasEmail = () => {
     try { return JSON.parse(localStorage.getItem('coo_emails_reporte') || '[]') } catch { return [] }
@@ -2319,17 +2321,38 @@ const cargarHistoricoPesos = async () => {
     }
     setEnviandoReporte(true)
     try {
-      await axios.post(
+      const res = await axios.post(
         `${API_URL}/api/reporte/email`,
         { correo: emailReporte },
         { headers: { Authorization: `Bearer ${token}` } }
       )
       guardarEmailUsado(emailReporte)
-      alert(`✅ Reporte enviado exitosamente a ${emailReporte}`)
+      alert(`✅ ${res.data.mensaje}`)
     } catch (error) {
       alert('Error enviando reporte: ' + (error.response?.data?.mensaje || error.message))
     } finally {
       setEnviandoReporte(false)
+    }
+  }
+
+  const verificarConfigEmail = async () => {
+    setTestandoEmail(true)
+    setTestEmailResult(null)
+    try {
+      const res = await axios.get(`${API_URL}/api/reporte/test-email`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setTestEmailResult({ ok: true, mensaje: res.data.mensaje })
+    } catch (error) {
+      const data = error.response?.data || {}
+      setTestEmailResult({
+        ok: false,
+        problema: data.problema || 'ERROR',
+        mensaje: data.solucion || data.mensaje || error.message,
+        error_tecnico: data.error_tecnico || ''
+      })
+    } finally {
+      setTestandoEmail(false)
     }
   }
 
@@ -4877,6 +4900,65 @@ const cargarHistoricoPesos = async () => {
                         Últimos usados: {getSugerenciasEmail().join(' · ')}
                       </p>
                     )}
+
+                    {/* Verificar config Gmail */}
+                    <div style={{ marginTop: '14px', borderTop: '1px solid #f1f5f9', paddingTop: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                        <button
+                          onClick={verificarConfigEmail}
+                          disabled={testandoEmail}
+                          style={{
+                            padding: '6px 14px', fontSize: '12px', borderRadius: '6px',
+                            border: '1px solid #d1d5db', background: '#f8fafc',
+                            cursor: 'pointer', color: '#374151'
+                          }}
+                        >
+                          {testandoEmail ? 'Verificando...' : 'Verificar config. Gmail'}
+                        </button>
+                        {testEmailResult && (
+                          <span style={{
+                            fontSize: '12px', fontWeight: 600,
+                            color: testEmailResult.ok ? '#16a34a' : '#dc2626'
+                          }}>
+                            {testEmailResult.ok ? '✅ Gmail OK' : '❌ ' + testEmailResult.problema}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Mostrar solución si hay error */}
+                      {testEmailResult && !testEmailResult.ok && (
+                        <div style={{
+                          marginTop: '10px', padding: '12px', borderRadius: '8px',
+                          background: '#fef2f2', border: '1px solid #fecaca', fontSize: '12px'
+                        }}>
+                          <p style={{ fontWeight: 700, color: '#dc2626', marginBottom: '6px' }}>
+                            Problema: {testEmailResult.problema}
+                          </p>
+                          <p style={{ color: '#7f1d1d', lineHeight: 1.6 }}>{testEmailResult.mensaje}</p>
+                          {testEmailResult.error_tecnico && (
+                            <p style={{ color: '#9ca3af', marginTop: '6px', fontFamily: 'monospace', fontSize: '11px' }}>
+                              {testEmailResult.error_tecnico}
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Guía rápida App Password */}
+                      <details style={{ marginTop: '10px' }}>
+                        <summary style={{ fontSize: '12px', color: '#6b7280', cursor: 'pointer' }}>
+                          ¿Cómo configurar Gmail App Password?
+                        </summary>
+                        <ol style={{ fontSize: '11px', color: '#374151', paddingLeft: '16px', marginTop: '8px', lineHeight: 1.8 }}>
+                          <li>Ve a <strong>myaccount.google.com → Seguridad</strong></li>
+                          <li>Activa <strong>Verificación en 2 pasos</strong> (si no está activa)</li>
+                          <li>Busca <strong>"Contraseñas de aplicaciones"</strong></li>
+                          <li>Selecciona "Correo" → "Otro" → nombra "COO Alianzas"</li>
+                          <li>Copia los <strong>16 dígitos</strong> generados</li>
+                          <li>Pega esos 16 dígitos en la variable <code>EMAIL_PASS</code> del servidor</li>
+                          <li>En <code>EMAIL_USER</code> pon tu correo Gmail completo</li>
+                        </ol>
+                      </details>
+                    </div>
                   </div>
                 </div>
 

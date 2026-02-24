@@ -5138,3 +5138,228 @@ tr.anulado td { opacity: 0.5; text-decoration: line-through; }
     width: auto;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RESPONSIVE — TELÉFONOS (≤ 480px)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 480px) {
+
+  /* Sidebar: limitar ancho para que siempre haya overlay visible */
+  .sidebar {
+    max-width: 82vw;
+    width: 82vw;
+  }
+
+  /* Contenido: menos padding */
+  .content {
+    padding: 12px !important;
+  }
+
+  /* Header: compactar */
+  .header { padding: 0 12px; }
+  .logo span { display: none; }
+  .user-info { display: none; }
+  .btn-logout span { display: none; }
+  .btn-logout { padding: 8px; min-width: unset; }
+
+  /* Encabezados de página */
+  .page-header {
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .page-header h2 {
+    font-size: 1.1rem !important;
+    width: 100%;
+  }
+  .page-header button,
+  .page-header .btn-primary,
+  .page-header .btn-secondary {
+    font-size: 0.8rem;
+    padding: 8px 14px;
+  }
+
+  /* Cards genéricas */
+  .card { padding: 14px; }
+  .cards-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px;
+  }
+
+  /* Reportes — anular el span-2 en pantallas pequeñas */
+  .reportes-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .reportes-grid .reporte-card {
+    grid-column: span 1 !important;
+    text-align: left;
+  }
+  .reporte-card .reporte-icon { margin: 0 0 12px; }
+
+  /* Bombas */
+  .bombas-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px;
+  }
+  .bomba-card { padding: 16px; }
+
+  /* Lotes */
+  .lotes-grid { grid-template-columns: 1fr !important; }
+  .lote-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  .lote-detalle-header { padding: 16px !important; flex-direction: column; gap: 12px; }
+  .lote-detalle-titulo h3 { font-size: 1.2rem; }
+  .lote-stat-card { padding: 12px; }
+  .stat-valor { font-size: 1.1rem; }
+
+  /* Tabs (finanzas y otros) */
+  .finanzas-tabs {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 2px;
+    padding: 3px;
+  }
+  .finanzas-tabs::-webkit-scrollbar { display: none; }
+  .tab-btn {
+    flex: 0 0 auto !important;
+    min-width: 72px;
+    padding: 8px 10px !important;
+    font-size: 0.72rem !important;
+  }
+
+  /* Todas las tablas: scroll horizontal */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+  .table-container,
+  .tabla-ventas,
+  .tabla-inventario,
+  .tabla-contabilidad,
+  .tabla-pesajes,
+  .tabla-alertas,
+  .tabla-alimentacion,
+  .tabla-gastos,
+  [class*="tabla-"] {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    display: block;
+  }
+
+  /* Sensor cards */
+  .sensor-card { padding: 16px; }
+  .sensor-valor { font-size: 2rem; }
+
+  /* Finanzas cards */
+  .finanzas-cards {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px;
+  }
+  .finanza-card { padding: 12px; gap: 8px; }
+  .fc-valor { font-size: 0.95rem; }
+
+  /* Ventas / Contabilidad stats */
+  .ventas-stats,
+  .contabilidad-resumen {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 10px;
+  }
+
+  /* Inventario stats */
+  .inventario-stats {
+    flex-direction: column !important;
+    gap: 10px;
+  }
+
+  /* Graficas */
+  .graficas-grid { grid-template-columns: 1fr !important; }
+  .chart-container,
+  .grafica-container { height: 200px !important; }
+
+  /* Modales: pantalla completa */
+  .modal-grande,
+  .modal-content,
+  [class*="modal"] {
+    width: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    max-height: 100vh !important;
+    height: 100vh;
+    top: 0 !important;
+    left: 0 !important;
+  }
+
+  /* Formularios */
+  .form-row { grid-template-columns: 1fr !important; }
+  .form-group input,
+  .form-group select,
+  .form-group textarea,
+  .input-group input {
+    font-size: 16px; /* evita zoom automático en iOS */
+  }
+
+  /* Botones de acción */
+  .btn-primary, .btn-secondary {
+    padding: 10px 16px;
+    font-size: 0.85rem;
+  }
+
+  /* Dashboard sections */
+  .dashboard-section { padding: 14px !important; }
+
+  /* Camaras */
+  .camaras-grid { grid-template-columns: 1fr !important; }
+
+  /* Alertas / historial */
+  .alertas-lista { font-size: 0.8rem; }
+  .alerta-item { padding: 10px 12px; }
+
+  /* Período selector (agua) */
+  .grafica-header-agua { flex-direction: column; align-items: flex-start; }
+  .periodo-selector { flex-wrap: wrap; gap: 4px; }
+  .periodo-btn { padding: 6px 12px; font-size: 0.8rem; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   RESPONSIVE — TELÉFONOS MUY PEQUEÑOS (≤ 360px)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 360px) {
+  .content { padding: 8px !important; }
+  .header { padding: 0 8px; }
+  .logo span { display: none; }
+  .page-header h2 { font-size: 1rem !important; }
+
+  /* Compactar tarjetas en 2 columnas donde sea posible */
+  .bombas-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .finanzas-cards,
+  .ventas-stats,
+  .contabilidad-resumen {
+    grid-template-columns: 1fr !important;
+  }
+
+  .lote-stats-grid { grid-template-columns: 1fr 1fr !important; }
+
+  .tab-btn {
+    min-width: 60px !important;
+    font-size: 0.68rem !important;
+    padding: 6px 8px !important;
+  }
+
+  .btn-primary, .btn-secondary {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+
+  .card { padding: 10px; }
+  .bomba-card { padding: 12px; }
+  .sensor-valor { font-size: 1.8rem; }
+  .stat-valor { font-size: 1rem; }
+  .fc-valor { font-size: 0.9rem; }
+}

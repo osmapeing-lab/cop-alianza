@@ -883,3 +883,62 @@ exports.obtenerResumen = async (_req, res) => {
     res.status(500).json({ mensaje: error.message });
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════════
+// VERIFICAR CONFIGURACIÓN DE EMAIL
+// GET /api/reporte/test-email
+// Verifica que Gmail SMTP esté configurado correctamente y devuelve
+// el error exacto si hay algún problema (App Password, credenciales, etc.)
+// ═══════════════════════════════════════════════════════════════════════
+
+exports.testEmail = async (_req, res) => {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    return res.status(400).json({
+      ok: false,
+      problema: 'VARIABLES_FALTANTES',
+      mensaje: 'Las variables EMAIL_USER y/o EMAIL_PASS no están configuradas en el servidor.',
+      solucion: 'Configura EMAIL_USER (tu correo Gmail) y EMAIL_PASS (App Password de 16 dígitos) en las variables de entorno del servidor.'
+    });
+  }
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+  });
+
+  try {
+    await transporter.verify();
+    res.json({
+      ok: true,
+      mensaje: `Conexión SMTP exitosa con ${process.env.EMAIL_USER}. El envío de correos está funcionando correctamente.`
+    });
+  } catch (error) {
+    let problema = 'ERROR_DESCONOCIDO';
+    let solucion = 'Revisa los logs del servidor para más detalles.';
+
+    if (error.code === 'EAUTH' || error.responseCode === 535 || error.message?.includes('Invalid credentials')) {
+      problema = 'CREDENCIALES_INVALIDAS';
+      solucion = [
+        '1. Gmail ya NO acepta contraseñas normales para apps externas.',
+        '2. Debes usar una "Contraseña de Aplicación" (App Password) de 16 dígitos.',
+        '3. Para generarla: Google Account → Seguridad → Verificación en 2 pasos → Contraseñas de aplicaciones.',
+        '4. Selecciona "Correo" y "Otro dispositivo" → Copia los 16 dígitos.',
+        '5. Pega esos 16 dígitos en EMAIL_PASS (sin espacios).'
+      ].join(' ');
+    } else if (error.code === 'ECONNECTION' || error.code === 'ENOTFOUND') {
+      problema = 'SIN_CONEXION';
+      solucion = 'El servidor no puede conectarse a Gmail. Verifica la conexión a internet del servidor.';
+    } else if (error.message?.includes('Username and Password not accepted')) {
+      problema = 'CONTRASEÑA_NO_ACEPTADA';
+      solucion = 'Contraseña no aceptada. Usa una App Password de 16 dígitos generada en tu cuenta Google, no la contraseña normal de Gmail.';
+    }
+
+    res.status(400).json({
+      ok: false,
+      problema,
+      error_tecnico: error.message,
+      correo_configurado: process.env.EMAIL_USER,
+      solucion
+    });
+  }
+};
