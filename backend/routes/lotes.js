@@ -20,7 +20,10 @@ const {
   eliminarAlimentacion,
   getGraficaPeso,
   getGraficaAlimentacion,
-  getGraficaEvolucion
+  getGraficaEvolucion,
+  registrarGastoSemanal,
+  getGastosSemanales,
+  eliminarGastoSemanal
 } = require('../controllers/gestionLotesController');
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -48,5 +51,12 @@ router.delete('/alimentacion/:alimentacionId', eliminarAlimentacion);
 router.get('/:id/grafica/peso', getGraficaPeso);
 router.get('/:id/grafica/alimentacion', getGraficaAlimentacion);
 router.get('/:id/grafica/evolucion', getGraficaEvolucion);
+
+// ═══════════════════════════════════════════════════════════════════════
+// RUTAS GASTOS SEMANALES
+// ═══════════════════════════════════════════════════════════════════════
+router.post('/:id/gasto-semanal', registrarGastoSemanal);
+router.get('/:id/gastos-semanales', getGastosSemanales);
+router.delete('/:id/gasto-semanal/:gastoId', eliminarGastoSemanal);
 
 module.exports = router;
