@@ -1145,6 +1145,9 @@ const [bombaEditando, setBombaEditando] = useState(null)
 const [inventario, setInventario] = useState([])
 const [estadisticasInventario, setEstadisticasInventario] = useState({})
 
+// Estado para tabs de inventario
+const [tabInventario, setTabInventario] = useState('cerdos')
+
 // Estados de inventario de alimento (concentrado)
 const [inventarioAlimento, setInventarioAlimento] = useState([])
 const [resumenInventarioAlimento, setResumenInventarioAlimento] = useState({})
@@ -1258,18 +1261,6 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
       cargarBombas();
     });
 
-    // Alerta de stock bajo de alimento (tiempo real)
-    socket.on('alerta_stock', (data) => {
-      setAlertas(prev => [data, ...prev.slice(0, 49)]);
-      setMostrarNotificaciones(true);
-    });
-
-    // Alerta crítica general (tiempo real)
-    socket.on('alerta_critica', (data) => {
-      setAlertas(prev => [data, ...prev.slice(0, 49)]);
-      setMostrarNotificaciones(true);
-    });
-
     // Limpieza de todos los eventos al cerrar el componente
     return () => {
       socket.off('lectura_actualizada');
@@ -1277,8 +1268,6 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
       socket.off('bomba_actualizada');
       socket.off('peso_live');
       socket.off('flujo_actualizado');
-      socket.off('alerta_stock');
-      socket.off('alerta_critica');
     };
   }, []); // El array vacío asegura que esto solo se ejecute una vez
   // ═══════════════════════════════════════════════════════════════════════
@@ -1391,7 +1380,7 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
   // FUNCIONES DE CARGA DE DATOS
   // ═══════════════════════════════════════════════════════════════════════
 
-const cargarDatos = async () => {
+  const cargarDatos = async () => {
   await Promise.all([
     cargarClima(),
     cargarPorqueriza(),
@@ -1506,9 +1495,19 @@ const cargarInventarioAlimento = async () => {
 
 const registrarMovimientoAlimento = async () => {
   try {
-    await axios.post(`${API_URL}/api/inventario-alimento`, nuevaMovimientoAlimento, {
+    const endpoint = nuevaMovimientoAlimento.tipo === 'entrada' 
+      ? `${API_URL}/api/inventario-alimento/${inventarioAlimento[0]?._id || 'default'}/entrada`
+      : `${API_URL}/api/inventario-alimento/${inventarioAlimento[0]?._id || 'default'}/salida`
+    
+    await axios.post(endpoint, {
+      cantidad_bultos: nuevaMovimientoAlimento.cantidad_bultos,
+      precio_bulto: nuevaMovimientoAlimento.precio_bulto,
+      descripcion: nuevaMovimientoAlimento.descripcion,
+      lote_id: nuevaMovimientoAlimento.lote_id || null
+    }, {
       headers: { Authorization: `Bearer ${token}` }
     })
+    
     setMostrarModalAlimento(false)
     setNuevaMovimientoAlimento({
       tipo: 'entrada',
@@ -1518,7 +1517,7 @@ const registrarMovimientoAlimento = async () => {
       lote_id: ''
     })
     cargarInventarioAlimento()
-    alert('Movimiento registrado correctamente')
+    alert('✓ Movimiento registrado correctamente')
   } catch (error) {
     alert('Error: ' + (error.response?.data?.mensaje || error.message))
   }
@@ -1971,51 +1970,36 @@ const anularVenta = async (id) => {
   // ═══════════════════════════════════════════════════════════════════════
 
   const toggleBomba = async (id) => {
-    try {
-      const bomba = bombas.find(b => b._id === id)
-      if (!bomba) {
-        alert('Bomba no encontrada')
-        return
-      }
-
-      // estado true = apagada, false = encendida (lógica invertida del modelo)
-      const accion      = bomba.estado ? 'ENCENDER' : 'APAGAR'
-      const nombreBomba = bomba.nombre || bomba.codigo_bomba || 'la motobomba'
-
-      const confirmado = confirm(
-        `¿Estás seguro de ${accion} ${nombreBomba}?\n\n` +
-        `Sistema: ${bomba.ubicacion || 'Sistema de riego/distribución'}\n` +
-        `Estado actual: ${bomba.estado ? 'Apagada' : 'Encendida'}`
-      )
-
-      if (!confirmado) return
-
-      await axios.put(`${API_URL}/api/motorbombs/${id}/toggle`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-
-      cargarBombas()
-      alert(`✓ ${nombreBomba} ${accion === 'ENCENDER' ? 'encendida' : 'apagada'} correctamente`)
-
-    } catch (error) {
-      const datos  = error.response?.data
-      const codigo = datos?.codigo
-      let mensaje  = datos?.mensaje || error.message
-
-      // Mensaje enriquecido según el código de error del servidor
-      if (codigo === 'LIMITE_AGUA') {
-        const actual = datos.consumo_actual?.toFixed(1) ?? '?'
-        const limite = datos.limite ?? 600
-        mensaje = `🚫 No se puede encender la bomba.\nLímite diario alcanzado: ${actual}L / ${limite}L`
-      } else if (codigo === 'HORARIO_NO_PERMITIDO') {
-        const horarios = datos.horarios_permitidos?.join(' y ') ?? '6:00-12:00 y 12:00-15:00'
-        mensaje = `⏰ Horario no permitido.\nLa bomba solo puede encenderse entre:\n${horarios}\n\nHora actual: ${datos.hora_actual}`
-      }
-
-      alert('Error controlando bomba:\n' + mensaje)
+  try {
+    // Buscar la bomba para saber su estado actual y nombre
+    const bomba = bombas.find(b => b._id === id)
+    if (!bomba) {
+      alert('Bomba no encontrada')
+      return
     }
+    
+    // Determinar acción (recordar: estado invertido - false = encendida, true = apagada)
+    const accion = bomba.estado ? 'ENCENDER' : 'APAGAR'
+    const nombreBomba = bomba.nombre || bomba.codigo_bomba || 'la motobomba'
+    
+    // Confirmar acción
+    const confirmado = confirm(
+      `¿Estás seguro de ${accion} ${nombreBomba}?\n\n` +
+      `Sistema: ${bomba.ubicacion || 'Sistema de riego/distribución'}\n` +
+      `Estado actual: ${bomba.estado ? 'Apagada' : 'Encendida'}`
+    )
+    
+    if (!confirmado) return
+    
+    await axios.put(`${API_URL}/api/motorbombs/${id}/toggle`, {}, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    cargarBombas()
+    alert(`✓ ${nombreBomba} ${accion === 'ENCENDER' ? 'encendida' : 'apagada'} correctamente`)
+  } catch (error) {
+    alert('Error controlando bomba: ' + (error.response?.data?.mensaje || error.message))
   }
-
+}
 const crearBomba = async () => {
   try {
     await axios.post(`${API_URL}/api/motorbombs`, nuevaBomba, {
@@ -2536,14 +2520,6 @@ const cargarHistoricoPesos = async () => {
   <IconInventario />
   <span>Inventario</span>
 </button>
-
-<button 
-  className={`nav-item ${pagina === 'inventario-alimento' ? 'activo' : ''}`}
-  onClick={() => { setPagina('inventario-alimento'); setMenuAbierto(false) }}
->
-  <Package />
-  <span>Alimento</span>
-</button>
             <button 
               className={`nav-item ${pagina === 'reportes' ? 'activo' : ''}`}
               onClick={() => { setPagina('reportes'); setMenuAbierto(false) }}
@@ -2619,11 +2595,11 @@ const cargarHistoricoPesos = async () => {
         </div>
       </div>
 
-{/* Granja Porcina */}
+      {/* Porqueriza */}
       <div className={`card ${getEstadoTemp(porqueriza.temp).clase}`}>
         <div className="card-header">
           <Thermometer size={20} />
-          <h3>Granja Porcina</h3>
+          <h3>Porqueriza</h3>
           <span className={`estado-badge ${porqueriza.conectado ? 'conectado' : 'desconectado'}`}>
             {porqueriza.conectado ? <><Wifi size={12} /> Conectado</> : <><WifiOff size={12} /> Desconectado</>}
           </span>
@@ -2723,9 +2699,9 @@ const cargarHistoricoPesos = async () => {
 
     {/* GRÁFICAS PRINCIPALES */}
     <div className="graficas-grid">
-{/* Gráfica de Temperatura 24h */}
+      {/* Gráfica de Temperatura 24h */}
       <div className="dashboard-section grafica-section">
-        <h3><Thermometer size={20} /> Temperatura Granja Porcina - Últimas 24h</h3>
+        <h3><Thermometer size={20} /> Temperatura Porqueriza - Últimas 24h</h3>
         <div className="grafica-container">
           <ResponsiveContainer width="100%" height={250}>
             <AreaChart data={historicoTemperatura}>
@@ -4757,163 +4733,304 @@ const cargarHistoricoPesos = async () => {
 {/* ════════════════════════════════════════════════════════════════ */}
 {/* PÁGINA: INVENTARIO */}
 {/* ════════════════════════════════════════════════════════════════ */}
+{/* ════════════════════════════════════════════════════════════════ */}
+{/* PÁGINA: INVENTARIO (CON TABS) */}
+{/* ════════════════════════════════════════════════════════════════ */}
 {pagina === 'inventario' && (
   <div className="page-inventario">
-    <PanelInventario 
-      inventario={inventario}
-      estadisticas={estadisticasInventario}
-      onNuevoCerdo={crearCerdo}
-    />
-  </div>
-)}
-
-{pagina === 'inventario-alimento' && (
-  <div className="page-inventario-alimento">
-    <div className="page-header">
-      <h2><Package size={24} /> Inventario de Alimento</h2>
-      <button className="btn-primary" onClick={() => setMostrarModalAlimento(true)}>
-        <Plus size={18} /> Movimiento
+    {/* Tabs de navegación */}
+    <div className="finanzas-tabs" style={{marginBottom: '24px'}}>
+      <button 
+        className={`tab-btn ${tabInventario === 'cerdos' ? 'activo' : ''}`}
+        onClick={() => setTabInventario('cerdos')}
+      >
+        🐷 Inventario de Cerdos
+      </button>
+      <button 
+        className={`tab-btn ${tabInventario === 'alimento' ? 'activo' : ''}`}
+        onClick={() => setTabInventario('alimento')}
+      >
+        🌽 Inventario de Alimento
       </button>
     </div>
-    <div className="resumen-cards">
-      <div className="resumen-card">
-        <span>Bultos: {resumenInventarioAlimento?.total_bultos || 0}</span>
-      </div>
-      <div className="resumen-card">
-        <span>Peso: {resumenInventarioAlimento?.peso_total_kg || 0} kg</span>
-      </div>
-      <div className="resumen-card">
-        <span>Valor: ${(resumenInventarioAlimento?.valor_total || 0).toLocaleString()}</span>
-      </div>
-    </div>
-    <div className="table-container">
-      <table>
-        <thead><tr><th>Fecha</th><th>Tipo</th><th>Cant</th><th>Precio</th><th>Total</th><th>Descripción</th></tr></thead>
-        <tbody>
-          {inventarioAlimento.length === 0 ? <tr><td colSpan="6">Sin datos</td></tr> : 
-            inventarioAlimento.map(m => (
-              <tr key={m._id}>
-                <td>{new Date(m.fecha).toLocaleDateString()}</td>
-                <td><span className={`tipo-badge ${m.tipo}`}>{m.tipo}</span></td>
-                <td>{m.cantidad_bultos}</td>
-                <td>${m.precio_bulto}</td>
-                <td>${((m.cantidad_bultos||0)*(m.precio_bulto||0)).toLocaleString()}</td>
-                <td>{m.descripcion}</td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
-    </div>
-    {mostrarModalAlimento && (
-      <div className="modal-overlay" onClick={() => setMostrarModalAlimento(false)}>
-        <div className="modal" onClick={e => e.stopPropagation()}>
-          <div className="modal-header"><h3>Movimiento</h3><button onClick={() => setMostrarModalAlimento(false)}>&times;</button></div>
-          <div className="modal-body">
-            <div className="form-group"><label>Tipo</label>
-              <select value={nuevaMovimientoAlimento.tipo} onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, tipo: e.target.value})}>
-                <option value="entrada">Entrada</option><option value="salida">Salida</option>
-              </select>
-            </div>
-            <div className="form-row">
-              <div className="form-group"><label>Bultos</label>
-                <input type="number" value={nuevaMovimientoAlimento.cantidad_bultos} onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, cantidad_bultos: numVal(e.target.value)})} />
+
+    {/* TAB: CERDOS */}
+    {tabInventario === 'cerdos' && (
+      <PanelInventario 
+        inventario={inventario}
+        estadisticas={estadisticasInventario}
+        onNuevoCerdo={crearCerdo}
+      />
+    )}
+
+    {/* TAB: ALIMENTO */}
+    {tabInventario === 'alimento' && (
+      <div className="inventario-alimento-content">
+        <div className="page-header">
+          <h2><Package size={24} /> Inventario de Alimento Concentrado</h2>
+          <button className="btn-primary" onClick={() => setMostrarModalAlimento(true)}>
+            <Plus size={18} /> Registrar Movimiento
+          </button>
+        </div>
+
+        {/* Resumen */}
+        <div className="resumen-cards" style={{display:'flex', gap:'16px', marginBottom:'24px', flexWrap:'wrap'}}>
+          <div className="resumen-card" style={{flex:'1', minWidth:'200px', padding:'20px', background:'#f8fafc', borderRadius:'12px', border:'1px solid #e2e8f0'}}>
+            <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
+              <Package size={28} style={{color:'#3b82f6'}} />
+              <div>
+                <p style={{margin:0, fontSize:'14px', color:'#64748b'}}>Total Bultos</p>
+                <strong style={{fontSize:'28px', color:'#1e293b'}}>{resumenInventarioAlimento?.total_bultos || 0}</strong>
               </div>
-              <div className="form-group"><label>Precio</label>
-                <input type="number" value={nuevaMovimientoAlimento.precio_bulto} onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, precio_bulto: numVal(e.target.value)})} />
-              </div>
-            </div>
-            <div className="form-group"><label>Descripción</label>
-              <input type="text" value={nuevaMovimientoAlimento.descripcion} onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, descripcion: e.target.value})} />
             </div>
           </div>
-          <div className="modal-footer">
-            <button className="btn-secondary" onClick={() => setMostrarModalAlimento(false)}>Cancelar</button>
-            <button className="btn-primary" onClick={registrarMovimientoAlimento}>Guardar</button>
+          <div className="resumen-card" style={{flex:'1', minWidth:'200px', padding:'20px', background:'#f8fafc', borderRadius:'12px', border:'1px solid #e2e8f0'}}>
+            <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
+              <Weight size={28} style={{color:'#10b981'}} />
+              <div>
+                <p style={{margin:0, fontSize:'14px', color:'#64748b'}}>Peso Total</p>
+                <strong style={{fontSize:'28px', color:'#1e293b'}}>{resumenInventarioAlimento?.total_kg || 0} kg</strong>
+              </div>
+            </div>
+          </div>
+          <div className="resumen-card" style={{flex:'1', minWidth:'200px', padding:'20px', background:'#f8fafc', borderRadius:'12px', border:'1px solid #e2e8f0'}}>
+            <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
+              <DollarSign size={28} style={{color:'#f59e0b'}} />
+              <div>
+                <p style={{margin:0, fontSize:'14px', color:'#64748b'}}>Valor Total</p>
+                <strong style={{fontSize:'28px', color:'#1e293b'}}>${(resumenInventarioAlimento?.valor_total || 0).toLocaleString()}</strong>
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* Alertas de stock bajo */}
+        {resumenInventarioAlimento?.bajo_stock?.length > 0 && (
+          <div style={{marginBottom:'24px', padding:'16px', background:'#fef3c7', border:'1px solid #fbbf24', borderRadius:'12px'}}>
+            <div style={{display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px'}}>
+              <AlertTriangle size={20} style={{color:'#f59e0b'}} />
+              <strong style={{color:'#92400e'}}>⚠️ Alertas de Stock Bajo</strong>
+            </div>
+            {resumenInventarioAlimento.bajo_stock.map((item, i) => (
+              <div key={i} style={{padding:'8px 0', borderBottom: i < resumenInventarioAlimento.bajo_stock.length - 1 ? '1px solid #fbbf24' : 'none'}}>
+                <strong>{item.nombre}</strong> ({item.tipo}) - Quedan <strong>{item.cantidad}</strong> bultos (mínimo: {item.minimo})
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Tabla de movimientos */}
+        <div className="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Cantidad</th>
+                <th>Precio/Bulto</th>
+                <th>Total</th>
+                <th>Lote</th>
+                <th>Descripción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {inventarioAlimento.length === 0 ? (
+                <tr><td colSpan="7" className="sin-datos">No hay movimientos registrados</td></tr>
+              ) : (
+                inventarioAlimento.slice(0, 50).map(m => (
+                  <tr key={m._id}>
+                    <td>{new Date(m.fecha || m.createdAt).toLocaleDateString('es-CO')}</td>
+                    <td>
+                      <span className={`tipo-badge ${m.tipo}`} style={{
+                        padding:'4px 12px', 
+                        borderRadius:'6px',
+                        fontSize:'12px',
+                        fontWeight:'600',
+                        background: m.tipo === 'entrada' ? '#dcfce7' : '#fee2e2',
+                        color: m.tipo === 'entrada' ? '#166534' : '#991b1b'
+                      }}>
+                        {m.tipo === 'entrada' ? '📥 Entrada' : '📤 Salida'}
+                      </span>
+                    </td>
+                    <td><strong>{m.cantidad_bultos} bultos</strong></td>
+                    <td>${(m.precio_bulto || 0).toLocaleString()}</td>
+                    <td><strong>${((m.cantidad_bultos || 0) * (m.precio_bulto || 0)).toLocaleString()}</strong></td>
+                    <td>{m.lote?.nombre || '-'}</td>
+                    <td>{m.descripcion || '-'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Modal Movimiento */}
+        {mostrarModalAlimento && (
+          <div className="modal-overlay" onClick={() => setMostrarModalAlimento(false)}>
+            <div className="modal" onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                <h3>Registrar Movimiento de Alimento</h3>
+                <button className="btn-cerrar" onClick={() => setMostrarModalAlimento(false)}>&times;</button>
+              </div>
+              <div className="modal-body">
+                <div className="form-group">
+                  <label>Tipo de Movimiento</label>
+                  <select 
+                    value={nuevaMovimientoAlimento.tipo} 
+                    onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, tipo: e.target.value})}
+                  >
+                    <option value="entrada">📥 Entrada (Compra)</option>
+                    <option value="salida">📤 Salida (Consumo)</option>
+                  </select>
+                </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Cantidad de Bultos</label>
+                    <input 
+                      type="number" 
+                      min="1"
+                      value={nuevaMovimientoAlimento.cantidad_bultos} 
+                      onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, cantidad_bultos: numVal(e.target.value)})} 
+                      placeholder="Ej: 10"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Precio por Bulto</label>
+                    <input 
+                      type="number" 
+                      value={nuevaMovimientoAlimento.precio_bulto} 
+                      onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, precio_bulto: numVal(e.target.value)})} 
+                      placeholder="Ej: 85000"
+                    />
+                  </div>
+                </div>
+                {nuevaMovimientoAlimento.tipo === 'salida' && (
+                  <div className="form-group">
+                    <label>Lote (opcional)</label>
+                    <select 
+                      value={nuevaMovimientoAlimento.lote_id} 
+                      onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, lote_id: e.target.value})}
+                    >
+                      <option value="">Sin lote específico</option>
+                      {lotes.filter(l => l.activo).map(lote => (
+                        <option key={lote._id} value={lote._id}>{lote.nombre}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div className="form-group">
+                  <label>Descripción</label>
+                  <input 
+                    type="text" 
+                    value={nuevaMovimientoAlimento.descripcion} 
+                    onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, descripcion: e.target.value})} 
+                    placeholder="Ej: Compra semanal, Consumo Lote A"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Total a Pagar/Registrar</label>
+                  <input 
+                    type="text"
+                    value={`$${((nuevaMovimientoAlimento.cantidad_bultos || 0) * (nuevaMovimientoAlimento.precio_bulto || 0)).toLocaleString()}`}
+                    disabled
+                    style={{background:'#f1f5f9', fontWeight:'bold', fontSize:'18px'}}
+                  />
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button className="btn-secondary" onClick={() => setMostrarModalAlimento(false)}>Cancelar</button>
+                <button className="btn-primary" onClick={registrarMovimientoAlimento}>
+                  {nuevaMovimientoAlimento.tipo === 'entrada' ? '📥 Registrar Entrada' : '📤 Registrar Salida'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )}
   </div>
+)}
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {/* PÁGINA: CONFIGURACIÓN */}
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {pagina === 'config' && (
+            <div className="page-config">
+              <div className="page-header">
+                <h2>Configuración</h2>
+              </div>
 
-)}{/* ════════════════════════════════════════════════════════════════ */}
-      {/* PÁGINA: CONFIGURACIÓN */}
-      {/* ════════════════════════════════════════════════════════════════ */}
-      {pagina === 'config' && (
-        <div className="page-config">
-          <div className="page-header">
-            <h2>Configuración</h2>
-          </div>
+              <div className="config-sections">
+                {/* Precios */}
+                <div className="config-section">
+                  <h3>Precios</h3>
+                  <div className="config-grid">
+                    <div className="form-group">
+                      <label>Precio Agua (por litro)</label>
+                      <input
+                        type="number"
+                        value={config.precio_agua_litro}
+                        onChange={e => setConfig({ ...config, precio_agua_litro: numVal(e.target.value, true) })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Precio Alimento (por kg)</label>
+                      <input
+                        type="number"
+                        value={config.precio_alimento_kg}
+                        onChange={e => setConfig({ ...config, precio_alimento_kg: numVal(e.target.value, true) })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Precio Venta Cerdo (por kg en pie)</label>
+                      <input
+                        type="number"
+                        value={config.precio_venta_kg}
+                        onChange={e => setConfig({ ...config, precio_venta_kg: numVal(e.target.value, true) })}
+                      />
+                    </div>
+                  </div>
+                </div>
 
-          <div className="config-sections">
-            {/* Precios */}
-            <div className="config-section">
-              <h3>Precios</h3>
-              <div className="config-grid">
-                <div className="form-group">
-                  <label>Precio Agua (por litro)</label>
-                  <input
-                    type="number"
-                    value={config.precio_agua_litro}
-                    onChange={e => setConfig({ ...config, precio_agua_litro: numVal(e.target.value, true) })}
-                  />
+                {/* Umbrales */}
+                <div className="config-section">
+                  <h3>Umbrales de Temperatura</h3>
+                  <div className="config-grid">
+                    <div className="form-group">
+                      <label>Temperatura Alerta (°C)</label>
+                      <input
+                        type="number"
+                        value={config.umbral_temp_max}
+                        onChange={e => setConfig({ ...config, umbral_temp_max: numVal(e.target.value, true) })}
+                      />
+                      <small>Se genera alerta cuando supera este valor</small>
+                    </div>
+                    <div className="form-group">
+                      <label>Temperatura Crítica (°C)</label>
+                      <input
+                        type="number"
+                        value={config.umbral_temp_critico}
+                        onChange={e => setConfig({ ...config, umbral_temp_critico: numVal(e.target.value, true) })}
+                      />
+                      <small>Se activan bombas automáticamente</small>
+                    </div>
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label>Precio Alimento (por kg)</label>
-                  <input
-                    type="number"
-                    value={config.precio_alimento_kg}
-                    onChange={e => setConfig({ ...config, precio_alimento_kg: numVal(e.target.value, true) })}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Precio Venta Cerdo (por kg en pie)</label>
-                  <input
-                    type="number"
-                    value={config.precio_venta_kg}
-                    onChange={e => setConfig({ ...config, precio_venta_kg: numVal(e.target.value, true) })}
-                  />
+
+                {/* Botón guardar */}
+                <div className="config-actions">
+                  <button className="btn-primary" onClick={guardarConfig}>
+                    Guardar Configuración
+                  </button>
                 </div>
               </div>
             </div>
-
-            {/* Umbrales */}
-            <div className="config-section">
-              <h3>Umbrales de Temperatura</h3>
-              <div className="config-grid">
-                <div className="form-group">
-                  <label>Temperatura Alerta (°C)</label>
-                  <input
-                    type="number"
-                    value={config.umbral_temp_max}
-                    onChange={e => setConfig({ ...config, umbral_temp_max: numVal(e.target.value, true) })}
-                  />
-                  <small>Se genera alerta cuando supera este valor</small>
-                </div>
-                <div className="form-group">
-                  <label>Temperatura Crítica (°C)</label>
-                  <input
-                    type="number"
-                    value={config.umbral_temp_critico}
-                    onChange={e => setConfig({ ...config, umbral_temp_critico: numVal(e.target.value, true) })}
-                  />
-                  <small>Se activan bombas automáticamente</small>
-                </div>
-              </div>
-            </div>
-
-            {/* Botón guardar */}
-            <div className="config-actions">
-              <button className="btn-primary" onClick={guardarConfig}>
-                Guardar Configuración
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-   </main>
+          )}
+        </main>
       </div>
     </div>
   )
-}
+
+
+} 
 
 export default App
