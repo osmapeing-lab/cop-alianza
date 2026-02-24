@@ -482,22 +482,26 @@ async function construirWorkbook() {
   ];
   estilizarHeader(aguaSheet, AZUL_OSCURO);
 
-  const lecturasAgua = await WaterConsumption.find({
-    createdAt: { $gte: hace24h },
-    tipo: 'lectura'
+  // Los registros de flujo se guardan en Reading tipo:'flujo_agua' cada 5 min
+  // El valor es el total acumulado del día → calculamos delta entre lecturas consecutivas
+  const lecturasFlujo = await Reading.find({
+    tipo: 'flujo_agua',
+    createdAt: { $gte: hace24h }
   }).sort({ createdAt: 1 });
 
-  // Agrupar por hora
   const aguaPorHora = {};
-  lecturasAgua.forEach(r => {
-    const d = new Date(r.createdAt || r.fecha);
-    const dCol = new Date(d.toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-    const horaKey = dCol.getHours();
-    const fechaKey = `${dCol.getFullYear()}-${String(dCol.getMonth()+1).padStart(2,'0')}-${String(dCol.getDate()).padStart(2,'0')}_${String(horaKey).padStart(2,'0')}`;
-    if (!aguaPorHora[fechaKey]) aguaPorHora[fechaKey] = { hora: horaKey, fecha: dCol, litros: 0, count: 0 };
-    aguaPorHora[fechaKey].litros += r.litros || 0;
+  for (let i = 1; i < lecturasFlujo.length; i++) {
+    const prev = lecturasFlujo[i - 1];
+    const curr = lecturasFlujo[i];
+    const delta = (curr.valor || 0) - (prev.valor || 0);
+    if (delta <= 0) continue; // saltar resets o sin consumo
+
+    const dCol = new Date(new Date(curr.createdAt).toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+    const fechaKey = `${dCol.getFullYear()}-${String(dCol.getMonth()+1).padStart(2,'0')}-${String(dCol.getDate()).padStart(2,'0')}_${String(dCol.getHours()).padStart(2,'0')}`;
+    if (!aguaPorHora[fechaKey]) aguaPorHora[fechaKey] = { hora: dCol.getHours(), fecha: dCol, litros: 0, count: 0 };
+    aguaPorHora[fechaKey].litros += delta;
     aguaPorHora[fechaKey].count++;
-  });
+  }
 
   const horasAgua = Object.entries(aguaPorHora).sort(([a], [b]) => a.localeCompare(b));
 
@@ -508,7 +512,7 @@ async function construirWorkbook() {
     let totalLitros = 0;
     horasAgua.forEach(([, d]) => {
       const horaStr = `${String(d.hora).padStart(2,'0')}:00`;
-      const horaFin = `${String(d.hora + 1).padStart(2,'0')}:00`;
+      const horaFin = `${String((d.hora + 1) % 24).padStart(2,'0')}:00`;
       const fechaDisplay = d.fecha.toLocaleDateString('es-CO');
       aguaSheet.addRow({
         rango:    `${fechaDisplay}  ${horaStr} – ${horaFin}`,
@@ -519,11 +523,10 @@ async function construirWorkbook() {
       totalLitros += d.litros;
     });
 
-    // Fila de total
     const totalRow = aguaSheet.addRow({
-      rango:   'TOTAL 24 HORAS',
-      litros:  parseFloat(totalLitros.toFixed(2)),
-      lecturas: lecturasAgua.length,
+      rango:    'TOTAL 24 HORAS',
+      litros:   parseFloat(totalLitros.toFixed(2)),
+      lecturas: lecturasFlujo.length,
       promedio: '-'
     });
     totalRow.eachCell(cell => {
@@ -779,37 +782,31 @@ exports.generarReporteExcel = async (_req, res) => {
 // Body: { correo: "destino@ejemplo.com" }
 // ═══════════════════════════════════════════════════════════════════════
 
-exports.enviarReportePorEmail = async (req, res) => {
-  try {
-    const { correo } = req.body;
-    if (!correo || !correo.includes('@')) {
-      return res.status(400).json({ mensaje: 'Correo electrónico inválido' });
-    }
+exports.enviarReportePorEmail = (req, res) => {
+  const { correo } = req.body;
 
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      return res.status(500).json({ mensaje: 'Configuración de email no encontrada. Verifique EMAIL_USER y EMAIL_PASS en el servidor.' });
-    }
+  if (!correo || !correo.includes('@')) {
+    return res.status(400).json({ mensaje: 'Correo electrónico inválido' });
+  }
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    return res.status(500).json({ mensaje: 'Configuración de email no encontrada en el servidor (EMAIL_USER / EMAIL_PASS).' });
+  }
 
-    const workbook = await construirWorkbook();
+  // ── Responder inmediatamente para evitar timeout ─────────────────────
+  res.json({ ok: true, mensaje: `Reporte siendo generado. Recibirás el correo en ${correo} en unos momentos.` });
 
-    // Generar buffer en memoria
-    const buffer = await workbook.xlsx.writeBuffer();
+  // ── Generar y enviar en segundo plano ────────────────────────────────
+  const fecha        = new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Bogota' });
+  const fechaArchivo = new Date().toISOString().split('T')[0];
 
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-      }
-    });
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+  });
 
-    const fecha = new Date().toLocaleDateString('es-CO', {
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
-      timeZone: 'America/Bogota'
-    });
-    const fechaArchivo = new Date().toISOString().split('T')[0];
-
-    await transporter.sendMail({
+  construirWorkbook()
+    .then(workbook => workbook.xlsx.writeBuffer())
+    .then(buffer => transporter.sendMail({
       from:    `"COO Alianzas - Granja Porcina" <${process.env.EMAIL_USER}>`,
       to:      correo,
       subject: `Reporte Completo Granja Porcina — ${fecha}`,
@@ -851,15 +848,9 @@ exports.enviarReportePorEmail = async (req, res) => {
         content:     buffer,
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       }]
-    });
-
-    console.log(`[REPORTE] Email enviado a ${correo}`);
-    res.json({ ok: true, mensaje: `Reporte enviado exitosamente a ${correo}` });
-
-  } catch (error) {
-    console.error('[REPORTE] Error enviando email:', error);
-    res.status(500).json({ mensaje: `Error al enviar el correo: ${error.message}` });
-  }
+    }))
+    .then(() => console.log(`[REPORTE] Email enviado exitosamente a ${correo}`))
+    .catch(err => console.error(`[REPORTE] Error enviando email a ${correo}:`, err.message));
 };
 
 // ═══════════════════════════════════════════════════════════════════════
