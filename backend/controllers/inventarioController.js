@@ -231,3 +231,27 @@ exports.obtenerEstadisticas = async (req, res) => {
     res.status(500).json({ mensaje: 'Error', error: error.message });
   }
 };
+
+// ═══════════════════════════════════════════════════════════════════════
+// ELIMINAR CERDO (soft delete)
+// DELETE /api/inventario/:id
+// ═══════════════════════════════════════════════════════════════════════
+exports.eliminarCerdo = async (req, res) => {
+  try {
+    const cerdo = await Inventario.findByIdAndUpdate(
+      req.params.id,
+      { estado: 'eliminado' },
+      { new: true }
+    );
+
+    if (!cerdo) {
+      return res.status(404).json({ mensaje: 'Cerdo no encontrado' });
+    }
+
+    console.log(`[INVENTARIO] Cerdo eliminado: ${cerdo.codigo}`);
+    res.json({ mensaje: `Cerdo ${cerdo.codigo} eliminado correctamente` });
+  } catch (error) {
+    console.error('[INVENTARIO] Error al eliminar:', error);
+    res.status(500).json({ mensaje: 'Error', error: error.message });
+  }
+};
