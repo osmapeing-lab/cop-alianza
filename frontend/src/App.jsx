@@ -875,33 +875,53 @@ const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo }) => {
       <div className="tabla-container">
         <table className="tabla-inventario">
           <thead>
-            <tr>
-              <th>Código</th>
-              <th>Tipo</th>
-              <th>Sexo</th>
-              <th>Peso</th>
-              <th>Corral</th>
-              <th>Salud</th>
-            </tr>
-          </thead>
+              <tr>
+                <th>Código</th>
+                <th>Tipo</th>
+                <th>Sexo</th>
+                <th>Peso</th>
+                <th>Corral</th>
+                <th>Salud</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
           <tbody>
             {inventario.length === 0 ? (
               <tr><td colSpan="6" className="empty-row">No hay cerdos registrados</td></tr>
             ) : (
               inventario.slice(0, 15).map(c => (
-                <tr key={c._id}>
-                  <td><strong>{c.codigo}</strong></td>
-                  <td>{c.tipo}</td>
-                  <td>{c.sexo === 'macho' ? '♂' : '♀'}</td>
-                  <td>{c.peso_actual} kg</td>
-                  <td>{c.corral || '-'}</td>
-                  <td>
-                    <span className={`salud-badge ${c.estado_salud}`}>
-                      {c.estado_salud}
-                    </span>
-                  </td>
-                </tr>
-              ))
+                        <tr key={c._id}>
+                          <td><strong>{c.codigo}</strong></td>
+                          <td>{c.tipo}</td>
+                          <td>{c.sexo === 'macho' ? '♂' : '♀'}</td>
+                          <td>{c.peso_actual} kg</td>
+                          <td>{c.corral || '-'}</td>
+                          <td>
+                            <span className={`salud-badge ${c.estado_salud}`}>
+                              {c.estado_salud}
+                            </span>
+                          </td>
+                          <td>
+                            <button
+                              className="btn-icon btn-danger"
+                              title="Eliminar cerdo"
+                              onClick={async () => {
+                                if (!confirm(`¿Eliminar el cerdo ${c.codigo}? Esta acción no se puede deshacer.`)) return
+                                try {
+                                  await axios.delete(`${API_URL}/api/inventario/${c._id}`, {
+                                    headers: { Authorization: `Bearer ${token}` }
+                                  })
+                                  cargarInventario()
+                                } catch (error) {
+                                  alert('Error eliminando cerdo: ' + (error.response?.data?.mensaje || error.message))
+                                }
+                              }}
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
             )}
           </tbody>
         </table>
@@ -1152,8 +1172,9 @@ const [tabInventario, setTabInventario] = useState('cerdos')
 const [inventarioAlimento, setInventarioAlimento] = useState([])
 const [resumenInventarioAlimento, setResumenInventarioAlimento] = useState({})
 const [mostrarModalAlimento, setMostrarModalAlimento] = useState(false)
-const [nuevaMovimientoAlimento, setNuevaMovimientoAlimento] = useState({
+ const [nuevaMovimientoAlimento, setNuevaMovimientoAlimento] = useState({
   tipo: 'entrada',
+  inventario_id: '',      // ← NUEVO: ID del producto seleccionado
   cantidad_bultos: 0,
   precio_bulto: 0,
   descripcion: '',
@@ -1502,10 +1523,19 @@ const cargarInventarioAlimento = async () => {
 }
 
 const registrarMovimientoAlimento = async () => {
+  // Validar que se haya seleccionado un producto
+  if (!nuevaMovimientoAlimento.inventario_id) {
+    alert('Selecciona un producto de alimento')
+    return
+  }
+  if (!nuevaMovimientoAlimento.cantidad_bultos || nuevaMovimientoAlimento.cantidad_bultos <= 0) {
+    alert('La cantidad de bultos debe ser mayor a 0')
+    return
+  }
+
   try {
-    const endpoint = nuevaMovimientoAlimento.tipo === 'entrada' 
-      ? `${API_URL}/api/inventario-alimento/${inventarioAlimento[0]?._id || 'default'}/entrada`
-      : `${API_URL}/api/inventario-alimento/${inventarioAlimento[0]?._id || 'default'}/salida`
+    const tipoRuta = nuevaMovimientoAlimento.tipo === 'entrada' ? 'entrada' : 'salida'
+    const endpoint = `${API_URL}/api/inventario-alimento/${nuevaMovimientoAlimento.inventario_id}/${tipoRuta}`
     
     await axios.post(endpoint, {
       cantidad_bultos: nuevaMovimientoAlimento.cantidad_bultos,
@@ -1519,6 +1549,7 @@ const registrarMovimientoAlimento = async () => {
     setMostrarModalAlimento(false)
     setNuevaMovimientoAlimento({
       tipo: 'entrada',
+      inventario_id: '',
       cantidad_bultos: 0,
       precio_bulto: 0,
       descripcion: '',
@@ -5385,88 +5416,116 @@ const cargarHistoricoPesos = async () => {
           </table>
         </div>
 
-        {/* Modal Movimiento */}
-        {mostrarModalAlimento && (
-          <div className="modal-overlay" onClick={() => setMostrarModalAlimento(false)}>
-            <div className="modal" onClick={e => e.stopPropagation()}>
-              <div className="modal-header">
-                <h3>Registrar Movimiento de Alimento</h3>
-                <button className="btn-cerrar" onClick={() => setMostrarModalAlimento(false)}>&times;</button>
-              </div>
-              <div className="modal-body">
-                <div className="form-group">
-                  <label>Tipo de Movimiento</label>
-                  <select 
-                    value={nuevaMovimientoAlimento.tipo} 
-                    onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, tipo: e.target.value})}
-                  >
-                    <option value="entrada">📥 Entrada (Compra)</option>
-                    <option value="salida">📤 Salida (Consumo)</option>
-                  </select>
-                </div>
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>Cantidad de Bultos</label>
-                    <input 
-                      type="number" 
-                      min="1"
-                      value={nuevaMovimientoAlimento.cantidad_bultos} 
-                      onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, cantidad_bultos: numVal(e.target.value)})} 
-                      placeholder="Ej: 10"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label>Precio por Bulto</label>
-                    <input 
-                      type="number" 
-                      value={nuevaMovimientoAlimento.precio_bulto} 
-                      onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, precio_bulto: numVal(e.target.value)})} 
-                      placeholder="Ej: 85000"
-                    />
-                  </div>
-                </div>
-                {nuevaMovimientoAlimento.tipo === 'salida' && (
-                  <div className="form-group">
-                    <label>Lote (opcional)</label>
-                    <select 
-                      value={nuevaMovimientoAlimento.lote_id} 
-                      onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, lote_id: e.target.value})}
-                    >
-                      <option value="">Sin lote específico</option>
-                      {lotes.filter(l => l.activo).map(lote => (
-                        <option key={lote._id} value={lote._id}>{lote.nombre}</option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-                <div className="form-group">
-                  <label>Descripción</label>
-                  <input 
-                    type="text" 
-                    value={nuevaMovimientoAlimento.descripcion} 
-                    onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, descripcion: e.target.value})} 
-                    placeholder="Ej: Compra semanal, Consumo Lote A"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Total a Pagar/Registrar</label>
-                  <input 
-                    type="text"
-                    value={`$${((nuevaMovimientoAlimento.cantidad_bultos || 0) * (nuevaMovimientoAlimento.precio_bulto || 0)).toLocaleString()}`}
-                    disabled
-                    style={{background:'#f1f5f9', fontWeight:'bold', fontSize:'18px'}}
-                  />
-                </div>
-              </div>
-              <div className="modal-footer">
-                <button className="btn-secondary" onClick={() => setMostrarModalAlimento(false)}>Cancelar</button>
-                <button className="btn-primary" onClick={registrarMovimientoAlimento}>
-                  {nuevaMovimientoAlimento.tipo === 'entrada' ? '📥 Registrar Entrada' : '📤 Registrar Salida'}
-                </button>
-              </div>
-            </div>
+       {/* Modal Movimiento */}
+{mostrarModalAlimento && (
+  <div className="modal-overlay" onClick={() => setMostrarModalAlimento(false)}>
+    <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-header">
+        <h3>Registrar Movimiento de Alimento</h3>
+        <button className="btn-cerrar" onClick={() => setMostrarModalAlimento(false)}>&times;</button>
+      </div>
+      <div className="modal-body">
+        <div className="form-group">
+          <label>Tipo de Movimiento</label>
+          <select 
+            value={nuevaMovimientoAlimento.tipo} 
+            onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, tipo: e.target.value})}
+          >
+            <option value="entrada">📥 Entrada (Compra)</option>
+            <option value="salida">📤 Salida (Consumo)</option>
+          </select>
+        </div>
+
+        {/* ← NUEVO: Selector de producto */}
+        <div className="form-group">
+          <label>Producto de Alimento *</label>
+          <select
+            value={nuevaMovimientoAlimento.inventario_id}
+            onChange={e => {
+              const inv = inventarioAlimento.find(i => i._id === e.target.value)
+              setNuevaMovimientoAlimento({
+                ...nuevaMovimientoAlimento,
+                inventario_id: e.target.value,
+                precio_bulto: inv?.precio_bulto || nuevaMovimientoAlimento.precio_bulto
+              })
+            }}
+          >
+            <option value="">— Selecciona un producto —</option>
+            {inventarioAlimento.map(inv => (
+              <option key={inv._id} value={inv._id}>
+                {inv.nombre} ({inv.tipo}) — Stock: {inv.cantidad_bultos} bultos
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="form-row">
+          <div className="form-group">
+            <label>Cantidad de Bultos</label>
+            <input 
+              type="number" 
+              min="1"
+              value={nuevaMovimientoAlimento.cantidad_bultos} 
+              onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, cantidad_bultos: numVal(e.target.value)})} 
+              placeholder="Ej: 10"
+            />
+          </div>
+          <div className="form-group">
+            <label>Precio por Bulto</label>
+            <input 
+              type="number" 
+              value={nuevaMovimientoAlimento.precio_bulto} 
+              onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, precio_bulto: numVal(e.target.value)})} 
+              placeholder="Ej: 85000"
+            />
+          </div>
+        </div>
+
+        {nuevaMovimientoAlimento.tipo === 'salida' && (
+          <div className="form-group">
+            <label>Lote (opcional)</label>
+            <select 
+              value={nuevaMovimientoAlimento.lote_id} 
+              onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, lote_id: e.target.value})}
+            >
+              <option value="">Sin lote específico</option>
+              {lotes.filter(l => l.activo).map(lote => (
+                <option key={lote._id} value={lote._id}>{lote.nombre}</option>
+              ))}
+            </select>
           </div>
         )}
+
+        <div className="form-group">
+          <label>Descripción</label>
+          <input 
+            type="text" 
+            value={nuevaMovimientoAlimento.descripcion} 
+            onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, descripcion: e.target.value})} 
+            placeholder="Ej: Compra semanal, Consumo Lote A"
+          />
+        </div>
+
+        <div className="form-group">
+          <label>Total a Pagar/Registrar</label>
+          <input 
+            type="text"
+            value={`$${((nuevaMovimientoAlimento.cantidad_bultos || 0) * (nuevaMovimientoAlimento.precio_bulto || 0)).toLocaleString()}`}
+            disabled
+            style={{background:'#f1f5f9', fontWeight:'bold', fontSize:'18px'}}
+          />
+        </div>
+      </div>
+
+      <div className="modal-footer">
+        <button className="btn-secondary" onClick={() => setMostrarModalAlimento(false)}>Cancelar</button>
+        <button className="btn-primary" onClick={registrarMovimientoAlimento}>
+          {nuevaMovimientoAlimento.tipo === 'entrada' ? '📥 Registrar Entrada' : '📤 Registrar Salida'}
+        </button>
+      </div>
+    </div>
+  </div>
+)}
       </div>
     )}
   </div>
