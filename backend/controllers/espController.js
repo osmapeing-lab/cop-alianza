@@ -53,6 +53,12 @@ const Config = require('../models/Config');
 const { evaluarTemperatura, notificarBomba } = require('../utils/notificationManager');
 const { enviarWhatsApp } = require('../utils/whatsappService');
 
+// Cooldown en memoria para evitar spam de Alert records en BD por temperatura
+// El ESP puede enviar datos cada 30s; sin throttle genera cientos de registros/hora
+const _alertCooldown = { critico: 0, alerta: 0 };
+const ALERT_CD_CRITICO = 15 * 60 * 1000; // 15 min entre alertas críticas en BD
+const ALERT_CD_NORMAL  = 30 * 60 * 1000; // 30 min entre alertas normales en BD
+
 // ═══════════════════════════════════════════════════════════════════════
 // CACHE EN MEMORIA PARA DATOS EN TIEMPO REAL
 // ═══════════════════════════════════════════════════════════════════════
@@ -265,23 +271,30 @@ exports.recibirRiego = async (req, res) => {
       });
       
       if (temperatura >= config.umbral_temp_critico) {
-        const alerta = new Alert({
-          tipo: 'critico',
-          mensaje: `CRITICO: Temperatura ${temperatura}°C - Riesgo de estrés térmico`,
-          valor: temperatura
-        });
-        await alerta.save();
-        
+        const now = Date.now();
+        if (now - _alertCooldown.critico > ALERT_CD_CRITICO) {
+          _alertCooldown.critico = now;
+          const alerta = new Alert({
+            tipo: 'critico',
+            mensaje: `CRITICO: Temperatura ${temperatura}°C - Riesgo de estrés térmico`,
+            valor: temperatura
+          });
+          await alerta.save();
+        }
         if (config.bomba_automatica) {
           await activarCicloBomba();
         }
       } else if (temperatura >= config.umbral_temp_max) {
-        const alerta = new Alert({
-          tipo: 'alerta',
-          mensaje: `ALERTA: Temperatura ${temperatura}°C - Por encima del umbral`,
-          valor: temperatura
-        });
-        await alerta.save();
+        const now = Date.now();
+        if (now - _alertCooldown.alerta > ALERT_CD_NORMAL) {
+          _alertCooldown.alerta = now;
+          const alerta = new Alert({
+            tipo: 'alerta',
+            mensaje: `ALERTA: Temperatura ${temperatura}°C - Por encima del umbral`,
+            valor: temperatura
+          });
+          await alerta.save();
+        }
       }
 
       evaluarTemperatura(temperatura, humedad).catch(e =>

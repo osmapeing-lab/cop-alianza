@@ -1188,6 +1188,8 @@ const [historicoPesos, setHistoricoPesos] = useState([])
 // Estados para notificaciones y config usuario
 const [mostrarNotificaciones, setMostrarNotificaciones] = useState(false)
 const [alertasLeidas, setAlertasLeidas] = useState(0)
+const _getAlertasLeidasTs = () => { try { return localStorage.getItem('coo_alertas_ts') || null } catch { return null } }
+const _setAlertasLeidasTs = () => { try { localStorage.setItem('coo_alertas_ts', new Date().toISOString()) } catch {} }
 const [mostrarConfigUsuario, setMostrarConfigUsuario] = useState(false)
 const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo: '', password_actual: '', password_nuevo: '' })
 
@@ -1698,7 +1700,16 @@ const verStreamCamara = (camara) => {
   const cargarAlertas = async () => {
     try {
       const res = await axios.get(`${API_URL}/api/alerts`)
-      setAlertas(res.data.slice(0, 10))
+      const data = res.data.slice(0, 10)
+      setAlertas(data)
+      // Calcular no-leídas desde el último timestamp guardado en localStorage
+      const ts = _getAlertasLeidasTs()
+      if (ts) {
+        const leidas = data.filter(a => new Date(a.createdAt || a.fecha) <= new Date(ts)).length
+        setAlertasLeidas(leidas)
+      } else {
+        setAlertasLeidas(0) // primera vez: todas son "nuevas"
+      }
     } catch (error) {
       console.error('Error cargando alertas:', error)
     }
@@ -2494,7 +2505,10 @@ const cargarHistoricoPesos = async () => {
     {/* Notificaciones */}
     <div className="notif-wrapper">
       <button className="btn-notif" onClick={() => {
-        if (!mostrarNotificaciones) setAlertasLeidas(alertas.length)
+        if (!mostrarNotificaciones) {
+          setAlertasLeidas(alertas.length)
+          _setAlertasLeidasTs()
+        }
         setMostrarNotificaciones(!mostrarNotificaciones)
         setMostrarConfigUsuario(false)
       }}>
@@ -4059,7 +4073,7 @@ const cargarHistoricoPesos = async () => {
       cursor: 'pointer'
     }}
   >
-    ⚠️ GUARDAR FORZADO
+    <AlertTriangle size={14} style={{marginRight:4, verticalAlign:'middle'}} /> GUARDAR FORZADO
   </button>
 )}
                   </div>
@@ -4920,7 +4934,10 @@ const cargarHistoricoPesos = async () => {
                             fontSize: '12px', fontWeight: 600,
                             color: testEmailResult.ok ? '#16a34a' : '#dc2626'
                           }}>
-                            {testEmailResult.ok ? '✅ Gmail OK' : '❌ ' + testEmailResult.problema}
+                            {testEmailResult.ok
+                              ? <><CheckCircle size={13} style={{verticalAlign:'middle', marginRight:3}} />Gmail OK</>
+                              : <><XCircle size={13} style={{verticalAlign:'middle', marginRight:3}} />{testEmailResult.problema}</>
+                            }
                           </span>
                         )}
                       </div>
@@ -5226,7 +5243,7 @@ const cargarHistoricoPesos = async () => {
           <div style={{marginBottom:'16px', padding:'16px', background:'#fef3c7', border:'2px solid #f59e0b', borderRadius:'12px'}}>
             <div style={{display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px'}}>
               <AlertTriangle size={22} style={{color:'#d97706'}} />
-              <strong style={{color:'#92400e', fontSize:'16px'}}>⚠️ ALERTA: Stock Bajo de Alimento</strong>
+              <strong style={{color:'#92400e', fontSize:'16px'}}>ALERTA: Stock Bajo de Alimento</strong>
             </div>
             {resumenInventarioAlimento.bajo_stock.map((item, i) => (
               <div key={i} style={{padding:'6px 0', borderBottom: i < resumenInventarioAlimento.bajo_stock.length - 1 ? '1px solid #fbbf24' : 'none', color:'#78350f'}}>
@@ -5265,8 +5282,8 @@ const cargarHistoricoPesos = async () => {
                     </div>
                   </div>
                   {(inv.cantidad_bultos || 0) <= (inv.stock_minimo_bultos || 5) && (
-                    <div style={{marginTop:'8px', padding:'4px 8px', background:'#fef3c7', borderRadius:'6px', fontSize:'12px', color:'#92400e', fontWeight:'600'}}>
-                      ⚠️ STOCK BAJO — Reabastecer pronto
+                    <div style={{marginTop:'8px', padding:'4px 8px', background:'#fef3c7', borderRadius:'6px', fontSize:'12px', color:'#92400e', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px'}}>
+                      <AlertTriangle size={12} /> STOCK BAJO — Reabastecer pronto
                     </div>
                   )}
                 </div>

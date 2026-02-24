@@ -14,6 +14,7 @@
  */
 
 const { enviarWhatsApp } = require('./whatsappService');
+const { enviarNotificacion: enviarFCM } = require('./fcmService');
 const Lote = require('../models/lote');
 const WaterConsumption = require('../models/WaterConsumption');
 const Motorbomb = require('../models/Motorbomb');
@@ -135,7 +136,15 @@ async function evaluarTemperatura(temperatura, humedad) {
     msg += `⚠️ Lote en ENGORDE - Mayor riesgo de estrés térmico`;
   }
 
-  await enviarWhatsApp(msg);
+  await Promise.all([
+    enviarWhatsApp(msg),
+    enviarFCM({
+      titulo: `🌡️ Alerta Calor — ${temperatura}°C`,
+      cuerpo: `Temperatura sobre umbral (${umbral}°C). Humedad: ${humedad}%. ${etapa !== 'desconocida' ? `Etapa: ${etapa}` : ''}`.trim(),
+      tipo: 'alerta',
+      datos: { pantalla: 'dashboard', temperatura: String(temperatura), umbral: String(umbral) }
+    }).catch(e => console.error('[FCM] Error temperatura:', e.message))
+  ]);
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -186,7 +195,15 @@ async function notificarBomba(bomba) {
     await setEstado(`bomba_encendida_${codigo}`, new Date().toISOString());
 
     const msg = getMensajeBombaEncendida(nombre);
-    await enviarWhatsApp(msg);
+    await Promise.all([
+      enviarWhatsApp(msg),
+      enviarFCM({
+        titulo: `Bomba Encendida`,
+        cuerpo: `${nombre} ha sido encendida`,
+        tipo: 'info',
+        datos: { pantalla: 'bombas', codigo }
+      }).catch(e => console.error('[FCM] Error bomba encendida:', e.message))
+    ]);
 
     // Iniciar timer de "bomba olvidada"
     if (bombaOlvidadaTimers[codigo]) clearTimeout(bombaOlvidadaTimers[codigo]);
@@ -222,7 +239,15 @@ async function notificarBomba(bomba) {
     }
 
     const msg = getMensajeBombaApagada(nombre, duracion);
-    await enviarWhatsApp(msg);
+    await Promise.all([
+      enviarWhatsApp(msg),
+      enviarFCM({
+        titulo: `Bomba Apagada`,
+        cuerpo: `${nombre} apagada${duracion}`,
+        tipo: 'info',
+        datos: { pantalla: 'bombas', codigo }
+      }).catch(e => console.error('[FCM] Error bomba apagada:', e.message))
+    ]);
   }
 }
 
@@ -259,7 +284,16 @@ async function evaluarNivelAgua(porcentaje) {
 
   if (umbral) {
     await setEstado(`alerta_nivel_${umbral}`, new Date().toISOString());
-    await enviarWhatsApp(mensaje);
+    const esCritico = umbral === '10';
+    await Promise.all([
+      enviarWhatsApp(mensaje),
+      enviarFCM({
+        titulo: esCritico ? 'Nivel Crítico de Agua' : umbral === '100' ? 'Tanque Lleno' : 'Nivel de Agua Bajo',
+        cuerpo: `Nivel del tanque: ${porcentaje}%`,
+        tipo: esCritico ? 'critico' : 'info',
+        datos: { pantalla: 'dashboard', nivel: String(porcentaje) }
+      }).catch(e => console.error('[FCM] Error nivel agua:', e.message))
+    ]);
   }
 }
 
@@ -297,7 +331,15 @@ async function revisarTareasDiarias() {
         const msg = `📋 *TAREA DEL DÍA - ${lote.nombre}*\n` +
           `Edad del lote: ${edadDias} días\n\n` +
           item.tarea;
-        await enviarWhatsApp(msg);
+        await Promise.all([
+          enviarWhatsApp(msg),
+          enviarFCM({
+            titulo: `Tarea del día — ${lote.nombre}`,
+            cuerpo: item.tarea.replace(/\*|_|`/g, '').slice(0, 100),
+            tipo: 'info',
+            datos: { pantalla: 'lotes' }
+          }).catch(e => console.error('[FCM] Error tarea diaria:', e.message))
+        ]);
         break;
       }
     }
@@ -337,7 +379,15 @@ async function enviarResumenDiarioAgua() {
       `Consumo ayer: ${litrosAyer.toFixed(1)} litros\n` +
       `Tendencia: ${tendencia} vs ayer`;
 
-    await enviarWhatsApp(msg);
+    await Promise.all([
+      enviarWhatsApp(msg),
+      enviarFCM({
+        titulo: 'Resumen Diario de Agua',
+        cuerpo: `Consumo hoy: ${litros.toFixed(1)}L | Ayer: ${litrosAyer.toFixed(1)}L`,
+        tipo: 'info',
+        datos: { pantalla: 'dashboard' }
+      }).catch(e => console.error('[FCM] Error resumen agua:', e.message))
+    ]);
   } catch (error) {
     console.error('[RESUMEN] Error enviando resumen agua:', error.message);
   }
