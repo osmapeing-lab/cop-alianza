@@ -15,6 +15,7 @@
 
 const { enviarWhatsApp } = require('./whatsappService');
 const { enviarNotificacion: enviarFCM } = require('./fcmService');
+const { enviarPushATodos } = require('./pushService');
 const Lote = require('../models/lote');
 const WaterConsumption = require('../models/WaterConsumption');
 const Motorbomb = require('../models/Motorbomb');
@@ -144,7 +145,12 @@ async function evaluarTemperatura(temperatura, humedad) {
       cuerpo: `Temperatura sobre umbral (${umbral}°C). Humedad: ${humedad}%. ${etapa !== 'desconocida' ? `Etapa: ${etapa}` : ''}`.trim(),
       tipo: 'alerta',
       datos: { pantalla: 'dashboard', temperatura: String(temperatura), umbral: String(umbral) }
-    }).catch(e => console.error('[FCM] Error temperatura:', e.message))
+    }).catch(e => console.error('[FCM] Error temperatura:', e.message)),
+    enviarPushATodos({
+      title: `🌡️ Alerta Calor — ${temperatura}°C`,
+      body: `Temperatura sobre umbral (${umbral}°C). Humedad: ${humedad}%.`,
+      data: { url: '/' }
+    }).catch(e => console.error('[PUSH] Error temperatura:', e.message))
   ]);
 }
 
@@ -203,7 +209,12 @@ async function notificarBomba(bomba) {
         cuerpo: `${nombre} ha sido encendida`,
         tipo: 'info',
         datos: { pantalla: 'bombas', codigo }
-      }).catch(e => console.error('[FCM] Error bomba encendida:', e.message))
+      }).catch(e => console.error('[FCM] Error bomba encendida:', e.message)),
+      enviarPushATodos({
+        title: `Bomba Encendida`,
+        body: `${nombre} ha sido encendida`,
+        data: { url: '/' }
+      }).catch(e => console.error('[PUSH] Error bomba encendida:', e.message))
     ]);
 
     // Iniciar timer de "bomba olvidada"
@@ -247,7 +258,12 @@ async function notificarBomba(bomba) {
         cuerpo: `${nombre} apagada${duracion}`,
         tipo: 'info',
         datos: { pantalla: 'bombas', codigo }
-      }).catch(e => console.error('[FCM] Error bomba apagada:', e.message))
+      }).catch(e => console.error('[FCM] Error bomba apagada:', e.message)),
+      enviarPushATodos({
+        title: `Bomba Apagada`,
+        body: `${nombre} apagada${duracion}`,
+        data: { url: '/' }
+      }).catch(e => console.error('[PUSH] Error bomba apagada:', e.message))
     ]);
   }
 }
@@ -286,14 +302,20 @@ async function evaluarNivelAgua(porcentaje) {
   if (umbral) {
     await setEstado(`alerta_nivel_${umbral}`, new Date().toISOString());
     const esCritico = umbral === '10';
+    const tituloAgua = esCritico ? 'Nivel Crítico de Agua' : umbral === '100' ? 'Tanque Lleno' : 'Nivel de Agua Bajo';
     await Promise.all([
       enviarWhatsApp(mensaje),
       enviarFCM({
-        titulo: esCritico ? 'Nivel Crítico de Agua' : umbral === '100' ? 'Tanque Lleno' : 'Nivel de Agua Bajo',
+        titulo: tituloAgua,
         cuerpo: `Nivel del tanque: ${porcentaje}%`,
         tipo: esCritico ? 'critico' : 'info',
         datos: { pantalla: 'dashboard', nivel: String(porcentaje) }
-      }).catch(e => console.error('[FCM] Error nivel agua:', e.message))
+      }).catch(e => console.error('[FCM] Error nivel agua:', e.message)),
+      enviarPushATodos({
+        title: tituloAgua,
+        body: `Nivel del tanque: ${porcentaje}%`,
+        data: { url: '/' }
+      }).catch(e => console.error('[PUSH] Error nivel agua:', e.message))
     ]);
   }
 }
@@ -332,14 +354,20 @@ async function revisarTareasDiarias() {
         const msg = `📋 *TAREA DEL DÍA - ${lote.nombre}*\n` +
           `Edad del lote: ${edadDias} días\n\n` +
           item.tarea;
+        const tareaTexto = item.tarea.replace(/\*|_|`/g, '').slice(0, 100);
         await Promise.all([
           enviarWhatsApp(msg),
           enviarFCM({
             titulo: `Tarea del día — ${lote.nombre}`,
-            cuerpo: item.tarea.replace(/\*|_|`/g, '').slice(0, 100),
+            cuerpo: tareaTexto,
             tipo: 'info',
             datos: { pantalla: 'lotes' }
-          }).catch(e => console.error('[FCM] Error tarea diaria:', e.message))
+          }).catch(e => console.error('[FCM] Error tarea diaria:', e.message)),
+          enviarPushATodos({
+            title: `Tarea del día — ${lote.nombre}`,
+            body: tareaTexto,
+            data: { url: '/' }
+          }).catch(e => console.error('[PUSH] Error tarea diaria:', e.message))
         ]);
         break;
       }
@@ -387,7 +415,12 @@ async function enviarResumenDiarioAgua() {
         cuerpo: `Consumo hoy: ${litros.toFixed(1)}L | Ayer: ${litrosAyer.toFixed(1)}L`,
         tipo: 'info',
         datos: { pantalla: 'dashboard' }
-      }).catch(e => console.error('[FCM] Error resumen agua:', e.message))
+      }).catch(e => console.error('[FCM] Error resumen agua:', e.message)),
+      enviarPushATodos({
+        title: 'Resumen Diario de Agua',
+        body: `Consumo hoy: ${litros.toFixed(1)}L | Ayer: ${litrosAyer.toFixed(1)}L`,
+        data: { url: '/' }
+      }).catch(e => console.error('[PUSH] Error resumen agua:', e.message))
     ]);
   } catch (error) {
     console.error('[RESUMEN] Error enviando resumen agua:', error.message);
@@ -430,7 +463,12 @@ async function verificarStockCriticoAlimento(inventario) {
         cuerpo: `Solo quedan ${kg_restantes.toFixed(1)} kg. Reabastecer urgente.`,
         tipo: 'critico',
         datos: { pantalla: 'inventario', inventario_id: String(inventario._id) }
-      }).catch(e => console.error('[FCM] Error stock alimento:', e.message))
+      }).catch(e => console.error('[FCM] Error stock alimento:', e.message)),
+      enviarPushATodos({
+        title: `🚨 Stock Crítico: ${inventario.nombre}`,
+        body: `Solo quedan ${kg_restantes.toFixed(1)} kg. Reabastecer urgente.`,
+        data: { url: '/' }
+      }).catch(e => console.error('[PUSH] Error stock alimento:', e.message))
     ]);
 
     console.log(`[STOCK] Alerta crítica enviada: ${inventario.nombre} — ${kg_restantes.toFixed(1)} kg`);
@@ -488,7 +526,12 @@ async function verificarPesajeSemanal() {
             cuerpo: `Hace ${diasDesde} días del último pesaje. Prepara la romana.`,
             tipo: 'info',
             datos: { pantalla: 'lotes', lote_id: String(lote._id) }
-          }).catch(e => console.error('[FCM] Error pesaje:', e.message))
+          }).catch(e => console.error('[FCM] Error pesaje:', e.message)),
+          enviarPushATodos({
+            title: `⚖️ Mañana: Día de Pesaje`,
+            body: `Lote ${lote.nombre} — Hace ${diasDesde} días del último pesaje. Prepara la romana.`,
+            data: { url: '/' }
+          }).catch(e => console.error('[PUSH] Error pesaje:', e.message))
         ]);
 
         console.log(`[PESAJE] Alerta enviada para lote "${lote.nombre}" — ${diasDesde} días desde último pesaje`);

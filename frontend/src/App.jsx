@@ -1346,6 +1346,51 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
     }
   }, [user])
 
+  // Suscripción a Web Push (VAPID) cuando el usuario inicia sesión
+  useEffect(() => {
+    if (!user || !token) return
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+
+    const suscribirPush = async () => {
+      try {
+        // Registrar el Service Worker
+        const reg = await navigator.serviceWorker.register('/sw.js')
+
+        // Pedir permiso de notificaciones
+        const permiso = await Notification.requestPermission()
+        if (permiso !== 'granted') return
+
+        // Obtener clave VAPID pública del backend
+        const { data } = await axios.get(`${API_URL}/api/push/vapid-public-key`)
+        if (!data.publicKey) return
+
+        // Convertir la clave pública a Uint8Array
+        const vapidKey = Uint8Array.from(
+          atob(data.publicKey.replace(/-/g, '+').replace(/_/g, '/')),
+          c => c.charCodeAt(0)
+        )
+
+        // Suscribirse al push manager
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: vapidKey
+        })
+
+        // Enviar suscripción al backend
+        await axios.post(
+          `${API_URL}/api/push/subscribe`,
+          { subscription: sub.toJSON(), usuario: user.username || user.email || '', dispositivo: 'web' },
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        console.log('[PUSH] Suscripción registrada correctamente')
+      } catch (err) {
+        console.log('[PUSH] No se pudo suscribir:', err.message)
+      }
+    }
+
+    suscribirPush()
+  }, [user])
+
   // Recalcular gráfica de pesos cuando pesajes cambian
   useEffect(() => {
     if (pesajes.length > 0) cargarHistoricoPesos()
