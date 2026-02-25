@@ -18,7 +18,7 @@
  */
 
 const ExcelJS    = require('exceljs');
-const nodemailer = require('nodemailer');
+const { Resend }  = require('resend');
 const Reading    = require('../models/Reading');
 const Weighing   = require('../models/pesaje');
 const Lote       = require('../models/lote');
@@ -825,8 +825,8 @@ exports.enviarReportePorEmail = (req, res) => {
   if (!correo || !correo.includes('@')) {
     return res.status(400).json({ mensaje: 'Correo electrónico inválido' });
   }
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    return res.status(500).json({ mensaje: 'Configuración de email no encontrada en el servidor (EMAIL_USER / EMAIL_PASS).' });
+  if (!process.env.RESEND_API_KEY) {
+    return res.status(500).json({ mensaje: 'RESEND_API_KEY no está configurada en el servidor.' });
   }
 
   // ── Responder inmediatamente para evitar timeout ─────────────────────
@@ -835,20 +835,13 @@ exports.enviarReportePorEmail = (req, res) => {
   // ── Generar y enviar en segundo plano ────────────────────────────────
   const fecha        = new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Bogota' });
   const fechaArchivo = new Date().toISOString().split('T')[0];
-
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    connectionTimeout: 15000,
-    tls: { rejectUnauthorized: false }
-  });
+  const resend       = new Resend(process.env.RESEND_API_KEY);
+  const fromAddr     = process.env.RESEND_FROM || 'COO Alianzas <onboarding@resend.dev>';
 
   construirWorkbook()
     .then(workbook => workbook.xlsx.writeBuffer())
-    .then(buffer => transporter.sendMail({
-      from:    `"COO Alianzas - Granja Porcina" <${process.env.EMAIL_USER}>`,
+    .then(buffer => resend.emails.send({
+      from:    fromAddr,
       to:      correo,
       subject: `Reporte Completo Granja Porcina — ${fecha}`,
       html: `
@@ -886,11 +879,14 @@ exports.enviarReportePorEmail = (req, res) => {
       `,
       attachments: [{
         filename:    `Reporte_COO_Alianzas_${fechaArchivo}.xlsx`,
-        content:     buffer,
+        content:     buffer.toString('base64'),
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       }]
     }))
-    .then(() => console.log(`[REPORTE] Email enviado exitosamente a ${correo}`))
+    .then(result => {
+      if (result.error) throw new Error(result.error.message);
+      console.log(`[REPORTE] Email enviado exitosamente a ${correo} (id: ${result.data?.id})`);
+    })
     .catch(err => console.error(`[REPORTE] Error enviando email a ${correo}:`, err.message));
 };
 
@@ -933,60 +929,31 @@ exports.obtenerResumen = async (_req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 
 exports.testEmail = async (_req, res) => {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+  if (!process.env.RESEND_API_KEY) {
     return res.status(400).json({
       ok: false,
       problema: 'VARIABLES_FALTANTES',
-      mensaje: 'Las variables EMAIL_USER y/o EMAIL_PASS no están configuradas en el servidor.',
-      solucion: 'Configura EMAIL_USER (tu correo Gmail) y EMAIL_PASS (App Password de 16 dígitos) en las variables de entorno del servidor.'
+      mensaje: 'La variable RESEND_API_KEY no está configurada en el servidor.',
+      solucion: 'Agrega RESEND_API_KEY en las variables de entorno de Render con tu API Key de resend.com.'
     });
   }
 
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-    connectionTimeout: 15000,
-    tls: { rejectUnauthorized: false }
-  });
-
   try {
-    await transporter.verify();
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    // Verificar la clave intentando listar dominios (no envía correo, solo valida)
+    const { data, error } = await resend.domains.list();
+    if (error) throw new Error(error.message);
     res.json({
       ok: true,
-      mensaje: `Conexión SMTP exitosa con ${process.env.EMAIL_USER}. El envío de correos está funcionando correctamente.`
+      mensaje: `API Key de Resend válida. Dominios verificados: ${data?.data?.length || 0}.`,
+      from_configurado: process.env.RESEND_FROM || 'onboarding@resend.dev (predeterminado)'
     });
   } catch (error) {
-    let problema = 'ERROR_DESCONOCIDO';
-    let solucion = 'Revisa los logs del servidor para más detalles.';
-
-    if (error.code === 'EAUTH' || error.responseCode === 535 || error.message?.includes('Invalid credentials')) {
-      problema = 'CREDENCIALES_INVALIDAS';
-      solucion = [
-        '1. Gmail ya NO acepta contraseñas normales para apps externas.',
-        '2. Debes usar una "Contraseña de Aplicación" (App Password) de 16 dígitos.',
-        '3. Para generarla: Google Account → Seguridad → Verificación en 2 pasos → Contraseñas de aplicaciones.',
-        '4. Selecciona "Correo" y "Otro dispositivo" → Copia los 16 dígitos.',
-        '5. Pega esos 16 dígitos en EMAIL_PASS (sin espacios).'
-      ].join(' ');
-    } else if (error.code === 'ECONNECTION' || error.code === 'ENOTFOUND') {
-      problema = 'SIN_CONEXION';
-      solucion = 'El servidor no puede conectarse a Gmail (smtp.gmail.com). Verifica la conexión a internet del servidor.';
-    } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
-      problema = 'CONEXION_TIMEOUT';
-      solucion = 'Tiempo de espera agotado al conectar con smtp.gmail.com:587. El proveedor de hosting puede estar bloqueando el puerto. Verifica que EMAIL_USER y EMAIL_PASS estén configuradas correctamente en las variables de entorno de Render.';
-    } else if (error.message?.includes('Username and Password not accepted')) {
-      problema = 'CONTRASEÑA_NO_ACEPTADA';
-      solucion = 'Contraseña no aceptada. Usa una App Password de 16 dígitos generada en tu cuenta Google, no la contraseña normal de Gmail.';
-    }
-
     res.status(400).json({
       ok: false,
-      problema,
+      problema: 'API_KEY_INVALIDA',
       error_tecnico: error.message,
-      correo_configurado: process.env.EMAIL_USER,
-      solucion
+      solucion: 'Verifica que RESEND_API_KEY sea correcta en las variables de entorno de Render.'
     });
   }
 };

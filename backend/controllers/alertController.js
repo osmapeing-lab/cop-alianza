@@ -1,32 +1,34 @@
 const Alert = require('../models/Alert');
-const nodemailer = require('nodemailer');
-
-const transporter = nodemailer.createTransport({
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
-  tls: { rejectUnauthorized: false }
-});
+const { Resend } = require('resend');
 
 exports.enviarAlertaEmail = async (asunto, contenidoHTML) => {
   try {
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.log('Email no configurado');
+    if (!process.env.RESEND_API_KEY) {
+      console.log('[ALERTA] RESEND_API_KEY no configurada, omitiendo email');
       return false;
     }
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: process.env.EMAIL_USER,
+    const resend   = new Resend(process.env.RESEND_API_KEY);
+    const fromAddr = process.env.RESEND_FROM || 'COO Alianzas <onboarding@resend.dev>';
+    const toAddr   = process.env.EMAIL_USER  || process.env.ALERT_EMAIL;
+
+    if (!toAddr) {
+      console.log('[ALERTA] EMAIL_USER no configurado, no se sabe a quién enviar la alerta');
+      return false;
+    }
+
+    const { error } = await resend.emails.send({
+      from:    fromAddr,
+      to:      toAddr,
       subject: asunto,
-      html: contenidoHTML
+      html:    contenidoHTML
     });
 
-    console.log('Email enviado:', asunto);
+    if (error) throw new Error(error.message);
+    console.log('[ALERTA] Email enviado:', asunto);
     return true;
   } catch (error) {
-    console.log('Error enviando email:', error.message);
+    console.log('[ALERTA] Error enviando email:', error.message);
     return false;
   }
 };
