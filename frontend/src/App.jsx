@@ -901,7 +901,7 @@ const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo, onEliminarCer
                   <tr key={lote._id}>
                     <td><strong>{lote.nombre}</strong></td>
                     <td><strong style={{color:'#1d4ed8'}}>{lote.cantidad_cerdos}</strong></td>
-                    <td>{lote.peso_promedio_actual || 0} kg</td>
+                    <td>{(lote.peso_promedio_actual || 0).toFixed(1)} kg</td>
                     <td><strong>{pesoTotal.toFixed(0)} kg</strong></td>
                     <td>{edadDias} días</td>
                     <td><span style={{background: faseColor, color:'#fff', padding:'2px 8px', borderRadius:'8px', fontSize:'12px', fontWeight:'700'}}>{fase}</span></td>
@@ -1250,7 +1250,7 @@ const [nuevoProductoAlimento, setNuevoProductoAlimento] = useState({
   tipo: 'universa',
   precio_bulto: '',
   peso_por_bulto_kg: 40,
-  stock_minimo_bultos: 5
+  stock_minimo_bultos: 1
 })
 
 // Refs para cerrar paneles al click fuera
@@ -1260,6 +1260,12 @@ const notifPanelRef = useRef(null)
 // Estados para notificaciones y config usuario
 const [mostrarNotificaciones, setMostrarNotificaciones] = useState(false)
 const [alertasLeidas, setAlertasLeidas] = useState(0)
+// Recordatorios locales (guardados en localStorage)
+const [recordatorios, setRecordatorios] = useState(() => {
+  try { return JSON.parse(localStorage.getItem('coo_recordatorios') || '[]') } catch { return [] }
+})
+const [mostrarFormRecordatorio, setMostrarFormRecordatorio] = useState(false)
+const [nuevoRecordatorio, setNuevoRecordatorio] = useState({ titulo: '', fecha: '', hora: '', descripcion: '' })
 const _getAlertasLeidasTs = () => { try { return localStorage.getItem('coo_alertas_ts') || null } catch { return null } }
 const _setAlertasLeidasTs = () => { try { localStorage.setItem('coo_alertas_ts', new Date().toISOString()) } catch {} }
 const [mostrarConfigUsuario, setMostrarConfigUsuario] = useState(false)
@@ -1637,7 +1643,7 @@ const crearNuevoProductoAlimento = async () => {
       headers: { Authorization: `Bearer ${token}` }
     })
     setMostrarModalNuevoProducto(false)
-    setNuevoProductoAlimento({ nombre: '', tipo: 'universa', precio_bulto: '', peso_por_bulto_kg: 40, stock_minimo_bultos: 5 })
+    setNuevoProductoAlimento({ nombre: '', tipo: 'universa', precio_bulto: '', peso_por_bulto_kg: 40, stock_minimo_bultos: 1 })
     await cargarInventarioAlimento()
     alert('✓ Producto creado correctamente. Ahora registra una Entrada para agregar stock.')
   } catch (error) {
@@ -1846,6 +1852,22 @@ const verStreamCamara = (camara) => {
     } catch (error) {
       console.error('Error cargando alertas:', error)
     }
+  }
+
+  const guardarRecordatorio = () => {
+    if (!nuevoRecordatorio.titulo || !nuevoRecordatorio.fecha) return
+    const nuevo = { ...nuevoRecordatorio, id: Date.now(), creado: new Date().toISOString() }
+    const actualizados = [...recordatorios, nuevo]
+    setRecordatorios(actualizados)
+    try { localStorage.setItem('coo_recordatorios', JSON.stringify(actualizados)) } catch {}
+    setNuevoRecordatorio({ titulo: '', fecha: '', hora: '', descripcion: '' })
+    setMostrarFormRecordatorio(false)
+  }
+
+  const eliminarRecordatorio = (id) => {
+    const actualizados = recordatorios.filter(r => r.id !== id)
+    setRecordatorios(actualizados)
+    try { localStorage.setItem('coo_recordatorios', JSON.stringify(actualizados)) } catch {}
   }
 
   const cargarLotes = async () => {
@@ -3310,8 +3332,8 @@ const cargarHistoricoPesos = async () => {
                 </div>
                 <div className="lote-info">
                   <span><PiggyBank size={14} /> {lote.cantidad_cerdos} cerdos</span>
-                  <span><Weight size={14} /> {lote.peso_promedio_actual || 0} kg/cerdo</span>
-                  <span><TrendingUp size={14} /> {((lote.cantidad_cerdos || 0) * (lote.peso_promedio_actual || 0)).toFixed(0)} kg total</span>
+                  <span><Weight size={14} /> {(lote.peso_promedio_actual || 0).toFixed(1)} kg/cerdo</span>
+                  <span><TrendingUp size={14} /> {((lote.cantidad_cerdos || 0) * (lote.peso_promedio_actual || 0)).toFixed(1)} kg total</span>
                 </div>
                 <div className="lote-progreso">
                   <div className="progreso-label">Ganancia de peso</div>
@@ -3322,8 +3344,8 @@ const cargarHistoricoPesos = async () => {
                     ></div>
                   </div>
                   <div className="progreso-valores">
-                    <span>{lote.peso_inicial_promedio || 0} kg</span>
-                    <span>{lote.peso_promedio_actual || 0} kg</span>
+                    <span>{(lote.peso_inicial_promedio || 0).toFixed(1)} kg</span>
+                    <span>{(lote.peso_promedio_actual || 0).toFixed(1)} kg</span>
                   </div>
                 </div>
               </div>
@@ -4122,7 +4144,7 @@ const cargarHistoricoPesos = async () => {
                 </div>
                 <div className="lote-dato">
                   <span>Prom. por Cerdo</span>
-                  <strong>{lote.peso_promedio_actual || 0} kg</strong>
+                  <strong>{(lote.peso_promedio_actual || 0).toFixed(1)} kg</strong>
                 </div>
                 <div className="lote-dato destacado">
                   <span>Peso Total Lote</span>
@@ -4685,9 +4707,9 @@ const cargarHistoricoPesos = async () => {
               {/* ── TAB: COSTOS ── */}
               {tabFinanzas === 'costos' && (
                 <div className="finanzas-costos">
-                  <div className="tab-header-actions">
+                  <PanelContabilidad resumen={resumenCostos} comparativo={[]} onNuevoCosto={crearCosto} />
+                  <div className="tab-header-actions" style={{marginTop:'1.5rem'}}>
                     <h3>Costos Registrados</h3>
-                    <PanelContabilidad resumen={resumenCostos} comparativo={[]} onNuevoCosto={crearCosto} />
                   </div>
                   <div className="table-container">
                     <table>
@@ -4912,26 +4934,30 @@ const cargarHistoricoPesos = async () => {
               {/* ── TAB: GASTOS POR LOTE (Registros contables separados) ── */}
               {tabFinanzas === 'gastos-lote' && (
                 <div className="finanzas-gastos-lote">
-                  <h3 style={{marginBottom:'16px'}}>Gastos Registrados por Lote</h3>
+                  <h3 style={{marginBottom:'8px'}}>Gastos por Lote</h3>
+                  <p style={{fontSize:'13px', color:'#64748b', marginBottom:'20px'}}>
+                    El costo de alimento se muestra como referencia — ya está contabilizado en la pestaña <strong>Costos</strong> al momento de la compra.
+                  </p>
 
-                  {/* Resumen general */}
+                  {/* Resumen general — balance solo incluye gastos semanales, NO alimento */}
                   <div style={{display:'flex', gap:'16px', marginBottom:'24px', flexWrap:'wrap'}}>
                     <div style={{flex:'1', minWidth:'180px', padding:'16px', background:'#fef2f2', borderRadius:'12px', border:'1px solid #fca5a5'}}>
-                      <div style={{fontSize:'13px', color:'#64748b'}}>Total Gastos Lotes</div>
+                      <div style={{fontSize:'13px', color:'#64748b'}}>Otros Gastos (sin alimento)</div>
                       <div style={{fontSize:'24px', fontWeight:'800', color:'#dc2626'}}>
                         {formatearDinero(lotes.reduce((s, l) => s + (l.total_gastos || 0), 0))}
                       </div>
+                    </div>
+                    <div style={{flex:'1', minWidth:'180px', padding:'16px', background:'#fff7ed', borderRadius:'12px', border:'1px solid #fdba74'}}>
+                      <div style={{fontSize:'13px', color:'#64748b'}}>Alimento Consumido (referencia)</div>
+                      <div style={{fontSize:'24px', fontWeight:'800', color:'#ea580c'}}>
+                        {formatearDinero(lotes.reduce((s, l) => s + (l.costo_alimento_total || 0), 0))}
+                      </div>
+                      <div style={{fontSize:'11px', color:'#9ca3af', marginTop:'4px'}}>Ya registrado en Costos</div>
                     </div>
                     <div style={{flex:'1', minWidth:'180px', padding:'16px', background:'#f0fdf4', borderRadius:'12px', border:'1px solid #86efac'}}>
                       <div style={{fontSize:'13px', color:'#64748b'}}>Ingresos (Ventas)</div>
                       <div style={{fontSize:'24px', fontWeight:'800', color:'#16a34a'}}>
                         {formatearDinero(resumenCostos?.ingresos?.total || resumenContable.total_ingresos || 0)}
-                      </div>
-                    </div>
-                    <div style={{flex:'1', minWidth:'180px', padding:'16px', background:'#eff6ff', borderRadius:'12px', border:'1px solid #93c5fd'}}>
-                      <div style={{fontSize:'13px', color:'#64748b'}}>Balance Neto</div>
-                      <div style={{fontSize:'24px', fontWeight:'800', color:'#1d4ed8'}}>
-                        {formatearDinero((resumenCostos?.ingresos?.total || resumenContable.total_ingresos || 0) - lotes.reduce((s, l) => s + (l.total_gastos || 0), 0))}
                       </div>
                     </div>
                   </div>
@@ -4944,20 +4970,22 @@ const cargarHistoricoPesos = async () => {
                           <th>Lote</th>
                           <th>Estado</th>
                           <th>Cerdos</th>
-                          <th>Total Gastos</th>
+                          <th>Alimento (info)</th>
+                          <th>Otros Gastos</th>
                           <th>Costo/Cerdo</th>
                           <th>Acciones</th>
                         </tr>
                       </thead>
                       <tbody>
                         {lotes.length === 0 ? (
-                          <tr><td colSpan="6" className="sin-datos">No hay lotes registrados</td></tr>
+                          <tr><td colSpan="7" className="sin-datos">No hay lotes registrados</td></tr>
                         ) : (
                           lotes.map(lote => (
                             <tr key={lote._id}>
                               <td><strong>{lote.nombre}</strong></td>
                               <td><span className={`estado-lote ${lote.activo ? 'activo' : 'inactivo'}`}>{lote.activo ? 'Activo' : 'Finalizado'}</span></td>
                               <td>{lote.cantidad_cerdos}</td>
+                              <td style={{color:'#ea580c', fontStyle:'italic'}}>{formatearDinero(lote.costo_alimento_total || 0)}</td>
                               <td><strong style={{color:'#ef4444'}}>{formatearDinero(lote.total_gastos || 0)}</strong></td>
                               <td>{lote.cantidad_cerdos > 0 ? formatearDinero((lote.total_gastos || 0) / lote.cantidad_cerdos) : '-'}</td>
                               <td>
@@ -4973,7 +5001,7 @@ const cargarHistoricoPesos = async () => {
                         )}
                         {lotes.length > 0 && (
                           <tr style={{background:'#fef2f2', fontWeight:'bold'}}>
-                            <td colSpan="3" style={{textAlign:'right'}}>TOTAL:</td>
+                            <td colSpan="4" style={{textAlign:'right'}}>TOTAL otros gastos:</td>
                             <td style={{color:'#dc2626'}}>{formatearDinero(lotes.reduce((s, l) => s + (l.total_gastos || 0), 0))}</td>
                             <td></td>
                             <td></td>
@@ -5312,12 +5340,104 @@ const cargarHistoricoPesos = async () => {
               )
             }
 
+            // Recordatorios próximos (hoy y siguientes 7 días)
+            const hoy = ahora.toISOString().split('T')[0]
+            const en7dias = new Date(ahora.getTime() + 7*24*3600000).toISOString().split('T')[0]
+            const recordatoriosProximos = recordatorios
+              .filter(r => r.fecha >= hoy && r.fecha <= en7dias)
+              .sort((a,b) => (a.fecha+a.hora) > (b.fecha+b.hora) ? 1 : -1)
+            const recordatoriosVencidos = recordatorios.filter(r => r.fecha < hoy)
+              .sort((a,b) => b.fecha > a.fecha ? 1 : -1)
+
             return (
               <div className="page-alertas">
                 <div className="page-header">
                   <h2><Bell size={22} /> Centro de Alertas y Notificaciones</h2>
-                  <button className="btn-refresh" onClick={cargarAlertas}><IconRefresh /></button>
+                  <div style={{display:'flex', gap:'8px'}}>
+                    <button className="btn-primary btn-sm" onClick={() => setMostrarFormRecordatorio(true)}>+ Recordatorio</button>
+                    <button className="btn-refresh" onClick={cargarAlertas}><IconRefresh /></button>
+                  </div>
                 </div>
+
+                {/* Modal crear recordatorio */}
+                {mostrarFormRecordatorio && (
+                  <div className="modal-overlay">
+                    <div className="modal-content" style={{maxWidth:'420px'}}>
+                      <div className="modal-header">
+                        <h3>Nuevo Recordatorio</h3>
+                        <button className="btn-close" onClick={() => setMostrarFormRecordatorio(false)}>×</button>
+                      </div>
+                      <div style={{padding:'16px', display:'flex', flexDirection:'column', gap:'12px'}}>
+                        <div className="form-group">
+                          <label>Título *</label>
+                          <input type="text" className="form-control" value={nuevoRecordatorio.titulo}
+                            onChange={e => setNuevoRecordatorio({...nuevoRecordatorio, titulo: e.target.value})}
+                            placeholder="Ej: Vacunación lote A" />
+                        </div>
+                        <div style={{display:'flex', gap:'12px'}}>
+                          <div className="form-group" style={{flex:1}}>
+                            <label>Fecha *</label>
+                            <input type="date" className="form-control" value={nuevoRecordatorio.fecha}
+                              onChange={e => setNuevoRecordatorio({...nuevoRecordatorio, fecha: e.target.value})} />
+                          </div>
+                          <div className="form-group" style={{flex:1}}>
+                            <label>Hora</label>
+                            <input type="time" className="form-control" value={nuevoRecordatorio.hora}
+                              onChange={e => setNuevoRecordatorio({...nuevoRecordatorio, hora: e.target.value})} />
+                          </div>
+                        </div>
+                        <div className="form-group">
+                          <label>Descripción</label>
+                          <textarea className="form-control" rows="2" value={nuevoRecordatorio.descripcion}
+                            onChange={e => setNuevoRecordatorio({...nuevoRecordatorio, descripcion: e.target.value})}
+                            placeholder="Detalles adicionales..." style={{resize:'vertical'}} />
+                        </div>
+                        <div style={{display:'flex', gap:'8px', justifyContent:'flex-end'}}>
+                          <button className="btn-secondary" onClick={() => setMostrarFormRecordatorio(false)}>Cancelar</button>
+                          <button className="btn-primary" onClick={guardarRecordatorio}
+                            disabled={!nuevoRecordatorio.titulo || !nuevoRecordatorio.fecha}>Guardar</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ESTADO DE LOTES ACTIVOS */}
+                {lotes.filter(l => l.activo).length > 0 && (
+                  <div style={{ marginBottom:'28px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px' }}>
+                      <span style={{ background:'#0369a1', color:'#fff', borderRadius:'8px', padding:'4px 12px', fontWeight:'700', fontSize:'13px' }}>📊 LOTES ACTIVOS</span>
+                      <span style={{ color:'#64748b', fontSize:'12px' }}>Estado actual y próximo pesaje</span>
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:'12px' }}>
+                      {lotes.filter(l => l.activo).map(lote => {
+                        const edadDias = lote.edad_dias || Math.floor((Date.now() - new Date(lote.fecha_inicio)) / (1000*60*60*24))
+                        const pesajesLote = pesajes.filter(p => String(p.lote) === String(lote._id) || p.lote?._id === lote._id)
+                        const ultimoPesaje = pesajesLote.sort((a,b) => new Date(b.fecha) - new Date(a.fecha))[0]
+                        const diasSinPesar = ultimoPesaje
+                          ? Math.floor((ahora - new Date(ultimoPesaje.fecha)) / (1000*60*60*24))
+                          : edadDias
+                        const proximoPesaje = 7 - (diasSinPesar % 7)
+                        const fase = getEtapaAutomatica(edadDias)
+                        const semana = Math.ceil(edadDias / 7)
+                        const pesajeVencido = diasSinPesar >= 7
+                        return (
+                          <div key={lote._id} style={{ padding:'14px', borderRadius:'10px', border:`1px solid ${pesajeVencido ? '#fca5a5' : '#bfdbfe'}`, background: pesajeVencido ? '#fef2f2' : '#eff6ff' }}>
+                            <div style={{ fontWeight:'700', fontSize:'14px', marginBottom:'6px', color:'#1e293b' }}>{lote.nombre}</div>
+                            <div style={{ fontSize:'12px', color:'#475569', display:'flex', flexDirection:'column', gap:'3px' }}>
+                              <span>🐷 {lote.cantidad_cerdos} cerdos · {(lote.peso_promedio_actual||0).toFixed(1)} kg/cerdo</span>
+                              <span>📅 Día {edadDias} · Semana {semana} · Fase: <strong>{fase}</strong></span>
+                              <span>⚖️ {ultimoPesaje ? `Último pesaje: hace ${diasSinPesar} días` : 'Sin pesajes registrados'}</span>
+                              <span style={{ color: pesajeVencido ? '#dc2626' : '#16a34a', fontWeight:'600' }}>
+                                {pesajeVencido ? `⚠️ Pesaje VENCIDO (${diasSinPesar} días)` : `✓ Próximo pesaje: en ${proximoPesaje} días`}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* SECCIÓN 1: URGENTES */}
                 <div style={{ marginBottom:'28px' }}>
@@ -5334,27 +5454,59 @@ const cargarHistoricoPesos = async () => {
                   }
                 </div>
 
-                {/* SECCIÓN 2: PRÓXIMOS EVENTOS */}
+                {/* SECCIÓN 2: PRÓXIMOS EVENTOS + RECORDATORIOS */}
                 <div style={{ marginBottom:'28px' }}>
                   <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px' }}>
                     <span style={{ background:'#d97706', color:'#fff', borderRadius:'8px', padding:'4px 12px', fontWeight:'700', fontSize:'13px' }}>⚠️ PRÓXIMOS EVENTOS</span>
-                    <span style={{ color:'#64748b', fontSize:'12px' }}>Calculado desde los lotes activos · próximos 7 días</span>
+                    <span style={{ color:'#64748b', fontSize:'12px' }}>Próximos 7 días · lotes activos + recordatorios</span>
                   </div>
-                  {eventosProximos.filter(e => e.prioridad === 'proximo').length === 0
+                  {eventosProximos.filter(e => e.prioridad === 'proximo').length === 0 && recordatoriosProximos.length === 0
                     ? <p style={{ color:'#64748b', fontSize:'13px', padding:'10px 14px', background:'#f8fafc', borderRadius:'8px', border:'1px solid #e2e8f0' }}>No hay eventos próximos en los siguientes 7 días</p>
-                    : eventosProximos.filter(e => e.prioridad === 'proximo').map((e, i) => <AlertCard key={`ev-p-${i}`} alerta={e} esEvento />)
+                    : <>
+                        {eventosProximos.filter(e => e.prioridad === 'proximo').map((e, i) => <AlertCard key={`ev-p-${i}`} alerta={e} esEvento />)}
+                        {recordatoriosProximos.map(r => (
+                          <div key={r.id} style={{ display:'flex', gap:'12px', padding:'12px 14px', borderRadius:'10px', border:'1px solid #fde68a', background:'#fffbeb', marginBottom:'8px', alignItems:'flex-start' }}>
+                            <div style={{ fontSize:'22px', lineHeight:1 }}>📌</div>
+                            <div style={{ flex:1 }}>
+                              <div style={{ fontWeight:'700', fontSize:'14px', color:'#92400e' }}>{r.titulo}</div>
+                              <p style={{ margin:'2px 0', fontSize:'13px', color:'#374151' }}>{r.descripcion || ''}</p>
+                              <small style={{ color:'#9ca3af', fontSize:'11px' }}>
+                                {r.fecha}{r.hora ? ` a las ${r.hora}` : ''}
+                              </small>
+                            </div>
+                            <button onClick={() => eliminarRecordatorio(r.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#9ca3af', padding:'4px' }} title="Eliminar">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
+                      </>
                   }
                 </div>
 
-                {/* SECCIÓN 3: HISTORIAL */}
+                {/* SECCIÓN 3: HISTORIAL + RECORDATORIOS VENCIDOS */}
                 <div>
                   <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px' }}>
                     <span style={{ background:'#475569', color:'#fff', borderRadius:'8px', padding:'4px 12px', fontWeight:'700', fontSize:'13px' }}>📋 HISTORIAL</span>
                     <span style={{ color:'#64748b', fontSize:'12px' }}>Alertas del sistema anteriores a 48 horas</span>
                   </div>
-                  {historial.length === 0
+                  {historial.length === 0 && recordatoriosVencidos.length === 0
                     ? <p style={{ color:'#64748b', fontSize:'13px', padding:'10px 14px', background:'#f8fafc', borderRadius:'8px', border:'1px solid #e2e8f0' }}>Sin historial de alertas</p>
-                    : historial.slice(0, 30).map((a, i) => <AlertCard key={`hist-${i}`} alerta={a} />)
+                    : <>
+                        {recordatoriosVencidos.map(r => (
+                          <div key={r.id} style={{ display:'flex', gap:'12px', padding:'12px 14px', borderRadius:'10px', border:'1px solid #e2e8f0', background:'#f8fafc', marginBottom:'8px', opacity:0.7, alignItems:'flex-start' }}>
+                            <div style={{ fontSize:'22px', lineHeight:1 }}>📌</div>
+                            <div style={{ flex:1 }}>
+                              <div style={{ fontWeight:'700', fontSize:'14px', color:'#64748b' }}>{r.titulo} <span style={{fontSize:'11px', color:'#9ca3af'}}>(vencido)</span></div>
+                              {r.descripcion && <p style={{ margin:'2px 0', fontSize:'13px', color:'#94a3b8' }}>{r.descripcion}</p>}
+                              <small style={{ color:'#9ca3af', fontSize:'11px' }}>{r.fecha}</small>
+                            </div>
+                            <button onClick={() => eliminarRecordatorio(r.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#9ca3af', padding:'4px' }} title="Eliminar">
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        ))}
+                        {historial.slice(0, 30).map((a, i) => <AlertCard key={`hist-${i}`} alerta={a} />)}
+                      </>
                   }
                 </div>
               </div>
@@ -5376,11 +5528,29 @@ const cargarHistoricoPesos = async () => {
                     <IconReporte />
                   </div>
                   <h3>Reporte Completo</h3>
-                  <p style={{ marginBottom: '12px' }}>
-                    Incluye resumen ejecutivo, lotes, pesajes, contabilidad, alertas,
-                    temperatura/humedad 24h, consumo de agua por hora, historial motobomba,
-                    gastos por lote e inventario de alimento.
+                  <p style={{ marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>
+                    El Excel descargado contiene las siguientes pestañas:
                   </p>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px', marginBottom: '16px' }}>
+                    {[
+                      { hoja: 'Resumen Ejecutivo', desc: 'Indicadores generales: lotes activos, cerdos totales, peso promedio, ingresos y costos del período.' },
+                      { hoja: 'Lotes', desc: 'Detalle de cada lote: nombre, cantidad de cerdos, peso inicial y actual, días de edad, fase y corral.' },
+                      { hoja: 'Pesajes', desc: 'Historial de pesajes por lote con fecha, peso promedio, peso total y ganancia registrada.' },
+                      { hoja: 'Contabilidad', desc: 'Costos registrados con categoría, descripción, monto y estado (registrado/anulado).' },
+                      { hoja: 'Ventas', desc: 'Registro de ventas: lote, cerdos vendidos, precio por kg, peso total y monto cobrado.' },
+                      { hoja: 'Inventario Alimento', desc: 'Stock actual por producto: bultos disponibles, kg totales, precio y movimientos recientes.' },
+                      { hoja: 'Gastos por Lote', desc: 'Gastos semanales manuales por lote con categoría y monto (sin incluir compras de alimento).' },
+                      { hoja: 'Alertas', desc: 'Alertas activas del sistema registradas en la plataforma.' },
+                      { hoja: 'Temperatura/Humedad', desc: 'Lecturas de sensores de las últimas 24 horas por hora.' },
+                      { hoja: 'Consumo Agua', desc: 'Consumo de agua por hora de las últimas 24 horas.' },
+                      { hoja: 'Historial Motobomba', desc: 'Registro de activaciones/desactivaciones del sistema de bombeo.' },
+                    ].map(({ hoja, desc }) => (
+                      <div key={hoja} style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                        <div style={{ fontWeight: '700', fontSize: '12px', color: '#1d4ed8', marginBottom: '3px' }}>📄 {hoja}</div>
+                        <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.4' }}>{desc}</div>
+                      </div>
+                    ))}
+                  </div>
 
                   {/* Descarga directa */}
                   <button className="btn-primary" onClick={descargarReporte} style={{ marginBottom: '16px' }}>
@@ -5715,10 +5885,12 @@ const cargarHistoricoPesos = async () => {
             ) : (
               inventarioAlimento.map(inv => {
                 const kgTotal     = (inv.cantidad_bultos || 0) * (inv.peso_por_bulto_kg || 40)
+                const sinStock    = (inv.cantidad_bultos || 0) === 0
                 const critico10kg = kgTotal <= 10 && kgTotal > 0
-                const bajo        = !critico10kg && (inv.cantidad_bultos || 0) <= (inv.stock_minimo_bultos || 5)
-                const bgColor     = critico10kg ? '#fef2f2' : bajo ? '#fef3c7' : '#f8fafc'
-                const borderColor = critico10kg ? '#fecaca' : bajo ? '#fde68a' : '#e2e8f0'
+                // STOCK BAJO solo si hay algo de stock pero está por debajo del mínimo (no cuando es 0)
+                const bajo        = !sinStock && !critico10kg && (inv.cantidad_bultos || 0) <= (inv.stock_minimo_bultos || 5)
+                const bgColor     = sinStock ? '#f8fafc' : critico10kg ? '#fef2f2' : bajo ? '#fef3c7' : '#f8fafc'
+                const borderColor = sinStock ? '#cbd5e1' : critico10kg ? '#fecaca' : bajo ? '#fde68a' : '#e2e8f0'
                 return (
                   <div key={inv._id} style={{
                     flex:'1', minWidth:'220px', padding:'16px', borderRadius:'12px',
@@ -5749,6 +5921,11 @@ const cargarHistoricoPesos = async () => {
                       <span>Mín: {inv.stock_minimo_bultos || 5} bultos</span>
                     </div>
 
+                    {sinStock && (
+                      <div style={{marginTop:'8px', padding:'4px 8px', background:'#f1f5f9', borderRadius:'6px', fontSize:'12px', color:'#64748b', fontWeight:'500', display:'flex', alignItems:'center', gap:'4px'}}>
+                        Sin stock — registra una Entrada para agregar bultos
+                      </div>
+                    )}
                     {critico10kg && (
                       <div style={{marginTop:'8px', padding:'6px 8px', background:'#fee2e2', borderRadius:'6px', fontSize:'12px', color:'#991b1b', fontWeight:'700', display:'flex', alignItems:'center', gap:'4px'}}>
                         <AlertTriangle size={13} /> CRÍTICO: solo {kgTotal.toFixed(1)} kg — Reabastecer urgente
@@ -5756,7 +5933,7 @@ const cargarHistoricoPesos = async () => {
                     )}
                     {bajo && !critico10kg && (
                       <div style={{marginTop:'8px', padding:'4px 8px', background:'#fef3c7', borderRadius:'6px', fontSize:'12px', color:'#92400e', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px'}}>
-                        <AlertTriangle size={12} /> STOCK BAJO — Reabastecer pronto
+                        <AlertTriangle size={12} /> STOCK BAJO — quedan {inv.cantidad_bultos} bulto(s), mín. {inv.stock_minimo_bultos}
                       </div>
                     )}
                   </div>
