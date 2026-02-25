@@ -1969,14 +1969,17 @@ const verStreamCamara = (camara) => {
 
   const crearLote = async () => {
     try {
+      // Incluir cualquier peso pendiente en el campo de texto
+      const extraLote = pesoLoteInputTmp.split(/[,\s]+/).map(v => parseFloat(v.replace(',','.'))).filter(v => !isNaN(v) && v > 0)
+      const todosLosPesosLote = [...pesosLoteInicial, ...extraLote]
       // Si se ingresaron pesos individuales, derivar promedios y totales del array
       let payload = { ...nuevoLote }
-      if (pesosLoteInicial.length > 0) {
-        const totalPesos = pesosLoteInicial.reduce((s, v) => s + v, 0)
-        const promedio = Math.round((totalPesos / pesosLoteInicial.length) * 100) / 100
+      if (todosLosPesosLote.length > 0) {
+        const totalPesos = todosLosPesosLote.reduce((s, v) => s + v, 0)
+        const promedio = Math.round((totalPesos / todosLosPesosLote.length) * 100) / 100
         payload = {
           ...payload,
-          cantidad_cerdos: pesosLoteInicial.length,
+          cantidad_cerdos: todosLosPesosLote.length,
           peso_inicial_promedio: promedio,
           peso_promedio_actual: promedio
         }
@@ -2180,16 +2183,18 @@ const eliminarGastoSemanal = async (loteId, gastoId) => {
   // ═══════════════════════════════════════════════════════════════════════
 
   const crearPesaje = async () => {
-    if (pesosIngresados.length === 0) { alert('Ingresa al menos un peso antes de registrar.'); return }
+    // Incluir cualquier peso pendiente en el campo de texto
+    const extra = pesoInputTmp.split(/[,\s]+/).map(v => parseFloat(v.replace(',','.'))).filter(v => !isNaN(v) && v > 0)
+    const todosLosPesos = [...pesosIngresados, ...extra]
+    if (todosLosPesos.length === 0) { alert('Ingresa al menos un peso antes de registrar.'); return }
     try {
-      const total = pesosIngresados.reduce((s, v) => s + v, 0)
-      const promedio = total / pesosIngresados.length
+      const total = todosLosPesos.reduce((s, v) => s + v, 0)
       const payload = {
         ...nuevoPesaje,
         peso: Math.round(total * 100) / 100,
-        cantidad_cerdos_pesados: pesosIngresados.length,
-        peso_min: Math.min(...pesosIngresados),
-        peso_max: Math.max(...pesosIngresados)
+        cantidad_cerdos_pesados: todosLosPesos.length,
+        peso_min: Math.min(...todosLosPesos),
+        peso_max: Math.max(...todosLosPesos)
       }
       await axios.post(`${API_URL}/api/pesajes`, payload, {
         headers: { Authorization: `Bearer ${token}` }

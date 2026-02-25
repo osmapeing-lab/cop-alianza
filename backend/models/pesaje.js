@@ -119,9 +119,10 @@ pesajeSchema.post('deleteOne', { document: true, query: false }, async function(
         peso_promedio_actual: nuevoPesoPromedio
       });
     } else {
-      // Si no quedan pesajes, resetear a peso inicial
+      // Si no quedan pesajes, resetear al peso inicial del lote
+      const lote = await Lote.findById(doc.lote).select('peso_inicial_promedio');
       await Lote.findByIdAndUpdate(doc.lote, {
-        peso_promedio_actual: 0
+        peso_promedio_actual: lote?.peso_inicial_promedio || 0
       });
     }
     
