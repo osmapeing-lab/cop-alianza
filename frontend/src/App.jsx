@@ -831,7 +831,7 @@ const PanelContabilidad = ({ resumen, comparativo, onNuevoCosto }) => {
 // COMPONENTE: PANEL DE INVENTARIO
 // ═══════════════════════════════════════════════════════════════════════
 
-const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo, onEliminarCerdo }) => {
+const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo, onEliminarCerdo, lotes = [] }) => {
   const [modalCerdo, setModalCerdo] = useState(false)
   const [nuevoCerdo, setNuevoCerdo] = useState({
     tipo: 'engorde',
@@ -871,24 +871,56 @@ const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo, onEliminarCer
         </div>
       </div>
       
-      {/* Por Tipo */}
-      <div className="inventario-tipos">
-        <h3>Por Categoría</h3>
-        <div className="tipos-grid">
-          {estadisticas?.por_tipo?.map(t => (
-            <div key={t._id} className="tipo-card">
-              <span className="tipo-nombre">{t._id}</span>
-              <span className="tipo-cantidad">{t.cantidad}</span>
-              <span className="tipo-peso">~{t.peso_promedio?.toFixed(1) || 0} kg/cerdo</span>
-            </div>
-          ))}
-        </div>
-      </div>
-      
-      {/* Tabla de inventario */}
-      <div className="tabla-container">
+      {/* Tabla por Lote */}
+      <div className="tabla-container" style={{marginBottom: '24px'}}>
+        <h3 style={{margin: '16px 0 10px', fontSize: '15px', fontWeight: '600'}}>Cerdos por Lote</h3>
         <table className="tabla-inventario">
           <thead>
+            <tr>
+              <th>Lote / Grupo</th>
+              <th>Cerdos</th>
+              <th>Peso Prom.</th>
+              <th>Peso Total</th>
+              <th>Edad</th>
+              <th>Fase</th>
+              <th>Corral</th>
+              <th>Ingresó</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lotes.length === 0 ? (
+              <tr><td colSpan="8" className="empty-row">No hay lotes activos</td></tr>
+            ) : (
+              lotes.map(lote => {
+                const pesoTotal = (lote.cantidad_cerdos || 0) * (lote.peso_promedio_actual || 0)
+                const edadDias = lote.edad_dias || Math.floor((Date.now() - new Date(lote.fecha_inicio)) / (1000*60*60*24))
+                const fase = getEtapaAutomatica(edadDias)
+                const fechaIngreso = lote.fecha_inicio ? new Date(lote.fecha_inicio).toLocaleDateString('es-CO') : '-'
+                const faseColor = fase === 'inicio' ? '#3b82f6' : fase === 'crecimiento' ? '#f59e0b' : '#16a34a'
+                return (
+                  <tr key={lote._id}>
+                    <td><strong>{lote.nombre}</strong></td>
+                    <td><strong style={{color:'#1d4ed8'}}>{lote.cantidad_cerdos}</strong></td>
+                    <td>{lote.peso_promedio_actual || 0} kg</td>
+                    <td><strong>{pesoTotal.toFixed(0)} kg</strong></td>
+                    <td>{edadDias} días</td>
+                    <td><span style={{background: faseColor, color:'#fff', padding:'2px 8px', borderRadius:'8px', fontSize:'12px', fontWeight:'700'}}>{fase}</span></td>
+                    <td>{lote.corral || '-'}</td>
+                    <td style={{fontSize:'12px', color:'#64748b'}}>{fechaIngreso}</td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Registros individuales (si los hay) */}
+      {inventario.length > 0 && (
+        <div className="tabla-container">
+          <h3 style={{margin: '0 0 10px', fontSize: '15px', fontWeight: '600'}}>Registros Individuales</h3>
+          <table className="tabla-inventario">
+            <thead>
               <tr>
                 <th>Código</th>
                 <th>Tipo</th>
@@ -899,37 +931,34 @@ const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo, onEliminarCer
                 <th>Acciones</th>
               </tr>
             </thead>
-          <tbody>
-            {inventario.length === 0 ? (
-              <tr><td colSpan="6" className="empty-row">No hay cerdos registrados</td></tr>
-            ) : (
-              inventario.slice(0, 15).map(c => (
-                        <tr key={c._id}>
-                          <td><strong>{c.codigo}</strong></td>
-                          <td>{c.tipo}</td>
-                          <td>{c.sexo === 'macho' ? '♂' : '♀'}</td>
-                          <td>{c.peso_actual} kg</td>
-                          <td>{c.corral || '-'}</td>
-                          <td>
-                            <span className={`salud-badge ${c.estado_salud}`}>
-                              {c.estado_salud}
-                            </span>
-                          </td>
-                          <td>
-                            <button
-                              className="btn-icon btn-danger"
-                              title="Eliminar cerdo"
-                              onClick={() => onEliminarCerdo && onEliminarCerdo(c._id, c.codigo)}
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-            )}
-          </tbody>
-        </table>
-      </div>
+            <tbody>
+              {inventario.slice(0, 15).map(c => (
+                <tr key={c._id}>
+                  <td><strong>{c.codigo}</strong></td>
+                  <td>{c.tipo}</td>
+                  <td>{c.sexo === 'macho' ? '♂' : '♀'}</td>
+                  <td>{c.peso_actual} kg</td>
+                  <td>{c.corral || '-'}</td>
+                  <td>
+                    <span className={`salud-badge ${c.estado_salud}`}>
+                      {c.estado_salud}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      className="btn-icon btn-danger"
+                      title="Eliminar cerdo"
+                      onClick={() => onEliminarCerdo && onEliminarCerdo(c._id, c.codigo)}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       
       {/* Modal Nuevo Cerdo */}
       {modalCerdo && (
@@ -2790,13 +2819,15 @@ const cargarHistoricoPesos = async () => {
               <IconAlerta />
               <span>Alertas</span>
             </button>
-            <button 
+{/* Cámaras - temporalmente oculto
+            <button
   className={`nav-item ${pagina === 'camaras' ? 'activo' : ''}`}
   onClick={() => { setPagina('camaras'); setMenuAbierto(false) }}
 >
   <IconCamara />
   <span>Cámaras</span>
 </button>
+*/}
 
 
 <button
@@ -5522,16 +5553,7 @@ const cargarHistoricoPesos = async () => {
 {/* ════════════════════════════════════════════════════════════════ */}
 {/* PÁGINA: CÁMARAS */}
 {/* ════════════════════════════════════════════════════════════════ */}
-{pagina === 'camaras' && (
-  <div className="page-camaras">
-    <PanelCamaras 
-      camaras={camaras}
-      grabaciones={grabaciones}
-      onCapturar={capturarFotoCamara}
-      onVerStream={verStreamCamara}
-    />
-  </div>
-)}
+{/* Módulo cámaras temporalmente oculto */}
 
 {/* ════════════════════════════════════════════════════════════════ */}
 {/* PÁGINA: INVENTARIO */}
@@ -5561,6 +5583,7 @@ const cargarHistoricoPesos = async () => {
     {tabInventario === 'cerdos' && (
       <PanelInventario
         inventario={inventario}
+        lotes={lotes.filter(l => l.activo)}
         estadisticas={{
           ...estadisticasInventario,
           total_activos: lotes.filter(l => l.activo).reduce((sum, l) => sum + (l.cantidad_cerdos || 0), 0),

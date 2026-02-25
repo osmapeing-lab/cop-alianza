@@ -133,12 +133,35 @@ exports.registrarEntrada = async (req, res) => {
       return res.status(404).json({ mensaje: 'Inventario no encontrado' });
     }
 
+    const precioBultoFinal = precio_bulto || inventario.precio_bulto;
+
     await inventario.registrarEntrada(
       cantidad_bultos,
-      precio_bulto || inventario.precio_bulto,
+      precioBultoFinal,
       descripcion,
       req.user?._id
     );
+
+    // Registrar el costo de la compra en módulo financiero
+    try {
+      const precioPorKg = inventario.peso_por_bulto_kg > 0
+        ? precioBultoFinal / inventario.peso_por_bulto_kg
+        : 0;
+      const costoCompra = new Costo({
+        tipo_costo: 'directo',
+        categoria: 'alimento_concentrado',
+        descripcion: descripcion || `Compra ${inventario.nombre} — ${cantidad_bultos} bulto(s)`,
+        cantidad: cantidad_bultos * inventario.peso_por_bulto_kg,
+        unidad: 'kg',
+        precio_unitario: precioPorKg,
+        total: cantidad_bultos * precioBultoFinal,
+        estado: 'registrado',
+        metodo_pago: 'efectivo'
+      });
+      await costoCompra.save();
+    } catch (costoErr) {
+      console.error('[INVENTARIO] Error registrando costo de compra:', costoErr.message);
+    }
 
     // Al reponer stock, resetear alerta de 10 kg para este producto
     await resetearAlertaStockAlimento(inventario._id).catch(() => {});
@@ -205,26 +228,8 @@ exports.registrarSalida = async (req, res) => {
     // CORRECCIÓN: No usar 'inventario' viejo para calcular stock restante
     const inventarioActualizado = await InventarioAlimento.findById(req.params.id);
 
-    // ── Crear costo con valores actualizados ──────────────────────
-    if (lote_id) {
-      const lote = await Lote.findById(lote_id);
-      const precioPorKg = inventarioActualizado.peso_por_bulto_kg > 0
-        ? inventarioActualizado.precio_bulto / inventarioActualizado.peso_por_bulto_kg
-        : 0;
-
-      const costo = new Costo({
-        tipo_costo: 'directo',
-        categoria: 'alimento_concentrado',
-        descripcion: descripcion || `Alimento para lote: ${lote?.nombre || 'Sin nombre'}`,
-        cantidad: cantidad_bultos * inventarioActualizado.peso_por_bulto_kg,
-        unidad: 'kg',
-        precio_unitario: precioPorKg,
-        total: cantidad_bultos * inventarioActualizado.precio_bulto,
-        lote: lote_id,
-        estado: 'registrado'
-      });
-      await costo.save();
-    }
+    // ── El costo ya fue registrado al COMPRAR el bulto (registrarEntrada) ──
+    // No se crea costo adicional al consumir para evitar doble conteo.
 
     // ── Verificar stock DESPUÉS de actualizar ─────────────────────
     // CORRECCIÓN: usa inventarioActualizado con el stock real post-salida

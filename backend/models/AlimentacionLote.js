@@ -112,10 +112,11 @@ alimentacionLoteSchema.pre('save', async function() {
   // 1. Calcular total
   this.total = (this.cantidad_kg || 0) * (this.precio_kg || 0);
 
-  // 2. Solo crear costo si es documento nuevo y aún no tiene costo_ref
-  if (this.isNew && !this.costo_ref) {
-    const Costo = mongoose.model('Costo');
-    const Lote  = mongoose.model('Lote');
+  // 2. Si es documento nuevo, validar lote y actualizar sus totales.
+  // NOTA: El Costo financiero se registra al COMPRAR el bulto (registrarEntrada),
+  // no al consumir, para evitar doble conteo en el balance.
+  if (this.isNew) {
+    const Lote = mongoose.model('Lote');
 
     // ── VALIDAR LOTE ──────────────────────────────────────────────
     const lote = await Lote.findById(this.lote);
@@ -128,39 +129,12 @@ alimentacionLoteSchema.pre('save', async function() {
       throw new Error('No se puede registrar alimentación en un lote finalizado');
     }
 
-    const nombreLote = lote.nombre;
-
-    // ── CREAR COSTO ───────────────────────────────────────────────
-    try {
-      const nuevoCosto = new Costo({
-        tipo_costo: 'directo',
-        categoria: 'alimento_concentrado',
-        subcategoria: this.tipo_alimento,
-        descripcion: `Alimento ${this.tipo_alimento} - Lote ${nombreLote}`,
-        cantidad: this.cantidad_kg,
-        unidad: 'kg',
-        precio_unitario: this.precio_kg,
-        total: this.total,
-        lote: this.lote,
-        fecha: this.fecha,
-        estado: 'registrado',
-        metodo_pago: 'efectivo'
-      });
-
-      await nuevoCosto.save();
-      this.costo_ref = nuevoCosto._id;
-
-      console.log(`[ALIMENTACIÓN] ✓ Costo creado: $${this.total} para lote ${nombreLote}`);
-    } catch (error) {
-      console.error('[ALIMENTACIÓN] ✗ Error creando costo:', error.message);
-      throw error; // Cancela el save de AlimentacionLote
-    }
-
     // ── ACTUALIZAR TOTALES EN EL LOTE ────────────────────────────
-    // Se hace aquí (no en post save) para que todo sea atómico
-    lote.alimento_total_kg   = (lote.alimento_total_kg   || 0) + this.cantidad_kg;
+    lote.alimento_total_kg    = (lote.alimento_total_kg   || 0) + this.cantidad_kg;
     lote.costo_alimento_total = (lote.costo_alimento_total || 0) + this.total;
     await lote.save();
+
+    console.log(`[ALIMENTACIÓN] ✓ ${this.cantidad_kg} kg registrados para lote ${lote.nombre}`);
   }
 });
 
