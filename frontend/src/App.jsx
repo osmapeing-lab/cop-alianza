@@ -3535,8 +3535,18 @@ const cargarHistoricoPesos = async () => {
               <span className="stat-valor">{loteDetalle.peso_promedio_actual?.toFixed(1) || 0} kg</span>
               <span className="stat-label">Peso Prom. por Cerdo</span>
               {(() => {
-                const up = pesajes.filter(p => String(p.lote?._id || p.lote) === String(loteDetalle._id) && p.peso_min != null).sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt))[0]
-                return up ? <span style={{fontSize:'11px', color:'#64748b', marginTop:'2px'}}>rango: {up.peso_min?.toFixed(1)}–{up.peso_max?.toFixed(1)} kg</span> : null
+                // Agrupar pesajes del lote por fecha (día), tomar el día más reciente
+                const lotePs = pesajes.filter(p => String(p.lote?._id || p.lote) === String(loteDetalle._id) && p.peso_promedio)
+                if (lotePs.length === 0) return null
+                // Hallar la fecha del pesaje más reciente
+                const ultimaFecha = lotePs.map(p => new Date(p.createdAt).toDateString()).sort().at(-1)
+                const delDia = lotePs.filter(p => new Date(p.createdAt).toDateString() === ultimaFecha)
+                // Calcular min/max: usar peso_min/peso_max si existen, o derivar de los pesos individuales
+                const todosMin = delDia.map(p => p.peso_min ?? p.peso_promedio)
+                const todosMax = delDia.map(p => p.peso_max ?? p.peso_promedio)
+                const mn = Math.min(...todosMin), mx = Math.max(...todosMax)
+                if (mn === mx) return null  // un solo valor, no hay rango
+                return <span style={{fontSize:'11px', color:'#64748b', marginTop:'2px'}}>rango: {mn.toFixed(1)}–{mx.toFixed(1)} kg</span>
               })()}
             </div>
           </div>
@@ -3910,8 +3920,9 @@ const cargarHistoricoPesos = async () => {
               const puntosPesaje = Object.entries(pesajesPorDia).map(([dia, data]) => ({
                 dia: parseInt(dia),
                 peso: Math.round((data.pesos.reduce((a, b) => a + b, 0) / data.pesos.length) * 100) / 100,
-                peso_min: data.mins.length > 0 ? Math.min(...data.mins) : null,
-                peso_max: data.maxs.length > 0 ? Math.max(...data.maxs) : null
+                // Si hay min/max explícito úsalos; si no, derivar del rango de pesos individuales del día
+                peso_min: data.mins.length > 0 ? Math.min(...data.mins) : (data.pesos.length > 1 ? Math.min(...data.pesos) : null),
+                peso_max: data.maxs.length > 0 ? Math.max(...data.maxs) : (data.pesos.length > 1 ? Math.max(...data.pesos) : null)
               })).sort((a, b) => a.dia - b.dia)
 
               // Curva esperada recortada hasta edad actual + 4 semanas
@@ -4035,10 +4046,13 @@ const cargarHistoricoPesos = async () => {
             const diffPeso = pesoReal - pesoMeta
             const semanaEnFase = refSemana ? refSemana.semana : '—'
             const consumoRef = refSemana ? (refSemana.consumo_dia || `${refSemana.consumo_dia_min}-${refSemana.consumo_dia_max}`) : '—'
-            // Rango de pesos del último pesaje registrado
-            const ultimoPesajeConRango = [...pesajes]
-              .filter(p => String(p.lote?._id || p.lote) === String(loteDetalle._id) && (p.peso_min != null || p.peso_max != null))
-              .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
+            // Rango de pesos: derivar del último día de pesajes (min/max explícito o de pesos individuales)
+            const lotePs = pesajes.filter(p => String(p.lote?._id || p.lote) === String(loteDetalle._id) && p.peso_promedio)
+            const ultimaFechaFinca = lotePs.map(p => new Date(p.createdAt).toDateString()).sort().at(-1)
+            const delDiaFinca = lotePs.filter(p => new Date(p.createdAt).toDateString() === ultimaFechaFinca)
+            const fincaMn = delDiaFinca.length > 0 ? Math.min(...delDiaFinca.map(p => p.peso_min ?? p.peso_promedio)) : null
+            const fincaMx = delDiaFinca.length > 0 ? Math.max(...delDiaFinca.map(p => p.peso_max ?? p.peso_promedio)) : null
+            const hayRangoFinca = fincaMn !== null && fincaMx !== null && fincaMn !== fincaMx
 
             return (
               <div className="finca-indicadores">
@@ -4046,9 +4060,9 @@ const cargarHistoricoPesos = async () => {
                   <span className="finca-label">Peso vs Meta</span>
                   <span className="finca-valor">{pesoReal.toFixed(1)} / {pesoMeta} kg</span>
                   <span className="finca-diff">{diffPeso >= 0 ? '+' : ''}{diffPeso.toFixed(1)} kg</span>
-                  {ultimoPesajeConRango && (
+                  {hayRangoFinca && (
                     <span style={{fontSize:'11px', color:'#64748b', marginTop:'2px'}}>
-                      rango: {ultimoPesajeConRango.peso_min?.toFixed(1)}–{ultimoPesajeConRango.peso_max?.toFixed(1)} kg
+                      rango: {fincaMn.toFixed(1)}–{fincaMx.toFixed(1)} kg
                     </span>
                   )}
                 </div>
