@@ -1206,6 +1206,15 @@ const [historicoPesos, setHistoricoPesos] = useState([])
   })
 
 
+// Estados alimentación desde inventario (modal en lote detalle)
+const [mostrarModalAlimInv, setMostrarModalAlimInv] = useState(false)
+const [nuevaAlimInv, setNuevaAlimInv] = useState({ inventario_id: '', cantidad_bultos: '', notas: '' })
+const [cargandoAlimInv, setCargandoAlimInv] = useState(false)
+
+// Refs para cerrar paneles al click fuera
+const userPanelRef = useRef(null)
+const notifPanelRef = useRef(null)
+
 // Estados para notificaciones y config usuario
 const [mostrarNotificaciones, setMostrarNotificaciones] = useState(false)
 const [alertasLeidas, setAlertasLeidas] = useState(0)
@@ -1217,6 +1226,20 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
   // ═══════════════════════════════════════════════════════════════════════
   // EFECTOS
   // ═══════════════════════════════════════════════════════════════════════
+
+  // Cerrar paneles flotantes al hacer clic fuera
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (userPanelRef.current && !userPanelRef.current.contains(e.target)) {
+        setMostrarConfigUsuario(false)
+      }
+      if (notifPanelRef.current && !notifPanelRef.current.contains(e.target)) {
+        setMostrarNotificaciones(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // Verificar token al cargar
   useEffect(() => {
@@ -1924,6 +1947,34 @@ const eliminarAlimentacion = async (id) => {
   }
 }
 
+const registrarAlimentacionDesdeInventario = async () => {
+  if (!nuevaAlimInv.inventario_id) { alert('Selecciona un producto de alimento'); return }
+  if (!nuevaAlimInv.cantidad_bultos || Number(nuevaAlimInv.cantidad_bultos) <= 0) { alert('Ingresa la cantidad de bultos'); return }
+  setCargandoAlimInv(true)
+  try {
+    const res = await axios.post(`${API_URL}/api/lotes/alimentacion-inventario`, {
+      lote_id:        loteDetalle._id,
+      inventario_id:  nuevaAlimInv.inventario_id,
+      cantidad_bultos: Number(nuevaAlimInv.cantidad_bultos),
+      notas:          nuevaAlimInv.notas
+    }, { headers: { Authorization: `Bearer ${token}` } })
+
+    setMostrarModalAlimInv(false)
+    setNuevaAlimInv({ inventario_id: '', cantidad_bultos: '', notas: '' })
+    // Recargar datos relacionados
+    await Promise.all([
+      cargarAlimentacionLote(loteDetalle._id),
+      cargarInventarioAlimento(),
+      cargarCostos()
+    ])
+    alert(res.data.mensaje)
+  } catch (error) {
+    alert('Error: ' + (error.response?.data?.mensaje || error.message))
+  } finally {
+    setCargandoAlimInv(false)
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // FUNCIONES GASTOS SEMANALES POR LOTE
 // ═══════════════════════════════════════════════════════════════════════
@@ -2103,9 +2154,23 @@ const anularVenta = async (id) => {
   } catch (error) {
     const data = error.response?.data
     if (data?.codigo === 'HORARIO_NO_PERMITIDO') {
-      alert(`⏰ HORARIO NO PERMITIDO\n\nHora actual: ${data.hora_actual}\n\nHorarios permitidos:\n• ${data.horarios_permitidos?.join('\n• ')}\n\nSolo se puede encender en esos horarios.`)
+      alert(`HORARIO NO PERMITIDO\n\nHora actual: ${data.hora_actual}\n\nHorarios permitidos:\n• ${data.horarios_permitidos?.join('\n• ')}\n\nSolo se puede encender en esos horarios.`)
     } else if (data?.codigo === 'LIMITE_AGUA') {
-      alert(`🔒 LÍMITE DIARIO ALCANZADO\n\nConsumo actual: ${data.consumo_actual?.toFixed(1)} L\nLímite: ${data.limite} L\n\nLa bomba se bloqueó automáticamente para no exceder el límite diario.`)
+      const msg = `LÍMITE DIARIO ALCANZADO\n\nConsumo: ${data.consumo_actual?.toFixed(1)} L / ${data.limite} L\n\nLa bomba se bloqueó automáticamente.`
+      if ((user.rol === 'ingeniero' || user.rol === 'superadmin') &&
+          confirm(msg + '\n\n¿Forzar encendido? (solo para ingeniero/admin)')) {
+        try {
+          await axios.put(`${API_URL}/api/motorbombs/${id}/toggle`, { forzar: true }, {
+            headers: { Authorization: `Bearer ${token}` }
+          })
+          cargarBombas()
+          alert('Bomba encendida por forzado de ingeniero')
+        } catch (e2) {
+          alert('Error forzando bomba: ' + (e2.response?.data?.mensaje || e2.message))
+        }
+      } else if (user.rol !== 'ingeniero' && user.rol !== 'superadmin') {
+        alert(msg)
+      }
     } else {
       alert('Error controlando bomba: ' + (data?.mensaje || error.message))
     }
@@ -2534,7 +2599,7 @@ const cargarHistoricoPesos = async () => {
   
   <div className="header-right">
     {/* Notificaciones */}
-    <div className="notif-wrapper">
+    <div className="notif-wrapper" ref={notifPanelRef}>
       <button className="btn-notif" onClick={() => {
         if (!mostrarNotificaciones) {
           setAlertasLeidas(alertas.length)
@@ -2583,7 +2648,7 @@ const cargarHistoricoPesos = async () => {
     </div>
 
     {/* Usuario */}
-    <div className="user-wrapper">
+    <div className="user-wrapper" ref={userPanelRef}>
       <button className="btn-user" onClick={() => { setMostrarConfigUsuario(!mostrarConfigUsuario); setMostrarNotificaciones(false); setConfigUsuarioForm({ usuario: user.usuario, correo: user.correo || '', password_actual: '', password_nuevo: '' }) }}>
         <IconUsuario />
         <span className="user-name">{user.usuario}</span>
@@ -2684,9 +2749,9 @@ const cargarHistoricoPesos = async () => {
 </button>
 
 
-<button 
+<button
   className={`nav-item ${pagina === 'inventario' ? 'activo' : ''}`}
-  onClick={() => { setPagina('inventario'); setMenuAbierto(false) }}
+  onClick={() => { setPagina('inventario'); setMenuAbierto(false); cargarInventario(); cargarInventarioAlimento() }}
 >
   <IconInventario />
   <span>Inventario</span>
@@ -3358,6 +3423,144 @@ const cargarHistoricoPesos = async () => {
             <div className="info-item full">
               <span className="info-label">Notas:</span>
               <span className="info-valor">{loteDetalle.notas}</span>
+            </div>
+          )}
+        </div>
+
+        {/* ═══ ALIMENTACIÓN DEL LOTE (desde inventario) ═══ */}
+        <div className="dashboard-section" style={{marginBottom:'24px'}}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px'}}>
+            <h3><Package size={20} /> Alimentación del Lote — <span style={{color:'#1d4ed8'}}>{loteDetalle.alimento_total_kg?.toFixed(1) || 0} kg registrados</span></h3>
+            <button className="btn-primary btn-sm" onClick={() => { cargarInventarioAlimento(); setMostrarModalAlimInv(true) }}>
+              <Plus size={16} /> Registrar Consumo
+            </button>
+          </div>
+
+          {/* Totales de alimento */}
+          <div style={{display:'flex', gap:'12px', marginBottom:'16px', flexWrap:'wrap'}}>
+            <div style={{padding:'10px 16px', background:'#eff6ff', borderRadius:'8px', flex:'1', minWidth:'140px'}}>
+              <div style={{fontSize:'11px', color:'#64748b'}}>Total alimento</div>
+              <div style={{fontWeight:'700', fontSize:'18px', color:'#1d4ed8'}}>{loteDetalle.alimento_total_kg?.toFixed(1) || 0} kg</div>
+            </div>
+            <div style={{padding:'10px 16px', background:'#fef2f2', borderRadius:'8px', flex:'1', minWidth:'140px'}}>
+              <div style={{fontSize:'11px', color:'#64748b'}}>Costo alimento</div>
+              <div style={{fontWeight:'700', fontSize:'18px', color:'#ef4444'}}>${(loteDetalle.costo_alimento_total || 0).toLocaleString()}</div>
+            </div>
+            {loteDetalle.cantidad_cerdos > 0 && (
+              <div style={{padding:'10px 16px', background:'#f0fdf4', borderRadius:'8px', flex:'1', minWidth:'140px'}}>
+                <div style={{fontSize:'11px', color:'#64748b'}}>Kg/cerdo</div>
+                <div style={{fontWeight:'700', fontSize:'18px', color:'#16a34a'}}>{((loteDetalle.alimento_total_kg || 0) / loteDetalle.cantidad_cerdos).toFixed(1)} kg</div>
+              </div>
+            )}
+          </div>
+
+          {/* Historial de alimentación */}
+          {alimentacionLote.length === 0 ? (
+            <p className="sin-datos">No hay registros de alimentación. Usa el botón "Registrar Consumo".</p>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Tipo</th>
+                    <th>Cantidad</th>
+                    <th>Precio/kg</th>
+                    <th>Total</th>
+                    <th>Notas</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {alimentacionLote.slice(0, 10).map(a => (
+                    <tr key={a._id}>
+                      <td>{new Date(a.fecha).toLocaleDateString('es-CO')}</td>
+                      <td><span className="tipo-badge">{a.tipo_alimento}</span></td>
+                      <td><strong>{a.cantidad_kg?.toFixed(1)} kg</strong></td>
+                      <td>${(a.precio_kg || 0).toLocaleString()}/kg</td>
+                      <td style={{color:'#ef4444', fontWeight:'600'}}>${(a.total || 0).toLocaleString()}</td>
+                      <td style={{fontSize:'12px', color:'#64748b'}}>{a.notas || '-'}</td>
+                      <td>
+                        <button className="btn-icon btn-danger" onClick={() => eliminarAlimentacion(a._id)} title="Eliminar">
+                          <Trash2 size={14} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Modal registrar consumo desde inventario */}
+          {mostrarModalAlimInv && (
+            <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setMostrarModalAlimInv(false) }}>
+              <div className="modal-content" style={{maxWidth:'460px'}}>
+                <div className="modal-header">
+                  <h3><Package size={18} /> Registrar Consumo de Alimento</h3>
+                  <button className="btn-close" onClick={() => setMostrarModalAlimInv(false)}>×</button>
+                </div>
+                <div style={{padding:'16px'}}>
+                  <div className="form-group" style={{marginBottom:'12px'}}>
+                    <label>Producto de Inventario</label>
+                    <select
+                      value={nuevaAlimInv.inventario_id}
+                      onChange={e => setNuevaAlimInv({...nuevaAlimInv, inventario_id: e.target.value})}
+                    >
+                      <option value="">— Selecciona producto —</option>
+                      {inventarioAlimento.filter(i => i.cantidad_bultos > 0).map(inv => (
+                        <option key={inv._id} value={inv._id}>
+                          {inv.nombre} ({inv.tipo}) — {inv.cantidad_bultos} bultos disponibles
+                        </option>
+                      ))}
+                    </select>
+                    {inventarioAlimento.length === 0 && (
+                      <small style={{color:'#ef4444'}}>No hay productos en inventario. Agrega stock primero.</small>
+                    )}
+                  </div>
+
+                  {nuevaAlimInv.inventario_id && (() => {
+                    const inv = inventarioAlimento.find(i => i._id === nuevaAlimInv.inventario_id)
+                    if (!inv) return null
+                    const bultos = Number(nuevaAlimInv.cantidad_bultos) || 0
+                    const kg = bultos * (inv.peso_por_bulto_kg || 40)
+                    const total = bultos * (inv.precio_bulto || 0)
+                    return (
+                      <div style={{padding:'10px 12px', background:'#f0fdf4', borderRadius:'8px', marginBottom:'12px', fontSize:'13px'}}>
+                        <strong>{inv.nombre}</strong> — ${inv.precio_bulto?.toLocaleString()}/bulto, {inv.peso_por_bulto_kg} kg/bulto
+                        {bultos > 0 && <div style={{marginTop:'4px', color:'#16a34a', fontWeight:'600'}}>{kg.toFixed(1)} kg — ${total.toLocaleString()}</div>}
+                      </div>
+                    )
+                  })()}
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Cantidad de Bultos</label>
+                      <input
+                        type="number" min="1"
+                        value={nuevaAlimInv.cantidad_bultos}
+                        onChange={e => setNuevaAlimInv({...nuevaAlimInv, cantidad_bultos: e.target.value})}
+                        placeholder="0"
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Notas (opcional)</label>
+                      <input
+                        type="text"
+                        value={nuevaAlimInv.notas}
+                        onChange={e => setNuevaAlimInv({...nuevaAlimInv, notas: e.target.value})}
+                        placeholder="Ej: Mañana, tarde..."
+                      />
+                    </div>
+                  </div>
+                  <div className="modal-actions" style={{marginTop:'16px'}}>
+                    <button className="btn-cancelar" onClick={() => setMostrarModalAlimInv(false)}>Cancelar</button>
+                    <button className="btn-primary" onClick={registrarAlimentacionDesdeInventario} disabled={cargandoAlimInv}>
+                      {cargandoAlimInv ? 'Registrando...' : 'Registrar y Descontar Inventario'}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
         </div>
@@ -5240,13 +5443,13 @@ const cargarHistoricoPesos = async () => {
         className={`tab-btn ${tabInventario === 'cerdos' ? 'activo' : ''}`}
         onClick={() => setTabInventario('cerdos')}
       >
-        🐷 Inventario de Cerdos
+        <IconCerdo size={16} style={{verticalAlign:'middle', marginRight:6}} />Inventario de Cerdos
       </button>
-      <button 
+      <button
         className={`tab-btn ${tabInventario === 'alimento' ? 'activo' : ''}`}
         onClick={() => setTabInventario('alimento')}
       >
-        🌽 Inventario de Alimento
+        <Package size={16} style={{verticalAlign:'middle', marginRight:6}} />Inventario de Alimento
       </button>
     </div>
 

@@ -14,11 +14,12 @@
  * ═══════════════════════════════════════════════════════════════════════
  */
 
-const Lote           = require('../models/lote');
-const Weighing       = require('../models/pesaje');
-const Contabilidad   = require('../models/contabilidad');
+const Lote             = require('../models/lote');
+const Weighing         = require('../models/pesaje');
+const Contabilidad     = require('../models/contabilidad');
 const AlimentacionLote = require('../models/AlimentacionLote');
-const Costo          = require('../models/Costo');
+const Costo            = require('../models/Costo');
+const InventarioAlimento = require('../models/InventarioAlimento');
 
 // ═══════════════════════════════════════════════════════════════════════
 // CRUD BÁSICO DE LOTES
@@ -316,6 +317,86 @@ exports.eliminarGastoSemanal = async (req, res) => {
     res.json({ mensaje: 'Gasto eliminado', total_gastos: lote.total_gastos });
   } catch (error) {
     res.status(500).json({ mensaje: error.message });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// ALIMENTACIÓN VINCULADA A INVENTARIO
+// POST /api/lotes/alimentacion-inventario
+//
+// Une en una sola transacción:
+//   1. Reduce stock en InventarioAlimento (registrarSalida del modelo)
+//   2. Crea AlimentacionLote → el middleware pre('save') crea el Costo
+//      y actualiza alimento_total_kg + costo_alimento_total en el Lote
+// Resultado: UN solo Costo, inventario actualizado, totales en lote OK.
+// ═══════════════════════════════════════════════════════════════════════
+
+exports.registrarAlimentacionConInventario = async (req, res) => {
+  try {
+    const { lote_id, inventario_id, cantidad_bultos, notas } = req.body;
+
+    if (!lote_id || !inventario_id || !cantidad_bultos || Number(cantidad_bultos) <= 0) {
+      return res.status(400).json({ mensaje: 'lote_id, inventario_id y cantidad_bultos son requeridos' });
+    }
+
+    const [lote, inventario] = await Promise.all([
+      Lote.findById(lote_id),
+      InventarioAlimento.findById(inventario_id)
+    ]);
+
+    if (!lote)      return res.status(404).json({ mensaje: 'Lote no encontrado' });
+    if (!lote.activo) return res.status(400).json({ mensaje: 'No se puede registrar en un lote finalizado' });
+    if (!inventario) return res.status(404).json({ mensaje: 'Producto de inventario no encontrado' });
+
+    const bultos = Number(cantidad_bultos);
+
+    if (bultos > inventario.cantidad_bultos) {
+      return res.status(400).json({
+        mensaje: `Stock insuficiente. Disponible: ${inventario.cantidad_bultos} bultos de ${inventario.nombre}`,
+        disponible: inventario.cantidad_bultos
+      });
+    }
+
+    const cantidad_kg = bultos * (inventario.peso_por_bulto_kg || 40);
+    const precio_kg   = inventario.precio_bulto > 0 && inventario.peso_por_bulto_kg > 0
+      ? inventario.precio_bulto / inventario.peso_por_bulto_kg
+      : 0;
+
+    // 1. Reducir stock en inventario (el modelo solo registra movimiento, NO crea Costo)
+    await inventario.registrarSalida(
+      bultos,
+      lote_id,
+      `Consumo lote ${lote.nombre}${notas ? ' - ' + notas : ''}`,
+      req.user?._id
+    );
+
+    // 2. Crear AlimentacionLote → middleware pre('save') crea Costo + actualiza lote
+    const alimentacion = new AlimentacionLote({
+      lote:          lote_id,
+      tipo_alimento: inventario.tipo === 'inicio' ? 'iniciador'
+                   : inventario.tipo === 'crecimiento' ? 'levante'
+                   : inventario.tipo === 'engorde' ? 'engorde'
+                   : 'otro',
+      cantidad_kg,
+      precio_kg,
+      notas: notas || `${inventario.nombre} — ${bultos} bultos`,
+      registrado_por: req.user?._id
+    });
+
+    await alimentacion.save();
+
+    res.status(201).json({
+      ok: true,
+      mensaje: `${cantidad_kg.toFixed(1)} kg registrados. Inventario: ${inventario.cantidad_bultos} bultos restantes.`,
+      kg_registrados:      cantidad_kg,
+      total_costo:         alimentacion.total,
+      inventario_restante: inventario.cantidad_bultos,
+      alimentacion_id:     alimentacion._id,
+      costo_ref:           alimentacion.costo_ref
+    });
+  } catch (error) {
+    console.error('[LOTES] Error alimentacion+inventario:', error.message);
+    res.status(400).json({ mensaje: error.message });
   }
 };
 

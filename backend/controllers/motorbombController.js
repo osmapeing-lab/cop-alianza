@@ -64,7 +64,10 @@ exports.toggleMotorbomb = async (req, res) => {
 
     const vaAEncender = motorbomb.estado === true; // true=apagada, false=encendida
 
-    if (esBomba1 && vaAEncender) {
+    // Ingeniero/superadmin puede forzar el encendido enviando { forzar: true }
+    const forzar = req.body.forzar === true;
+
+    if (esBomba1 && vaAEncender && !forzar) {
 
       // ── VALIDACIÓN 1: Horario permitido ─────────────────────────────
       const ahoraColombia = new Date(

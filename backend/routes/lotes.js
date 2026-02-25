@@ -16,6 +16,7 @@ const {
   finalizarLote,
   getResumenLote,
   registrarAlimentacion,
+  registrarAlimentacionConInventario,
   getAlimentacionLote,
   eliminarAlimentacion,
   getGraficaPeso,
@@ -42,6 +43,7 @@ router.delete('/:id', deleteLote);
 // RUTAS ALIMENTACIÓN
 // ═══════════════════════════════════════════════════════════════════════
 router.post('/alimentacion', registrarAlimentacion);
+router.post('/alimentacion-inventario', registrarAlimentacionConInventario);
 router.get('/:id/alimentacion', getAlimentacionLote);
 router.delete('/alimentacion/:alimentacionId', eliminarAlimentacion);
 

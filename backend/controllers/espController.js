@@ -546,21 +546,63 @@ exports.recibirFlujo = async (req, res) => {
     if (req.io) {
       req.io.emit('lectura_actualizada', {
         caudal_l_min: caudal,
-        volumen_diario: volumenRealEnBD,  // ⚡ Valor confirmado por BD
+        volumen_diario: volumenRealEnBD,
         timestamp: ahora
       });
 
       req.io.emit('flujo_actualizado', {
         caudal: caudal,
         volumen_total: volumen,
-        volumen_diario: volumenRealEnBD,  // ⚡ Valor confirmado por BD
+        volumen_diario: volumenRealEnBD,
         timestamp: ahora
       });
     }
-    
-    res.status(200).json({ 
+
+    // ════════════════════════════════════════════════════════════════════
+    // AUTO-APAGADO MB001 AL ALCANZAR EL LÍMITE DIARIO DE AGUA
+    // ════════════════════════════════════════════════════════════════════
+    try {
+      const configActual = await Config.findOne();
+      const limiteAgua = configActual?.limite_consumo_bomba_1 ?? 600;
+
+      if (volumenRealEnBD >= limiteAgua) {
+        const mb001 = await Motorbomb.findOne({
+          $or: [{ codigo_bomba: 'MB001' }, { nombre: /bomba 1/i }]
+        });
+
+        if (mb001 && mb001.estado === false) { // false = encendida (lógica invertida)
+          mb001.estado      = true; // apagar
+          mb001.fecha_cambio = Date.now();
+          await mb001.save();
+
+          const alerta = new Alert({
+            tipo: 'alerta',
+            mensaje: `Bomba 1 apagada automáticamente: límite diario de ${limiteAgua}L alcanzado (${volumenRealEnBD.toFixed(1)}L)`
+          });
+          await alerta.save();
+
+          if (req.io) {
+            req.io.emit('bomba_actualizada', {
+              bomba_id:  mb001._id,
+              codigo:    mb001.codigo_bomba,
+              estado:    mb001.estado,
+              nombre:    mb001.nombre,
+              timestamp: Date.now()
+            });
+            req.io.emit('nueva_alerta', alerta);
+          }
+
+          notificarBomba(mb001).catch(e => console.error('[AUTO-OFF] Notif bomba:', e.message));
+          console.log(`[AUTO-OFF] MB001 apagada por límite de ${limiteAgua}L (${volumenRealEnBD.toFixed(1)}L)`);
+        }
+      }
+    } catch (errAutoOff) {
+      console.error('[AUTO-OFF] Error auto-apagado MB001:', errAutoOff.message);
+    }
+
+    res.status(200).json({
       ok: true,
-      volumen_diario: volumenRealEnBD  // ⚡ Devolver valor confirmado
+      volumen_diario: volumenRealEnBD
     });
     
   } catch (error) {
