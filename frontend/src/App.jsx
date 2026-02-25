@@ -1296,6 +1296,16 @@ const [recordatorios, setRecordatorios] = useState(() => {
 })
 const [mostrarFormRecordatorio, setMostrarFormRecordatorio] = useState(false)
 const [nuevoRecordatorio, setNuevoRecordatorio] = useState({ titulo: '', fecha: '', hora: '', descripcion: '' })
+const [alertasCumplidas, setAlertasCumplidas] = useState(() => {
+  try { return JSON.parse(localStorage.getItem('coo_alertas_cumplidas') || '{}') } catch { return {} }
+})
+const toggleAlertaCumplida = (key) => {
+  setAlertasCumplidas(prev => {
+    const next = { ...prev, [key]: !prev[key] }
+    try { localStorage.setItem('coo_alertas_cumplidas', JSON.stringify(next)) } catch {}
+    return next
+  })
+}
 const _getAlertasLeidasTs = () => { try { return localStorage.getItem('coo_alertas_ts') || null } catch { return null } }
 const _setAlertasLeidasTs = () => { try { localStorage.setItem('coo_alertas_ts', new Date().toISOString()) } catch {} }
 const [mostrarConfigUsuario, setMostrarConfigUsuario] = useState(false)
@@ -5573,20 +5583,34 @@ const cargarHistoricoPesos = async () => {
             const AlertCard = ({ alerta, esEvento = false }) => {
               const tipo = esEvento ? alerta.prioridad : (alerta.tipo === 'critico' ? 'urgente' : 'proximo')
               const s = seccionStyles[tipo] || seccionStyles.info
+              const key = esEvento
+                ? `ev_${alerta.tipo}_${alerta.lote || ''}_${alerta.titulo || ''}`
+                : `al_${alerta._id || alerta.createdAt}`
+              const cumplido = !!alertasCumplidas[key]
               return (
-                <div style={{ display:'flex', gap:'12px', padding:'12px 14px', borderRadius:'10px', border:`1px solid ${s.border}`, background: s.bg, marginBottom:'8px' }}>
-                  <div style={{ fontSize:'22px', lineHeight:1 }}>{esEvento ? alerta.emoji : (alerta.tipo === 'critico' ? '🔴' : '⚠️')}</div>
+                <div style={{ display:'flex', gap:'12px', padding:'12px 14px', borderRadius:'10px', border:`1px solid ${cumplido ? '#86efac' : s.border}`, background: cumplido ? '#f0fdf4' : s.bg, marginBottom:'8px', opacity: cumplido ? 0.75 : 1 }}>
+                  <div style={{ fontSize:'22px', lineHeight:1 }}>{cumplido ? '✅' : (esEvento ? alerta.emoji : (alerta.tipo === 'critico' ? '🔴' : '⚠️'))}</div>
                   <div style={{ flex:1 }}>
                     {esEvento
-                      ? <div style={{ fontWeight:'700', fontSize:'14px', color: s.titulo }}>{alerta.titulo}</div>
+                      ? <div style={{ fontWeight:'700', fontSize:'14px', color: cumplido ? '#16a34a' : s.titulo, textDecoration: cumplido ? 'line-through' : 'none' }}>{alerta.titulo}</div>
                       : <div style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'2px' }}>
-                          <span style={{ fontSize:'11px', fontWeight:'700', background: s.badge, color:'#fff', padding:'2px 7px', borderRadius:'20px', textTransform:'uppercase' }}>{alerta.tipo}</span>
+                          <span style={{ fontSize:'11px', fontWeight:'700', background: cumplido ? '#22c55e' : s.badge, color:'#fff', padding:'2px 7px', borderRadius:'20px', textTransform:'uppercase' }}>{cumplido ? 'cumplido' : alerta.tipo}</span>
                         </div>
                     }
-                    <p style={{ margin:'2px 0', fontSize:'13px', color:'#374151' }}>{esEvento ? alerta.mensaje : alerta.mensaje}</p>
+                    <p style={{ margin:'2px 0', fontSize:'13px', color: cumplido ? '#6b7280' : '#374151', textDecoration: cumplido ? 'line-through' : 'none' }}>{alerta.mensaje}</p>
                     {!esEvento && <small style={{ color:'#9ca3af', fontSize:'11px' }}>{formatearFecha(alerta.createdAt)}</small>}
                     {esEvento && alerta.lote && <small style={{ color:'#9ca3af', fontSize:'11px' }}>Lote: {alerta.lote}</small>}
                   </div>
+                  <button
+                    onClick={() => toggleAlertaCumplida(key)}
+                    style={{
+                      alignSelf: 'center', flexShrink:0,
+                      padding:'5px 12px', borderRadius:'20px', fontSize:'12px', fontWeight:'600', cursor:'pointer', border:'none',
+                      background: cumplido ? '#dcfce7' : '#f1f5f9',
+                      color: cumplido ? '#16a34a' : '#64748b',
+                      transition:'all .2s'
+                    }}
+                  >{cumplido ? '✓ Cumplido' : 'Marcar cumplido'}</button>
                 </div>
               )
             }
