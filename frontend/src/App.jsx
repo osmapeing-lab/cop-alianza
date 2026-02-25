@@ -1197,7 +1197,7 @@ const [historicoPesos, setHistoricoPesos] = useState([])
 
 // Estados alimentación desde inventario (modal en lote detalle)
 const [mostrarModalAlimInv, setMostrarModalAlimInv] = useState(false)
-const [nuevaAlimInv, setNuevaAlimInv] = useState({ inventario_id: '', cantidad_bultos: '', notas: '' })
+const [nuevaAlimInv, setNuevaAlimInv] = useState({ inventario_id: '', cantidad_kg: '', notas: '' })
 const [cargandoAlimInv, setCargandoAlimInv] = useState(false)
 
 // Estados para crear nuevo producto de inventario alimento
@@ -1978,18 +1978,18 @@ const eliminarAlimentacion = async (id) => {
 
 const registrarAlimentacionDesdeInventario = async () => {
   if (!nuevaAlimInv.inventario_id) { alert('Selecciona un producto de alimento'); return }
-  if (!nuevaAlimInv.cantidad_bultos || Number(nuevaAlimInv.cantidad_bultos) <= 0) { alert('Ingresa la cantidad de bultos'); return }
+  if (!nuevaAlimInv.cantidad_kg || Number(nuevaAlimInv.cantidad_kg) <= 0) { alert('Ingresa la cantidad de kg'); return }
   setCargandoAlimInv(true)
   try {
     const res = await axios.post(`${API_URL}/api/lotes/alimentacion-inventario`, {
-      lote_id:        loteDetalle._id,
-      inventario_id:  nuevaAlimInv.inventario_id,
-      cantidad_bultos: Number(nuevaAlimInv.cantidad_bultos),
-      notas:          nuevaAlimInv.notas
+      lote_id:       loteDetalle._id,
+      inventario_id: nuevaAlimInv.inventario_id,
+      cantidad_kg:   Number(nuevaAlimInv.cantidad_kg),
+      notas:         nuevaAlimInv.notas
     }, { headers: { Authorization: `Bearer ${token}` } })
 
     setMostrarModalAlimInv(false)
-    setNuevaAlimInv({ inventario_id: '', cantidad_bultos: '', notas: '' })
+    setNuevaAlimInv({ inventario_id: '', cantidad_kg: '', notas: '' })
     // Recargar datos relacionados
     await Promise.all([
       cargarAlimentacionLote(loteDetalle._id),
@@ -3524,67 +3524,117 @@ const cargarHistoricoPesos = async () => {
           {/* Modal registrar consumo desde inventario */}
           {mostrarModalAlimInv && (
             <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setMostrarModalAlimInv(false) }}>
-              <div className="modal-content" style={{maxWidth:'460px'}}>
+              <div className="modal-content" style={{maxWidth:'500px'}}>
                 <div className="modal-header">
                   <h3><Package size={18} /> Registrar Consumo de Alimento</h3>
                   <button className="btn-close" onClick={() => setMostrarModalAlimInv(false)}>×</button>
                 </div>
                 <div style={{padding:'16px'}}>
+
+                  {/* Selector de producto */}
                   <div className="form-group" style={{marginBottom:'12px'}}>
                     <label>Producto de Inventario</label>
                     <select
                       value={nuevaAlimInv.inventario_id}
-                      onChange={e => setNuevaAlimInv({...nuevaAlimInv, inventario_id: e.target.value})}
+                      onChange={e => setNuevaAlimInv({...nuevaAlimInv, inventario_id: e.target.value, cantidad_kg: ''})}
                     >
                       <option value="">— Selecciona producto —</option>
-                      {inventarioAlimento.map(inv => (
-                        <option key={inv._id} value={inv._id} disabled={inv.cantidad_bultos <= 0}>
-                          {inv.nombre} ({inv.tipo}) — {inv.cantidad_bultos > 0 ? `${inv.cantidad_bultos} bultos` : 'SIN STOCK'}
-                        </option>
-                      ))}
+                      {inventarioAlimento.map(inv => {
+                        const kg_disp = inv.cantidad_bultos * (inv.peso_por_bulto_kg || 40)
+                        return (
+                          <option key={inv._id} value={inv._id} disabled={inv.cantidad_bultos <= 0}>
+                            {inv.nombre} ({inv.tipo}) — {inv.cantidad_bultos > 0
+                              ? `${kg_disp.toFixed(1)} kg disponibles`
+                              : 'SIN STOCK'}
+                          </option>
+                        )
+                      })}
                     </select>
                     {inventarioAlimento.length === 0 && (
-                      <small style={{color:'#ef4444'}}>No hay productos registrados. Ve a Inventario &gt; Alimento y crea uno primero.</small>
+                      <small style={{color:'#ef4444'}}>No hay productos registrados. Ve a Inventario &gt; Alimento.</small>
                     )}
                     {inventarioAlimento.length > 0 && inventarioAlimento.every(i => i.cantidad_bultos <= 0) && (
-                      <small style={{color:'#ef4444'}}>Todos los productos tienen stock en 0. Registra una entrada en Inventario &gt; Alimento.</small>
+                      <small style={{color:'#ef4444'}}>Todos los productos tienen stock 0. Registra una entrada primero.</small>
                     )}
                   </div>
 
+                  {/* Preview disponible + cálculo en tiempo real */}
                   {nuevaAlimInv.inventario_id && (() => {
                     const inv = inventarioAlimento.find(i => i._id === nuevaAlimInv.inventario_id)
                     if (!inv) return null
-                    const bultos = Number(nuevaAlimInv.cantidad_bultos) || 0
-                    const kg = bultos * (inv.peso_por_bulto_kg || 40)
-                    const total = bultos * (inv.precio_bulto || 0)
+                    const pesoPorBulto     = inv.peso_por_bulto_kg || 40
+                    const disponible_kg    = inv.cantidad_bultos * pesoPorBulto
+                    const kg_ingresado     = Number(nuevaAlimInv.cantidad_kg) || 0
+                    const bultos_consume   = kg_ingresado / pesoPorBulto
+                    const restante_bultos  = inv.cantidad_bultos - bultos_consume
+                    const restante_enteros = Math.floor(restante_bultos)
+                    const restante_kg_suelto = Math.round((restante_bultos - restante_enteros) * pesoPorBulto * 10) / 10
+                    const costo_consume    = bultos_consume * inv.precio_bulto
+                    const excede           = kg_ingresado > disponible_kg
+
                     return (
-                      <div style={{padding:'10px 12px', background:'#f0fdf4', borderRadius:'8px', marginBottom:'12px', fontSize:'13px'}}>
-                        <strong>{inv.nombre}</strong> — ${inv.precio_bulto?.toLocaleString()}/bulto, {inv.peso_por_bulto_kg} kg/bulto
-                        {bultos > 0 && <div style={{marginTop:'4px', color:'#16a34a', fontWeight:'600'}}>{kg.toFixed(1)} kg — ${total.toLocaleString()}</div>}
-                      </div>
+                      <>
+                        {/* Stock actual */}
+                        <div style={{padding:'10px 14px', background:'#eff6ff', borderRadius:'8px', marginBottom:'12px', fontSize:'13px', border:'1px solid #bfdbfe'}}>
+                          <div style={{fontWeight:'700', marginBottom:'4px', color:'#1d4ed8'}}>{inv.nombre}</div>
+                          <div style={{display:'flex', gap:'16px', flexWrap:'wrap', color:'#374151'}}>
+                            <span>Stock: <strong>{inv.cantidad_bultos} bultos</strong> = <strong>{disponible_kg.toFixed(1)} kg</strong></span>
+                            <span style={{color:'#6b7280'}}>{pesoPorBulto} kg/bulto · ${inv.precio_bulto?.toLocaleString()}/bulto</span>
+                          </div>
+                        </div>
+
+                        {/* Input kg */}
+                        <div className="form-row" style={{marginBottom:'8px'}}>
+                          <div className="form-group">
+                            <label>Kg a echar en tolva *</label>
+                            <input
+                              type="number" min="0.1" step="0.1"
+                              value={nuevaAlimInv.cantidad_kg}
+                              onChange={e => setNuevaAlimInv({...nuevaAlimInv, cantidad_kg: e.target.value})}
+                              placeholder="Ej: 8"
+                              style={excede ? {borderColor:'#ef4444'} : {}}
+                              autoFocus
+                            />
+                            {excede && <small style={{color:'#ef4444'}}>Supera el stock disponible ({disponible_kg.toFixed(1)} kg)</small>}
+                          </div>
+                          <div className="form-group">
+                            <label>Notas (opcional)</label>
+                            <input
+                              type="text"
+                              value={nuevaAlimInv.notas}
+                              onChange={e => setNuevaAlimInv({...nuevaAlimInv, notas: e.target.value})}
+                              placeholder="Ej: Mañana, tarde..."
+                            />
+                          </div>
+                        </div>
+
+                        {/* Resultado en tiempo real */}
+                        {kg_ingresado > 0 && !excede && (
+                          <div style={{padding:'12px 14px', background:'#f0fdf4', borderRadius:'8px', border:'1px solid #bbf7d0', fontSize:'13px'}}>
+                            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px'}}>
+                              <div>
+                                <div style={{color:'#6b7280', fontSize:'11px', marginBottom:'2px'}}>CONSUMO</div>
+                                <div style={{fontWeight:'700', color:'#15803d'}}>{kg_ingresado.toFixed(1)} kg</div>
+                                <div style={{color:'#374151'}}>= {bultos_consume.toFixed(3)} bultos</div>
+                                <div style={{color:'#374151'}}>Costo: <strong>${Math.round(costo_consume).toLocaleString()}</strong></div>
+                              </div>
+                              <div>
+                                <div style={{color:'#6b7280', fontSize:'11px', marginBottom:'2px'}}>QUEDARÁ EN INVENTARIO</div>
+                                <div style={{fontWeight:'700', color: restante_bultos <= (inv.stock_minimo_bultos || 5) ? '#dc2626' : '#1e293b'}}>
+                                  {restante_enteros} bultos + {restante_kg_suelto} kg
+                                </div>
+                                <div style={{color:'#374151'}}>= {(restante_bultos * pesoPorBulto).toFixed(1)} kg total</div>
+                                {restante_bultos <= (inv.stock_minimo_bultos || 5) && (
+                                  <div style={{color:'#dc2626', fontWeight:'600', fontSize:'11px', marginTop:'2px'}}>Stock bajo el mínimo</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )
                   })()}
 
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label>Cantidad de Bultos</label>
-                      <input
-                        type="number" min="1"
-                        value={nuevaAlimInv.cantidad_bultos}
-                        onChange={e => setNuevaAlimInv({...nuevaAlimInv, cantidad_bultos: e.target.value})}
-                        placeholder="0"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label>Notas (opcional)</label>
-                      <input
-                        type="text"
-                        value={nuevaAlimInv.notas}
-                        onChange={e => setNuevaAlimInv({...nuevaAlimInv, notas: e.target.value})}
-                        placeholder="Ej: Mañana, tarde..."
-                      />
-                    </div>
-                  </div>
                   <div className="modal-actions" style={{marginTop:'16px'}}>
                     <button className="btn-cancelar" onClick={() => setMostrarModalAlimInv(false)}>Cancelar</button>
                     <button className="btn-primary" onClick={registrarAlimentacionDesdeInventario} disabled={cargandoAlimInv}>

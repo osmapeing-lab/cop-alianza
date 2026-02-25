@@ -333,10 +333,10 @@ exports.eliminarGastoSemanal = async (req, res) => {
 
 exports.registrarAlimentacionConInventario = async (req, res) => {
   try {
-    const { lote_id, inventario_id, cantidad_bultos, notas } = req.body;
+    const { lote_id, inventario_id, cantidad_kg, notas } = req.body;
 
-    if (!lote_id || !inventario_id || !cantidad_bultos || Number(cantidad_bultos) <= 0) {
-      return res.status(400).json({ mensaje: 'lote_id, inventario_id y cantidad_bultos son requeridos' });
+    if (!lote_id || !inventario_id || !cantidad_kg || Number(cantidad_kg) <= 0) {
+      return res.status(400).json({ mensaje: 'lote_id, inventario_id y cantidad_kg son requeridos' });
     }
 
     const [lote, inventario] = await Promise.all([
@@ -344,55 +344,77 @@ exports.registrarAlimentacionConInventario = async (req, res) => {
       InventarioAlimento.findById(inventario_id)
     ]);
 
-    if (!lote)      return res.status(404).json({ mensaje: 'Lote no encontrado' });
+    if (!lote)        return res.status(404).json({ mensaje: 'Lote no encontrado' });
     if (!lote.activo) return res.status(400).json({ mensaje: 'No se puede registrar en un lote finalizado' });
-    if (!inventario) return res.status(404).json({ mensaje: 'Producto de inventario no encontrado' });
+    if (!inventario)  return res.status(404).json({ mensaje: 'Producto de inventario no encontrado' });
 
-    const bultos = Number(cantidad_bultos);
+    const kg           = Number(cantidad_kg);
+    const pesoPorBulto = inventario.peso_por_bulto_kg || 40;
 
-    if (bultos > inventario.cantidad_bultos) {
+    // Convertir kg → bultos decimales (ej: 8 kg / 40 kg/bulto = 0.2 bultos)
+    const bultos_decimal = kg / pesoPorBulto;
+
+    if (bultos_decimal > inventario.cantidad_bultos) {
+      const disponible_kg = inventario.cantidad_bultos * pesoPorBulto;
       return res.status(400).json({
-        mensaje: `Stock insuficiente. Disponible: ${inventario.cantidad_bultos} bultos de ${inventario.nombre}`,
-        disponible: inventario.cantidad_bultos
+        mensaje: `Stock insuficiente. Disponible: ${disponible_kg.toFixed(1)} kg (${inventario.cantidad_bultos} bultos) de ${inventario.nombre}`,
+        disponible_kg,
+        disponible_bultos: inventario.cantidad_bultos
       });
     }
 
-    const cantidad_kg = bultos * (inventario.peso_por_bulto_kg || 40);
-    const precio_kg   = inventario.precio_bulto > 0 && inventario.peso_por_bulto_kg > 0
-      ? inventario.precio_bulto / inventario.peso_por_bulto_kg
+    const precio_kg = inventario.precio_bulto > 0 && pesoPorBulto > 0
+      ? inventario.precio_bulto / pesoPorBulto
       : 0;
 
-    // 1. Reducir stock en inventario (el modelo solo registra movimiento, NO crea Costo)
+    // 1. Reducir stock usando bultos decimales
     await inventario.registrarSalida(
-      bultos,
+      bultos_decimal,
       lote_id,
-      `Consumo lote ${lote.nombre}${notas ? ' - ' + notas : ''}`,
+      `Consumo lote ${lote.nombre}${notas ? ' — ' + notas : ''}`,
       req.user?._id
     );
 
-    // 2. Crear AlimentacionLote → middleware pre('save') crea Costo + actualiza lote
+    // 2. Crear AlimentacionLote con referencias para revertir si se elimina
+    const tipo_alimento = inventario.tipo === 'inicio'      ? 'iniciador'
+                        : inventario.tipo === 'crecimiento' ? 'levante'
+                        : inventario.tipo === 'engorde'     ? 'engorde'
+                        : inventario.tipo === 'gestacion'   ? 'gestacion'
+                        : inventario.tipo === 'lactancia'   ? 'lactancia'
+                        : 'otro';
+
     const alimentacion = new AlimentacionLote({
-      lote:          lote_id,
-      tipo_alimento: inventario.tipo === 'inicio' ? 'iniciador'
-                   : inventario.tipo === 'crecimiento' ? 'levante'
-                   : inventario.tipo === 'engorde' ? 'engorde'
-                   : 'otro',
-      cantidad_kg,
+      lote:             lote_id,
+      tipo_alimento,
+      cantidad_kg:      kg,
       precio_kg,
-      notas: notas || `${inventario.nombre} — ${bultos} bultos`,
-      registrado_por: req.user?._id
+      notas:            notas || `${inventario.nombre} — ${kg.toFixed(1)} kg`,
+      inventario_ref:   inventario_id,
+      bultos_consumidos: bultos_decimal,
+      registrado_por:   req.user?._id
     });
 
     await alimentacion.save();
 
+    // Calcular restante para mostrar al usuario
+    const restante_bultos   = inventario.cantidad_bultos;   // ya actualizado por registrarSalida
+    const restante_kg_total = restante_bultos * pesoPorBulto;
+    const restante_enteros  = Math.floor(restante_bultos);
+    const restante_kg_suelto = Math.round((restante_bultos - restante_enteros) * pesoPorBulto * 10) / 10;
+
     res.status(201).json({
       ok: true,
-      mensaje: `${cantidad_kg.toFixed(1)} kg registrados. Inventario: ${inventario.cantidad_bultos} bultos restantes.`,
-      kg_registrados:      cantidad_kg,
-      total_costo:         alimentacion.total,
-      inventario_restante: inventario.cantidad_bultos,
-      alimentacion_id:     alimentacion._id,
-      costo_ref:           alimentacion.costo_ref
+      mensaje: `${kg.toFixed(1)} kg registrados correctamente.`,
+      kg_registrados:     kg,
+      total_costo:        alimentacion.total,
+      inventario_restante: {
+        bultos:        restante_bultos,
+        bultos_enteros: restante_enteros,
+        kg_suelto:     restante_kg_suelto,
+        kg_total:      restante_kg_total
+      },
+      alimentacion_id:   alimentacion._id,
+      costo_ref:         alimentacion.costo_ref
     });
   } catch (error) {
     console.error('[LOTES] Error alimentacion+inventario:', error.message);

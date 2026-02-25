@@ -66,6 +66,20 @@ const alimentacionLoteSchema = new mongoose.Schema({
   },
 
   // ═══════════════════════════════════════════════════════════════════
+  // REFERENCIA AL INVENTARIO (para restaurar stock al eliminar)
+  // ═══════════════════════════════════════════════════════════════════
+  inventario_ref: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'InventarioAlimento'
+  },
+
+  // Bultos consumidos (decimal: 8 kg / 40 kg/bulto = 0.2 bultos)
+  bultos_consumidos: {
+    type: Number,
+    default: 0
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
   // NOTAS
   // ═══════════════════════════════════════════════════════════════════
   notas: {
@@ -155,23 +169,45 @@ alimentacionLoteSchema.pre('save', async function() {
 // ═══════════════════════════════════════════════════════════════════════
 
 alimentacionLoteSchema.post('findOneAndDelete', async function(doc) {
-  if (doc && doc.costo_ref) {
-    try {
+  if (!doc) return;
+  try {
+    // 1. Eliminar Costo asociado
+    if (doc.costo_ref) {
       const Costo = mongoose.model('Costo');
       await Costo.findByIdAndDelete(doc.costo_ref);
       console.log('[ALIMENTACIÓN] Costo eliminado automáticamente');
-
-      // Restar del lote
-      const Lote = mongoose.model('Lote');
-      const lote = await Lote.findById(doc.lote);
-      if (lote) {
-        lote.alimento_total_kg   = Math.max(0, (lote.alimento_total_kg   || 0) - doc.cantidad_kg);
-        lote.costo_alimento_total = Math.max(0, (lote.costo_alimento_total || 0) - doc.total);
-        await lote.save();
-      }
-    } catch (error) {
-      console.error('[ALIMENTACIÓN] Error eliminando costo:', error.message);
     }
+
+    // 2. Revertir totales en el Lote
+    const Lote = mongoose.model('Lote');
+    const lote = await Lote.findById(doc.lote);
+    if (lote) {
+      lote.alimento_total_kg    = Math.max(0, (lote.alimento_total_kg    || 0) - (doc.cantidad_kg || 0));
+      lote.costo_alimento_total = Math.max(0, (lote.costo_alimento_total || 0) - (doc.total       || 0));
+      await lote.save();
+    }
+
+    // 3. Restaurar stock en InventarioAlimento
+    if (doc.inventario_ref && doc.bultos_consumidos > 0) {
+      const InventarioAlimento = mongoose.model('InventarioAlimento');
+      const inv = await InventarioAlimento.findById(doc.inventario_ref);
+      if (inv) {
+        const kg_devueltos = doc.bultos_consumidos * (inv.peso_por_bulto_kg || 40);
+        inv.movimientos.push({
+          tipo: 'entrada',
+          cantidad_bultos: doc.bultos_consumidos,
+          cantidad_kg: kg_devueltos,
+          precio_unitario: inv.precio_bulto,
+          total: doc.bultos_consumidos * inv.precio_bulto,
+          descripcion: `Devolución por eliminación de registro de alimentación (${(doc.cantidad_kg || 0).toFixed(1)} kg)`
+        });
+        inv.cantidad_bultos = (inv.cantidad_bultos || 0) + doc.bultos_consumidos;
+        await inv.save();
+        console.log(`[ALIMENTACIÓN] Stock restaurado: +${doc.bultos_consumidos.toFixed(3)} bultos (${kg_devueltos.toFixed(1)} kg) en ${inv.nombre}`);
+      }
+    }
+  } catch (error) {
+    console.error('[ALIMENTACIÓN] Error en cleanup post-delete:', error.message);
   }
 });
 
