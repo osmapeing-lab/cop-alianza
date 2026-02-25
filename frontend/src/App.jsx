@@ -3579,7 +3579,7 @@ const cargarHistoricoPesos = async () => {
           <div className="lote-stat-card destacado">
             <Package size={24} />
             <div className="stat-info">
-              <span className="stat-valor">{loteDetalle.peso_total?.toFixed(0) || 0} kg</span>
+              <span className="stat-valor">{loteDetalle.peso_total?.toFixed(1) || 0} kg</span>
               <span className="stat-label">Peso Total Lote</span>
             </div>
           </div>
