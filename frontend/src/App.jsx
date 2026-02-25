@@ -1204,7 +1204,7 @@ const [cargandoAlimInv, setCargandoAlimInv] = useState(false)
 const [mostrarModalNuevoProducto, setMostrarModalNuevoProducto] = useState(false)
 const [nuevoProductoAlimento, setNuevoProductoAlimento] = useState({
   nombre: '',
-  tipo: 'concentrado',
+  tipo: 'universa',
   precio_bulto: '',
   peso_por_bulto_kg: 40,
   stock_minimo_bultos: 5
@@ -1594,7 +1594,7 @@ const crearNuevoProductoAlimento = async () => {
       headers: { Authorization: `Bearer ${token}` }
     })
     setMostrarModalNuevoProducto(false)
-    setNuevoProductoAlimento({ nombre: '', tipo: 'concentrado', precio_bulto: '', peso_por_bulto_kg: 40, stock_minimo_bultos: 5 })
+    setNuevoProductoAlimento({ nombre: '', tipo: 'universa', precio_bulto: '', peso_por_bulto_kg: 40, stock_minimo_bultos: 5 })
     await cargarInventarioAlimento()
     alert('✓ Producto creado correctamente. Ahora registra una Entrada para agregar stock.')
   } catch (error) {
@@ -5692,11 +5692,12 @@ const cargarHistoricoPesos = async () => {
               value={nuevoProductoAlimento.tipo}
               onChange={e => setNuevoProductoAlimento({...nuevoProductoAlimento, tipo: e.target.value})}
             >
-              <option value="concentrado">Concentrado</option>
-              <option value="maiz">Maíz</option>
-              <option value="soya">Soya</option>
-              <option value="premezcla">Premezcla</option>
-              <option value="otro">Otro</option>
+              <option value="universa">Universal</option>
+              <option value="inicio">Inicio</option>
+              <option value="crecimiento">Crecimiento</option>
+              <option value="engorde">Engorde</option>
+              <option value="gestacion">Gestación</option>
+              <option value="lactancia">Lactancia</option>
             </select>
           </div>
           <div className="form-group">
