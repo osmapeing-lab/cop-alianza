@@ -817,7 +817,7 @@ const PanelContabilidad = ({ resumen, comparativo, onNuevoCosto }) => {
 // COMPONENTE: PANEL DE INVENTARIO
 // ═══════════════════════════════════════════════════════════════════════
 
-const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo }) => {
+const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo, onEliminarCerdo }) => {
   const [modalCerdo, setModalCerdo] = useState(false)
   const [nuevoCerdo, setNuevoCerdo] = useState({
     tipo: 'engorde',
@@ -905,17 +905,7 @@ const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo }) => {
                             <button
                               className="btn-icon btn-danger"
                               title="Eliminar cerdo"
-                              onClick={async () => {
-                                if (!confirm(`¿Eliminar el cerdo ${c.codigo}? Esta acción no se puede deshacer.`)) return
-                                try {
-                                  await axios.delete(`${API_URL}/api/inventario/${c._id}`, {
-                                    headers: { Authorization: `Bearer ${token}` }
-                                  })
-                                  cargarInventario()
-                                } catch (error) {
-                                  alert('Error eliminando cerdo: ' + (error.response?.data?.mensaje || error.message))
-                                }
-                              }}
+                              onClick={() => onEliminarCerdo && onEliminarCerdo(c._id, c.codigo)}
                             >
                               <Trash2 size={15} />
                             </button>
@@ -1172,13 +1162,12 @@ const [tabInventario, setTabInventario] = useState('cerdos')
 const [inventarioAlimento, setInventarioAlimento] = useState([])
 const [resumenInventarioAlimento, setResumenInventarioAlimento] = useState({})
 const [mostrarModalAlimento, setMostrarModalAlimento] = useState(false)
- const [nuevaMovimientoAlimento, setNuevaMovimientoAlimento] = useState({
+const [nuevaMovimientoAlimento, setNuevaMovimientoAlimento] = useState({
   tipo: 'entrada',
-  inventario_id: '',      // ← NUEVO: ID del producto seleccionado
+  inventario_id: '',
   cantidad_bultos: 0,
   precio_bulto: 0,
-  descripcion: '',
-  lote_id: ''
+  descripcion: ''
 })
 
 // Estados para gastos semanales por lote
@@ -1210,6 +1199,16 @@ const [historicoPesos, setHistoricoPesos] = useState([])
 const [mostrarModalAlimInv, setMostrarModalAlimInv] = useState(false)
 const [nuevaAlimInv, setNuevaAlimInv] = useState({ inventario_id: '', cantidad_bultos: '', notas: '' })
 const [cargandoAlimInv, setCargandoAlimInv] = useState(false)
+
+// Estados para crear nuevo producto de inventario alimento
+const [mostrarModalNuevoProducto, setMostrarModalNuevoProducto] = useState(false)
+const [nuevoProductoAlimento, setNuevoProductoAlimento] = useState({
+  nombre: '',
+  tipo: 'concentrado',
+  precio_bulto: '',
+  peso_por_bulto_kg: 40,
+  stock_minimo_bultos: 5
+})
 
 // Refs para cerrar paneles al click fuera
 const userPanelRef = useRef(null)
@@ -1546,7 +1545,6 @@ const cargarInventarioAlimento = async () => {
 }
 
 const registrarMovimientoAlimento = async () => {
-  // Validar que se haya seleccionado un producto
   if (!nuevaMovimientoAlimento.inventario_id) {
     alert('Selecciona un producto de alimento')
     return
@@ -1557,29 +1555,48 @@ const registrarMovimientoAlimento = async () => {
   }
 
   try {
-    const tipoRuta = nuevaMovimientoAlimento.tipo === 'entrada' ? 'entrada' : 'salida'
-    const endpoint = `${API_URL}/api/inventario-alimento/${nuevaMovimientoAlimento.inventario_id}/${tipoRuta}`
-    
-    await axios.post(endpoint, {
-      cantidad_bultos: nuevaMovimientoAlimento.cantidad_bultos,
-      precio_bulto: nuevaMovimientoAlimento.precio_bulto,
-      descripcion: nuevaMovimientoAlimento.descripcion,
-      lote_id: nuevaMovimientoAlimento.lote_id || null
+    await axios.post(
+      `${API_URL}/api/inventario-alimento/${nuevaMovimientoAlimento.inventario_id}/entrada`,
+      {
+        cantidad_bultos: nuevaMovimientoAlimento.cantidad_bultos,
+        precio_bulto: nuevaMovimientoAlimento.precio_bulto,
+        descripcion: nuevaMovimientoAlimento.descripcion
+      },
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
+    setMostrarModalAlimento(false)
+    setNuevaMovimientoAlimento({ tipo: 'entrada', inventario_id: '', cantidad_bultos: 0, precio_bulto: 0, descripcion: '' })
+    cargarInventarioAlimento()
+    alert('✓ Entrada registrada correctamente')
+  } catch (error) {
+    alert('Error: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
+const crearNuevoProductoAlimento = async () => {
+  if (!nuevoProductoAlimento.nombre.trim()) {
+    alert('El nombre del producto es requerido')
+    return
+  }
+  if (!nuevoProductoAlimento.precio_bulto || nuevoProductoAlimento.precio_bulto <= 0) {
+    alert('El precio por bulto debe ser mayor a 0')
+    return
+  }
+  try {
+    await axios.post(`${API_URL}/api/inventario-alimento`, {
+      nombre: nuevoProductoAlimento.nombre.trim(),
+      tipo: nuevoProductoAlimento.tipo,
+      precio_bulto: Number(nuevoProductoAlimento.precio_bulto),
+      peso_por_bulto_kg: Number(nuevoProductoAlimento.peso_por_bulto_kg) || 40,
+      stock_minimo_bultos: Number(nuevoProductoAlimento.stock_minimo_bultos) || 5,
+      cantidad_bultos: 0
     }, {
       headers: { Authorization: `Bearer ${token}` }
     })
-    
-    setMostrarModalAlimento(false)
-    setNuevaMovimientoAlimento({
-      tipo: 'entrada',
-      inventario_id: '',
-      cantidad_bultos: 0,
-      precio_bulto: 0,
-      descripcion: '',
-      lote_id: ''
-    })
-    cargarInventarioAlimento()
-    alert('✓ Movimiento registrado correctamente')
+    setMostrarModalNuevoProducto(false)
+    setNuevoProductoAlimento({ nombre: '', tipo: 'concentrado', precio_bulto: '', peso_por_bulto_kg: 40, stock_minimo_bultos: 5 })
+    await cargarInventarioAlimento()
+    alert('✓ Producto creado correctamente. Ahora registra una Entrada para agregar stock.')
   } catch (error) {
     alert('Error: ' + (error.response?.data?.mensaje || error.message))
   }
@@ -1655,6 +1672,18 @@ const crearCerdo = async (datos) => {
     cargarInventario()
   } catch (error) {
     alert('Error registrando cerdo: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
+const eliminarCerdo = async (id, codigo) => {
+  if (!confirm(`¿Eliminar el cerdo ${codigo}? Esta acción no se puede deshacer.`)) return
+  try {
+    await axios.delete(`${API_URL}/api/inventario/${id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    cargarInventario()
+  } catch (error) {
+    alert('Error eliminando cerdo: ' + (error.response?.data?.mensaje || error.message))
   }
 }
 
@@ -3431,7 +3460,7 @@ const cargarHistoricoPesos = async () => {
         <div className="dashboard-section" style={{marginBottom:'24px'}}>
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px'}}>
             <h3><Package size={20} /> Alimentación del Lote — <span style={{color:'#1d4ed8'}}>{loteDetalle.alimento_total_kg?.toFixed(1) || 0} kg registrados</span></h3>
-            <button className="btn-primary btn-sm" onClick={() => { cargarInventarioAlimento(); setMostrarModalAlimInv(true) }}>
+            <button className="btn-primary btn-sm" onClick={async () => { await cargarInventarioAlimento(); setMostrarModalAlimInv(true) }}>
               <Plus size={16} /> Registrar Consumo
             </button>
           </div>
@@ -3508,14 +3537,17 @@ const cargarHistoricoPesos = async () => {
                       onChange={e => setNuevaAlimInv({...nuevaAlimInv, inventario_id: e.target.value})}
                     >
                       <option value="">— Selecciona producto —</option>
-                      {inventarioAlimento.filter(i => i.cantidad_bultos > 0).map(inv => (
-                        <option key={inv._id} value={inv._id}>
-                          {inv.nombre} ({inv.tipo}) — {inv.cantidad_bultos} bultos disponibles
+                      {inventarioAlimento.map(inv => (
+                        <option key={inv._id} value={inv._id} disabled={inv.cantidad_bultos <= 0}>
+                          {inv.nombre} ({inv.tipo}) — {inv.cantidad_bultos > 0 ? `${inv.cantidad_bultos} bultos` : 'SIN STOCK'}
                         </option>
                       ))}
                     </select>
                     {inventarioAlimento.length === 0 && (
-                      <small style={{color:'#ef4444'}}>No hay productos en inventario. Agrega stock primero.</small>
+                      <small style={{color:'#ef4444'}}>No hay productos registrados. Ve a Inventario &gt; Alimento y crea uno primero.</small>
+                    )}
+                    {inventarioAlimento.length > 0 && inventarioAlimento.every(i => i.cantidad_bultos <= 0) && (
+                      <small style={{color:'#ef4444'}}>Todos los productos tienen stock en 0. Registra una entrada en Inventario &gt; Alimento.</small>
                     )}
                   </div>
 
@@ -5455,10 +5487,11 @@ const cargarHistoricoPesos = async () => {
 
     {/* TAB: CERDOS */}
     {tabInventario === 'cerdos' && (
-      <PanelInventario 
+      <PanelInventario
         inventario={inventario}
         estadisticas={estadisticasInventario}
         onNuevoCerdo={crearCerdo}
+        onEliminarCerdo={eliminarCerdo}
       />
     )}
 
@@ -5467,9 +5500,21 @@ const cargarHistoricoPesos = async () => {
       <div className="inventario-alimento-content">
         <div className="page-header">
           <h2><Package size={24} /> Inventario de Alimento Concentrado</h2>
-          <button className="btn-primary" onClick={() => setMostrarModalAlimento(true)}>
-            <Plus size={18} /> Registrar Movimiento
-          </button>
+          <div style={{display:'flex', gap:'8px'}}>
+            <button className="btn-secondary" onClick={() => setMostrarModalNuevoProducto(true)}>
+              <Plus size={18} /> Nuevo Producto
+            </button>
+            <button className="btn-primary" onClick={() => {
+              if (inventarioAlimento.length === 0) {
+                alert('Primero crea un producto con el botón "Nuevo Producto"')
+                return
+              }
+              setNuevaMovimientoAlimento(prev => ({ ...prev, tipo: 'entrada' }))
+              setMostrarModalAlimento(true)
+            }}>
+              <Plus size={18} /> Registrar Entrada
+            </button>
+          </div>
         </div>
 
         {/* Alertas de stock bajo — PROMINENTE */}
@@ -5619,27 +5664,98 @@ const cargarHistoricoPesos = async () => {
           </table>
         </div>
 
-       {/* Modal Movimiento */}
+       {/* Modal Nuevo Producto de Alimento */}
+{mostrarModalNuevoProducto && (
+  <div className="modal-overlay" onClick={() => setMostrarModalNuevoProducto(false)}>
+    <div className="modal" onClick={e => e.stopPropagation()}>
+      <div className="modal-header">
+        <h3><Package size={18} /> Crear Nuevo Producto de Alimento</h3>
+        <button className="btn-cerrar" onClick={() => setMostrarModalNuevoProducto(false)}>&times;</button>
+      </div>
+      <div className="modal-body">
+        <p style={{color:'#64748b', fontSize:'13px', marginBottom:'12px'}}>
+          Crea el producto primero (sin stock). Luego usa "Registrar Movimiento &gt; Entrada" para agregar bultos.
+        </p>
+        <div className="form-group">
+          <label>Nombre del Producto *</label>
+          <input
+            type="text"
+            value={nuevoProductoAlimento.nombre}
+            onChange={e => setNuevoProductoAlimento({...nuevoProductoAlimento, nombre: e.target.value})}
+            placeholder="Ej: Concentrado Engorde, Maíz, Soya..."
+          />
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Tipo</label>
+            <select
+              value={nuevoProductoAlimento.tipo}
+              onChange={e => setNuevoProductoAlimento({...nuevoProductoAlimento, tipo: e.target.value})}
+            >
+              <option value="concentrado">Concentrado</option>
+              <option value="maiz">Maíz</option>
+              <option value="soya">Soya</option>
+              <option value="premezcla">Premezcla</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label>Precio por Bulto ($) *</label>
+            <input
+              type="number"
+              min="0"
+              value={nuevoProductoAlimento.precio_bulto}
+              onChange={e => setNuevoProductoAlimento({...nuevoProductoAlimento, precio_bulto: e.target.value})}
+              placeholder="Ej: 85000"
+            />
+          </div>
+        </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Kg por Bulto</label>
+            <input
+              type="number"
+              min="1"
+              value={nuevoProductoAlimento.peso_por_bulto_kg}
+              onChange={e => setNuevoProductoAlimento({...nuevoProductoAlimento, peso_por_bulto_kg: e.target.value})}
+              placeholder="40"
+            />
+          </div>
+          <div className="form-group">
+            <label>Stock Mínimo (bultos)</label>
+            <input
+              type="number"
+              min="0"
+              value={nuevoProductoAlimento.stock_minimo_bultos}
+              onChange={e => setNuevoProductoAlimento({...nuevoProductoAlimento, stock_minimo_bultos: e.target.value})}
+              placeholder="5"
+            />
+          </div>
+        </div>
+      </div>
+      <div className="modal-footer">
+        <button className="btn-secondary" onClick={() => setMostrarModalNuevoProducto(false)}>Cancelar</button>
+        <button className="btn-primary" onClick={crearNuevoProductoAlimento}>
+          <Plus size={16} /> Crear Producto
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+       {/* Modal Entrada de Alimento (solo compras; el consumo se registra desde el panel del lote) */}
 {mostrarModalAlimento && (
   <div className="modal-overlay" onClick={() => setMostrarModalAlimento(false)}>
     <div className="modal" onClick={e => e.stopPropagation()}>
       <div className="modal-header">
-        <h3>Registrar Movimiento de Alimento</h3>
+        <h3>Registrar Entrada de Alimento (Compra)</h3>
         <button className="btn-cerrar" onClick={() => setMostrarModalAlimento(false)}>&times;</button>
       </div>
       <div className="modal-body">
-        <div className="form-group">
-          <label>Tipo de Movimiento</label>
-          <select 
-            value={nuevaMovimientoAlimento.tipo} 
-            onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, tipo: e.target.value})}
-          >
-            <option value="entrada">📥 Entrada (Compra)</option>
-            <option value="salida">📤 Salida (Consumo)</option>
-          </select>
-        </div>
+        <p style={{fontSize:'12px', color:'#64748b', marginBottom:'12px', background:'#f0fdf4', padding:'8px 10px', borderRadius:'6px', borderLeft:'3px solid #22c55e'}}>
+          Usa este formulario para registrar <strong>compras</strong> de alimento. Para registrar <strong>consumo por lote</strong> ve al panel del lote y usa "Registrar Consumo".
+        </p>
 
-        {/* ← NUEVO: Selector de producto */}
         <div className="form-group">
           <label>Producto de Alimento *</label>
           <select
@@ -5664,54 +5780,39 @@ const cargarHistoricoPesos = async () => {
 
         <div className="form-row">
           <div className="form-group">
-            <label>Cantidad de Bultos</label>
-            <input 
-              type="number" 
+            <label>Cantidad de Bultos *</label>
+            <input
+              type="number"
               min="1"
-              value={nuevaMovimientoAlimento.cantidad_bultos} 
-              onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, cantidad_bultos: numVal(e.target.value)})} 
+              value={nuevaMovimientoAlimento.cantidad_bultos}
+              onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, cantidad_bultos: numVal(e.target.value)})}
               placeholder="Ej: 10"
             />
           </div>
           <div className="form-group">
-            <label>Precio por Bulto</label>
-            <input 
-              type="number" 
-              value={nuevaMovimientoAlimento.precio_bulto} 
-              onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, precio_bulto: numVal(e.target.value)})} 
+            <label>Precio por Bulto ($)</label>
+            <input
+              type="number"
+              value={nuevaMovimientoAlimento.precio_bulto}
+              onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, precio_bulto: numVal(e.target.value)})}
               placeholder="Ej: 85000"
             />
           </div>
         </div>
 
-        {nuevaMovimientoAlimento.tipo === 'salida' && (
-          <div className="form-group">
-            <label>Lote (opcional)</label>
-            <select 
-              value={nuevaMovimientoAlimento.lote_id} 
-              onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, lote_id: e.target.value})}
-            >
-              <option value="">Sin lote específico</option>
-              {lotes.filter(l => l.activo).map(lote => (
-                <option key={lote._id} value={lote._id}>{lote.nombre}</option>
-              ))}
-            </select>
-          </div>
-        )}
-
         <div className="form-group">
           <label>Descripción</label>
-          <input 
-            type="text" 
-            value={nuevaMovimientoAlimento.descripcion} 
-            onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, descripcion: e.target.value})} 
-            placeholder="Ej: Compra semanal, Consumo Lote A"
+          <input
+            type="text"
+            value={nuevaMovimientoAlimento.descripcion}
+            onChange={e => setNuevaMovimientoAlimento({...nuevaMovimientoAlimento, descripcion: e.target.value})}
+            placeholder="Ej: Compra semanal proveedor X"
           />
         </div>
 
         <div className="form-group">
-          <label>Total a Pagar/Registrar</label>
-          <input 
+          <label>Total de la Compra</label>
+          <input
             type="text"
             value={`$${((nuevaMovimientoAlimento.cantidad_bultos || 0) * (nuevaMovimientoAlimento.precio_bulto || 0)).toLocaleString()}`}
             disabled
@@ -5723,7 +5824,7 @@ const cargarHistoricoPesos = async () => {
       <div className="modal-footer">
         <button className="btn-secondary" onClick={() => setMostrarModalAlimento(false)}>Cancelar</button>
         <button className="btn-primary" onClick={registrarMovimientoAlimento}>
-          {nuevaMovimientoAlimento.tipo === 'entrada' ? '📥 Registrar Entrada' : '📤 Registrar Salida'}
+          Registrar Entrada
         </button>
       </div>
     </div>
