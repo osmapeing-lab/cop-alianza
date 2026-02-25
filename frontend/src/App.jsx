@@ -1580,7 +1580,7 @@ const registrarMovimientoAlimento = async () => {
     )
     setMostrarModalAlimento(false)
     setNuevaMovimientoAlimento({ tipo: 'entrada', inventario_id: '', cantidad_bultos: 0, precio_bulto: 0, descripcion: '' })
-    cargarInventarioAlimento()
+    await cargarInventarioAlimento()
     alert('✓ Entrada registrada correctamente')
   } catch (error) {
     alert('Error: ' + (error.response?.data?.mensaje || error.message))
@@ -3267,6 +3267,7 @@ const cargarHistoricoPesos = async () => {
                 <div className="lote-info">
                   <span><PiggyBank size={14} /> {lote.cantidad_cerdos} cerdos</span>
                   <span><Weight size={14} /> {lote.peso_promedio_actual || 0} kg/cerdo</span>
+                  <span><TrendingUp size={14} /> {((lote.cantidad_cerdos || 0) * (lote.peso_promedio_actual || 0)).toFixed(0)} kg total</span>
                 </div>
                 <div className="lote-progreso">
                   <div className="progreso-label">Ganancia de peso</div>
@@ -5560,7 +5561,11 @@ const cargarHistoricoPesos = async () => {
     {tabInventario === 'cerdos' && (
       <PanelInventario
         inventario={inventario}
-        estadisticas={estadisticasInventario}
+        estadisticas={{
+          ...estadisticasInventario,
+          total_activos: lotes.filter(l => l.activo).reduce((sum, l) => sum + (l.cantidad_cerdos || 0), 0),
+          peso_total_kg: lotes.filter(l => l.activo).reduce((sum, l) => sum + ((l.cantidad_cerdos || 0) * (l.peso_promedio_actual || 0)), 0)
+        }}
         onNuevoCerdo={crearCerdo}
         onEliminarCerdo={eliminarCerdo}
       />
@@ -5655,8 +5660,13 @@ const cargarHistoricoPesos = async () => {
             {inventarioAlimento.length > 0 && (
               <div style={{flex:'1', minWidth:'220px', padding:'16px', borderRadius:'12px', border:'2px solid #3b82f6', background:'#eff6ff'}}>
                 <div style={{fontWeight:'700', fontSize:'15px', marginBottom:'8px', color:'#1d4ed8'}}>TOTAL GENERAL</div>
-                <div style={{fontSize:'28px', fontWeight:'800', color:'#1e293b'}}>{resumenInventarioAlimento?.total_bultos || 0} <span style={{fontSize:'14px', fontWeight:'400', color:'#64748b'}}>bultos</span></div>
-                <div style={{fontSize:'14px', color:'#64748b'}}>{resumenInventarioAlimento?.total_kg || 0} kg</div>
+                <div style={{fontSize:'28px', fontWeight:'800', color:'#1e293b'}}>
+                  {(resumenInventarioAlimento?.total_kg || 0) % 1 === 0
+                    ? (resumenInventarioAlimento?.total_kg || 0)
+                    : (resumenInventarioAlimento?.total_kg || 0).toFixed(1)}
+                  <span style={{fontSize:'14px', fontWeight:'400', color:'#64748b'}}> kg</span>
+                </div>
+                <div style={{fontSize:'13px', color:'#64748b'}}>{inventarioAlimento.length} producto(s) · {inventarioAlimento.reduce((s, i) => s + (i.cantidad_bultos || 0), 0).toFixed(2)} bultos totales</div>
                 <div style={{fontSize:'14px', fontWeight:'600', color:'#1d4ed8', marginTop:'4px'}}>${(resumenInventarioAlimento?.valor_total || 0).toLocaleString()} en inventario</div>
               </div>
             )}
