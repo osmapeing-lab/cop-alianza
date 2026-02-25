@@ -1160,14 +1160,12 @@ const [mostrarTablaFinca, setMostrarTablaFinca] = useState(false)
   // Estados de pesajes
   const [pesajes, setPesajes] = useState([])
   const [mostrarModalPesaje, setMostrarModalPesaje] = useState(false)
-  const [nuevoPesaje, setNuevoPesaje] = useState({
-    lote: '',
-    peso: 0,
-    cantidad_cerdos_pesados: 1,
-    peso_min: '',
-    peso_max: '',
-    notas: ''
-  })
+  const [nuevoPesaje, setNuevoPesaje] = useState({ lote: '', notas: '' })
+  const [pesosIngresados, setPesosIngresados] = useState([])   // array de números (pesos individuales del pesaje)
+  const [pesoInputTmp, setPesoInputTmp]   = useState('')        // campo texto del último peso escrito
+  // Para lote creation
+  const [pesosLoteInicial, setPesosLoteInicial]  = useState([])
+  const [pesoLoteInputTmp, setPesoLoteInputTmp]  = useState('')
   // Estados de báscula en tiempo real
 const [pesoLive, setPesoLive] = useState({ peso: 0, estable: false, conectado: false })
 const [pesajeLive, setPesajeLive] = useState({ lote: '', cantidad: 1, notas: '' })
@@ -1971,11 +1969,28 @@ const verStreamCamara = (camara) => {
 
   const crearLote = async () => {
     try {
-      await axios.post(`${API_URL}/api/lotes`, nuevoLote, {
+      // Si se ingresaron pesos individuales, derivar promedios y totales del array
+      let payload = { ...nuevoLote }
+      if (pesosLoteInicial.length > 0) {
+        const totalPesos = pesosLoteInicial.reduce((s, v) => s + v, 0)
+        const promedio = Math.round((totalPesos / pesosLoteInicial.length) * 100) / 100
+        payload = {
+          ...payload,
+          cantidad_cerdos: pesosLoteInicial.length,
+          peso_inicial_promedio: promedio,
+          peso_promedio_actual: promedio
+        }
+      } else {
+        // Fallback: usar peso_inicial_promedio como peso_promedio_actual
+        payload.peso_promedio_actual = nuevoLote.peso_inicial_promedio || 0
+      }
+      await axios.post(`${API_URL}/api/lotes`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       })
       setMostrarModalLote(false)
       setNuevoLote({ nombre: '', cantidad_cerdos: 0, peso_inicial_promedio: 0, notas: '' })
+      setPesosLoteInicial([])
+      setPesoLoteInputTmp('')
       cargarLotes()
     } catch (error) {
       alert('Error creando lote: ' + (error.response?.data?.mensaje || error.message))
@@ -2165,18 +2180,24 @@ const eliminarGastoSemanal = async (loteId, gastoId) => {
   // ═══════════════════════════════════════════════════════════════════════
 
   const crearPesaje = async () => {
+    if (pesosIngresados.length === 0) { alert('Ingresa al menos un peso antes de registrar.'); return }
     try {
+      const total = pesosIngresados.reduce((s, v) => s + v, 0)
+      const promedio = total / pesosIngresados.length
       const payload = {
         ...nuevoPesaje,
-        peso: parseFloat(nuevoPesaje.peso) || 0,
-        peso_min: nuevoPesaje.peso_min !== '' ? parseFloat(nuevoPesaje.peso_min) : undefined,
-        peso_max: nuevoPesaje.peso_max !== '' ? parseFloat(nuevoPesaje.peso_max) : undefined
+        peso: Math.round(total * 100) / 100,
+        cantidad_cerdos_pesados: pesosIngresados.length,
+        peso_min: Math.min(...pesosIngresados),
+        peso_max: Math.max(...pesosIngresados)
       }
       await axios.post(`${API_URL}/api/pesajes`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       })
       setMostrarModalPesaje(false)
-      setNuevoPesaje({ lote: '', peso: 0, cantidad_cerdos_pesados: 1, peso_min: '', peso_max: '', notas: '' })
+      setNuevoPesaje({ lote: '', notas: '' })
+      setPesosIngresados([])
+      setPesoInputTmp('')
       cargarPesajes()
       cargarLotes()
     } catch (error) {
@@ -4294,16 +4315,8 @@ const cargarHistoricoPesos = async () => {
                   placeholder="Ej: Lote A - Febrero 2026"
                 />
               </div>
-              <div className="form-group">
-                <label>Cantidad de Cerdos *</label>
-                <input
-                  type="number"
-                  value={nuevoLote.cantidad_cerdos}
-                  onChange={e => setNuevoLote({ ...nuevoLote, cantidad_cerdos: numVal(e.target.value) })}
-                />
-              </div>
             </div>
-            
+
             <div className="form-row">
               <div className="form-group">
                 <label>Corral</label>
@@ -4339,25 +4352,93 @@ const cargarHistoricoPesos = async () => {
               </div>
             </div>
 
-            <div className="form-section-title">Peso</div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Peso Inicial Promedio (kg)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={nuevoLote.peso_inicial_promedio}
-                  onChange={e => setNuevoLote({ ...nuevoLote, peso_inicial_promedio: numVal(e.target.value, true) })}
-                />
-              </div>
-              <div className="form-group">
-                <label>Peso Total Estimado</label>
+            <div className="form-section-title">Peso Inicial</div>
+            <div className="form-group">
+              <label>
+                Ingresa los pesos de cada cerdo
+                <span style={{fontSize:'11px', color:'#94a3b8', fontWeight:'400', marginLeft:'8px'}}>
+                  Escribe un peso + Enter, o pega todos separados por coma. La cantidad de cerdos se deriva automáticamente.
+                </span>
+              </label>
+              <div style={{display:'flex', gap:'6px'}}>
                 <input
                   type="text"
-                  value={`${((nuevoLote.cantidad_cerdos || 0) * (nuevoLote.peso_inicial_promedio || 0)).toFixed(0)} kg`}
-                  disabled
+                  inputMode="decimal"
+                  placeholder="Ej: 10.5"
+                  value={pesoLoteInputTmp}
+                  onChange={e => setPesoLoteInputTmp(e.target.value.replace(/[^0-9.,\s]/g,''))}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ',') {
+                      e.preventDefault()
+                      const vals = pesoLoteInputTmp.split(/[,\s]+/).map(v => parseFloat(v.replace(',','.'))).filter(v => !isNaN(v) && v > 0)
+                      if (vals.length) { setPesosLoteInicial(prev => [...prev, ...vals]); setPesoLoteInputTmp('') }
+                    }
+                  }}
+                  onBlur={() => {
+                    const vals = pesoLoteInputTmp.split(/[,\s]+/).map(v => parseFloat(v.replace(',','.'))).filter(v => !isNaN(v) && v > 0)
+                    if (vals.length) { setPesosLoteInicial(prev => [...prev, ...vals]); setPesoLoteInputTmp('') }
+                  }}
+                  style={{flex:1}}
                 />
+                <button type="button" className="btn-primary btn-sm" onClick={() => {
+                  const vals = pesoLoteInputTmp.split(/[,\s]+/).map(v => parseFloat(v.replace(',','.'))).filter(v => !isNaN(v) && v > 0)
+                  if (vals.length) { setPesosLoteInicial(prev => [...prev, ...vals]); setPesoLoteInputTmp('') }
+                }}>+ Agregar</button>
               </div>
+
+              {pesosLoteInicial.length > 0 && (
+                <div style={{display:'flex', flexWrap:'wrap', gap:'6px', marginTop:'10px'}}>
+                  {pesosLoteInicial.map((p, i) => (
+                    <span key={i} style={{background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'20px', padding:'3px 10px', fontSize:'13px', display:'flex', alignItems:'center', gap:'4px'}}>
+                      {p.toFixed(1)} kg
+                      <button type="button" onClick={() => setPesosLoteInicial(prev => prev.filter((_,j) => j !== i))}
+                        style={{background:'none', border:'none', cursor:'pointer', color:'#94a3b8', padding:'0', lineHeight:1, fontSize:'14px'}}>&times;</button>
+                    </span>
+                  ))}
+                  <button type="button" onClick={() => setPesosLoteInicial([])}
+                    style={{background:'none', border:'none', cursor:'pointer', color:'#ef4444', fontSize:'12px', padding:'3px 6px'}}>Limpiar</button>
+                </div>
+              )}
+
+              {pesosLoteInicial.length > 0 && (() => {
+                const total = pesosLoteInicial.reduce((s,v) => s+v, 0)
+                const avg   = total / pesosLoteInicial.length
+                const mn    = Math.min(...pesosLoteInicial)
+                const mx    = Math.max(...pesosLoteInicial)
+                return (
+                  <div style={{marginTop:'12px', padding:'12px', background:'#f0fdf4', borderRadius:'10px', border:'1px solid #86efac', display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px', textAlign:'center'}}>
+                    <div><div style={{fontSize:'20px', fontWeight:'800', color:'#1e293b'}}>{pesosLoteInicial.length}</div><div style={{fontSize:'11px', color:'#64748b'}}>cerdos</div></div>
+                    <div><div style={{fontSize:'18px', fontWeight:'800', color:'#1e293b'}}>{total.toFixed(1)} kg</div><div style={{fontSize:'11px', color:'#64748b'}}>Total</div></div>
+                    <div><div style={{fontSize:'18px', fontWeight:'800', color:'#16a34a'}}>{avg.toFixed(1)} kg</div><div style={{fontSize:'11px', color:'#64748b'}}>Promedio</div></div>
+                    <div><div style={{fontSize:'14px', fontWeight:'700', color:'#0369a1'}}>{mn.toFixed(1)}–{mx.toFixed(1)}</div><div style={{fontSize:'11px', color:'#64748b'}}>Intervalo</div></div>
+                  </div>
+                )
+              })()}
+
+              {pesosLoteInicial.length === 0 && (
+                <div style={{marginTop:'10px'}}>
+                  <div style={{borderTop:'1px solid #e2e8f0', paddingTop:'10px', marginBottom:'8px', fontSize:'12px', color:'#94a3b8'}}>
+                    O ingresa solo el promedio manualmente:
+                  </div>
+                  <div style={{display:'flex', gap:'12px'}}>
+                    <div className="form-group" style={{flex:1, marginBottom:0}}>
+                      <label style={{fontSize:'12px'}}>Cantidad de cerdos</label>
+                      <input type="number" value={nuevoLote.cantidad_cerdos}
+                        onChange={e => setNuevoLote({ ...nuevoLote, cantidad_cerdos: numVal(e.target.value) })} />
+                    </div>
+                    <div className="form-group" style={{flex:1, marginBottom:0}}>
+                      <label style={{fontSize:'12px'}}>Peso prom. inicial (kg)</label>
+                      <input type="number" step="0.1" value={nuevoLote.peso_inicial_promedio}
+                        onChange={e => setNuevoLote({ ...nuevoLote, peso_inicial_promedio: numVal(e.target.value, true) })} />
+                    </div>
+                    <div className="form-group" style={{flex:1, marginBottom:0}}>
+                      <label style={{fontSize:'12px'}}>Total estimado</label>
+                      <input type="text" disabled
+                        value={`${((nuevoLote.cantidad_cerdos||0)*(nuevoLote.peso_inicial_promedio||0)).toFixed(1)} kg`} />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="form-group">
@@ -4637,52 +4718,80 @@ const cargarHistoricoPesos = async () => {
                         >
                           <option value="">Seleccionar lote...</option>
                           {lotes.filter(l => l.activo).map(lote => (
-                            <option key={lote._id} value={lote._id}>{lote.nombre}</option>
+                            <option key={lote._id} value={lote._id}>
+                              {lote.nombre} ({lote.cantidad_cerdos} cerdos)
+                            </option>
                           ))}
                         </select>
                       </div>
+
+                      {/* Entrada de pesos individuales */}
                       <div className="form-group">
-                        <label>Peso Total (kg)</label>
-                        <input
-                          type="text"
-                          inputMode="decimal"
-                          placeholder="0.0"
-                          value={nuevoPesaje.peso}
-                          onChange={e => setNuevoPesaje({ ...nuevoPesaje, peso: numVal(e.target.value, true) })}
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Cantidad de Cerdos Pesados</label>
-                        <input
-                          type="number"
-                          value={nuevoPesaje.cantidad_cerdos_pesados}
-                          onChange={e => setNuevoPesaje({ ...nuevoPesaje, cantidad_cerdos_pesados: numVal(e.target.value) })}
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label>Prom. por Cerdo (calculado)</label>
-                        <input
-                          type="text"
-                          value={nuevoPesaje.cantidad_cerdos_pesados > 0 ? (nuevoPesaje.peso / nuevoPesaje.cantidad_cerdos_pesados).toFixed(2) + ' kg' : '0 kg'}
-                          disabled
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label style={{display:'flex', alignItems:'center', gap:'6px'}}>
-                          Intervalo de pesos (opcional)
-                          <span style={{fontSize:'11px', color:'#94a3b8', fontWeight:'400'}}>cerdo más liviano / más pesado</span>
+                        <label>
+                          Pesos individuales
+                          <span style={{fontSize:'11px', color:'#94a3b8', fontWeight:'400', marginLeft:'8px'}}>
+                            Escribe un peso y presiona Enter o coma — o pega todos separados por coma
+                          </span>
                         </label>
-                        <div style={{display:'flex', gap:'8px'}}>
-                          <input type="number" step="0.1" placeholder="Mín kg"
-                            value={nuevoPesaje.peso_min}
-                            onChange={e => setNuevoPesaje({ ...nuevoPesaje, peso_min: e.target.value })}
+                        <div style={{display:'flex', gap:'6px'}}>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="Ej: 12.5"
+                            value={pesoInputTmp}
+                            onChange={e => setPesoInputTmp(e.target.value.replace(/[^0-9.,]/g,''))}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' || e.key === ',') {
+                                e.preventDefault()
+                                // soporte para pegar varios separados por coma
+                                const vals = pesoInputTmp.split(/[,\s]+/).map(v => parseFloat(v.replace(',','.'))).filter(v => !isNaN(v) && v > 0)
+                                if (vals.length) { setPesosIngresados(prev => [...prev, ...vals]); setPesoInputTmp('') }
+                              }
+                            }}
+                            onBlur={() => {
+                              const vals = pesoInputTmp.split(/[,\s]+/).map(v => parseFloat(v.replace(',','.'))).filter(v => !isNaN(v) && v > 0)
+                              if (vals.length) { setPesosIngresados(prev => [...prev, ...vals]); setPesoInputTmp('') }
+                            }}
+                            style={{flex:1}}
                           />
-                          <input type="number" step="0.1" placeholder="Máx kg"
-                            value={nuevoPesaje.peso_max}
-                            onChange={e => setNuevoPesaje({ ...nuevoPesaje, peso_max: e.target.value })}
-                          />
+                          <button type="button" className="btn-primary btn-sm" onClick={() => {
+                            const vals = pesoInputTmp.split(/[,\s]+/).map(v => parseFloat(v.replace(',','.'))).filter(v => !isNaN(v) && v > 0)
+                            if (vals.length) { setPesosIngresados(prev => [...prev, ...vals]); setPesoInputTmp('') }
+                          }}>+ Agregar</button>
                         </div>
+
+                        {/* Chips de pesos ingresados */}
+                        {pesosIngresados.length > 0 && (
+                          <div style={{display:'flex', flexWrap:'wrap', gap:'6px', marginTop:'10px'}}>
+                            {pesosIngresados.map((p, i) => (
+                              <span key={i} style={{background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'20px', padding:'3px 10px', fontSize:'13px', display:'flex', alignItems:'center', gap:'4px'}}>
+                                {p.toFixed(1)} kg
+                                <button type="button" onClick={() => setPesosIngresados(prev => prev.filter((_,j) => j !== i))}
+                                  style={{background:'none', border:'none', cursor:'pointer', color:'#94a3b8', padding:'0', lineHeight:1, fontSize:'14px'}}>&times;</button>
+                              </span>
+                            ))}
+                            <button type="button" onClick={() => setPesosIngresados([])}
+                              style={{background:'none', border:'none', cursor:'pointer', color:'#ef4444', fontSize:'12px', padding:'3px 6px'}}>Limpiar todo</button>
+                          </div>
+                        )}
+
+                        {/* Resumen calculado */}
+                        {pesosIngresados.length > 0 && (() => {
+                          const total = pesosIngresados.reduce((s,v) => s+v, 0)
+                          const avg   = total / pesosIngresados.length
+                          const mn    = Math.min(...pesosIngresados)
+                          const mx    = Math.max(...pesosIngresados)
+                          return (
+                            <div style={{marginTop:'12px', padding:'12px', background:'#f0fdf4', borderRadius:'10px', border:'1px solid #86efac', display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'8px', textAlign:'center'}}>
+                              <div><div style={{fontSize:'18px', fontWeight:'800', color:'#1e293b'}}>{pesosIngresados.length}</div><div style={{fontSize:'11px', color:'#64748b'}}>cerdos</div></div>
+                              <div><div style={{fontSize:'18px', fontWeight:'800', color:'#1e293b'}}>{total.toFixed(1)} kg</div><div style={{fontSize:'11px', color:'#64748b'}}>Total</div></div>
+                              <div><div style={{fontSize:'18px', fontWeight:'800', color:'#16a34a'}}>{avg.toFixed(1)} kg</div><div style={{fontSize:'11px', color:'#64748b'}}>Promedio</div></div>
+                              <div><div style={{fontSize:'14px', fontWeight:'700', color:'#0369a1'}}>{mn.toFixed(1)}–{mx.toFixed(1)}</div><div style={{fontSize:'11px', color:'#64748b'}}>Intervalo</div></div>
+                            </div>
+                          )
+                        })()}
                       </div>
+
                       <div className="form-group">
                         <label>Notas</label>
                         <textarea
@@ -4694,8 +4803,10 @@ const cargarHistoricoPesos = async () => {
                       </div>
                     </div>
                     <div className="modal-footer">
-                      <button className="btn-secondary" onClick={() => setMostrarModalPesaje(false)}>Cancelar</button>
-                      <button className="btn-primary" onClick={crearPesaje}>Registrar Pesaje</button>
+                      <button className="btn-secondary" onClick={() => { setMostrarModalPesaje(false); setPesosIngresados([]); setPesoInputTmp('') }}>Cancelar</button>
+                      <button className="btn-primary" onClick={crearPesaje} disabled={pesosIngresados.length === 0}>
+                        Registrar Pesaje {pesosIngresados.length > 0 ? `(${pesosIngresados.length} cerdos)` : ''}
+                      </button>
                     </div>
                   </div>
                 </div>
