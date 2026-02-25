@@ -20,6 +20,7 @@ const WaterConsumption = require('../models/WaterConsumption');
 const Motorbomb = require('../models/Motorbomb');
 const Config = require('../models/Config');
 const NotificationState = require('../models/NotificationState');
+const Pesaje = require('../models/pesaje');
 
 // ═══════════════════════════════════════════════════════════════════════
 // SOLO EN MEMORIA: timers de setTimeout (no se pueden persistir)
@@ -394,6 +395,116 @@ async function enviarResumenDiarioAgua() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// ALERTA STOCK CRÍTICO DE ALIMENTO (≤ 10 kg restantes)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Envía alerta si el stock de un producto de alimento cae a 10 kg o menos.
+ * Cooldown persistido en BD por producto (se resetea al registrar una entrada).
+ */
+async function verificarStockCriticoAlimento(inventario) {
+  try {
+    const kg_restantes = (inventario.cantidad_bultos || 0) * (inventario.peso_por_bulto_kg || 40);
+    if (kg_restantes > 10) return;
+
+    const clave = `alerta_stock_10kg_${inventario._id}`;
+    const yaEnviada = await getEstado(clave);
+    if (yaEnviada) return;
+
+    await setEstado(clave, new Date().toISOString());
+
+    const bultosEnteros = Math.floor(inventario.cantidad_bultos || 0);
+    const kgSuelto = Math.round(((inventario.cantidad_bultos || 0) - bultosEnteros) * (inventario.peso_por_bulto_kg || 40) * 10) / 10;
+    const desglose = kgSuelto > 0 ? `${bultosEnteros} bultos + ${kgSuelto} kg` : `${bultosEnteros} bultos`;
+
+    const msg =
+      `🚨 *STOCK CRÍTICO DE ALIMENTO*\n` +
+      `Producto: ${inventario.nombre} (${inventario.tipo})\n` +
+      `Restante: *${kg_restantes.toFixed(1)} kg* (${desglose})\n` +
+      `⚠️ Reabastecer urgente para no dejar a los cerdos sin alimento.`;
+
+    await Promise.all([
+      enviarWhatsApp(msg),
+      enviarFCM({
+        titulo: `🚨 Stock Crítico: ${inventario.nombre}`,
+        cuerpo: `Solo quedan ${kg_restantes.toFixed(1)} kg. Reabastecer urgente.`,
+        tipo: 'critico',
+        datos: { pantalla: 'inventario', inventario_id: String(inventario._id) }
+      }).catch(e => console.error('[FCM] Error stock alimento:', e.message))
+    ]);
+
+    console.log(`[STOCK] Alerta crítica enviada: ${inventario.nombre} — ${kg_restantes.toFixed(1)} kg`);
+  } catch (error) {
+    console.error('[STOCK] Error verificando stock crítico:', error.message);
+  }
+}
+
+/**
+ * Elimina el cooldown de alerta de stock cuando se registra una nueva entrada.
+ */
+async function resetearAlertaStockAlimento(inventarioId) {
+  await eliminarEstado(`alerta_stock_10kg_${inventarioId}`);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ALERTA PESAJE SEMANAL (avisa el día anterior al pesaje de 7 días)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Revisa todos los lotes activos y envía alerta si mañana es día de pesaje.
+ * El pesaje se hace cada 7 días. Detecta el día 6 desde el último pesaje.
+ */
+async function verificarPesajeSemanal() {
+  try {
+    const lotes = await Lote.find({ activo: true });
+    if (!lotes.length) return;
+
+    for (const lote of lotes) {
+      const ultimoPesaje = await Pesaje.findOne({ lote: lote._id }).sort({ fecha: -1 }).lean();
+      const referencia   = ultimoPesaje ? new Date(ultimoPesaje.fecha) : new Date(lote.fecha_inicio || lote.createdAt);
+
+      // Días transcurridos desde el último pesaje (o desde inicio del lote)
+      const diasDesde = Math.floor((Date.now() - referencia.getTime()) / (24 * 60 * 60 * 1000));
+
+      // Día 6 = mañana toca el pesaje (cada 7 días)
+      if (diasDesde === 6) {
+        const clave = `pesaje_alerta_${lote._id}_d${diasDesde}`;
+        const yaEnviada = await getEstado(clave);
+        if (yaEnviada) continue;
+
+        await setEstado(clave, new Date().toISOString());
+
+        const fechaUltima = referencia.toLocaleDateString('es-CO', { timeZone: 'America/Bogota' });
+        const msg =
+          `⚖️ *RECORDATORIO: MAÑANA ES DÍA DE PESAJE*\n` +
+          `Lote: ${lote.nombre}\n` +
+          `Último pesaje: ${fechaUltima} (hace ${diasDesde} días)\n` +
+          `Prepara la romana y registra los pesos para llevar el control.`;
+
+        await Promise.all([
+          enviarWhatsApp(msg),
+          enviarFCM({
+            titulo: `⚖️ Mañana: Día de Pesaje — ${lote.nombre}`,
+            cuerpo: `Hace ${diasDesde} días del último pesaje. Prepara la romana.`,
+            tipo: 'info',
+            datos: { pantalla: 'lotes', lote_id: String(lote._id) }
+          }).catch(e => console.error('[FCM] Error pesaje:', e.message))
+        ]);
+
+        console.log(`[PESAJE] Alerta enviada para lote "${lote.nombre}" — ${diasDesde} días desde último pesaje`);
+      }
+
+      // Limpiar claves viejas cuando ya pasó el pesaje (día 8+)
+      if (diasDesde >= 8) {
+        await eliminarEstado(`pesaje_alerta_${lote._id}_d6`);
+      }
+    }
+  } catch (error) {
+    console.error('[PESAJE] Error verificando pesaje semanal:', error.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // RESET DIARIO (limpiar cooldowns en BD a medianoche)
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -440,6 +551,9 @@ module.exports = {
   revisarTareasDiarias,
   enviarResumenDiarioAgua,
   resetearNotificacionesDiarias,
+  verificarStockCriticoAlimento,
+  resetearAlertaStockAlimento,
+  verificarPesajeSemanal,
   getUmbralTemperatura,
   getTareaDiariaEjecutada,
   setTareaDiariaEjecutada,

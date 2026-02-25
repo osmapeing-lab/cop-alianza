@@ -17,6 +17,7 @@ const InventarioAlimento = require('../models/InventarioAlimento');
 const Costo = require('../models/Costo');
 const Lote = require('../models/lote');
 const Alert = require('../models/Alert');
+const { verificarStockCriticoAlimento, resetearAlertaStockAlimento } = require('../utils/notificationManager');
 
 // ═══════════════════════════════════════════════════════════════════════
 // OBTENER TODOS LOS INVENTARIOS DE ALIMENTO
@@ -139,6 +140,9 @@ exports.registrarEntrada = async (req, res) => {
       req.user?._id
     );
 
+    // Al reponer stock, resetear alerta de 10 kg para este producto
+    await resetearAlertaStockAlimento(inventario._id).catch(() => {});
+
     res.json({
       mensaje: 'Entrada registrada correctamente',
       inventario
@@ -243,6 +247,11 @@ exports.registrarSalida = async (req, res) => {
         req.io.emit('alerta_stock', alerta);
       }
     }
+
+    // ── Alerta crítica si quedan ≤ 10 kg ─────────────────────────
+    await verificarStockCriticoAlimento(inventarioActualizado).catch(e =>
+      console.error('[STOCK] Error alerta 10kg:', e.message)
+    );
 
     res.json({
       mensaje: 'Salida registrada correctamente',

@@ -20,6 +20,7 @@ const Contabilidad     = require('../models/contabilidad');
 const AlimentacionLote = require('../models/AlimentacionLote');
 const Costo            = require('../models/Costo');
 const InventarioAlimento = require('../models/InventarioAlimento');
+const { verificarStockCriticoAlimento } = require('../utils/notificationManager');
 
 // ═══════════════════════════════════════════════════════════════════════
 // CRUD BÁSICO DE LOTES
@@ -401,6 +402,11 @@ exports.registrarAlimentacionConInventario = async (req, res) => {
     const restante_kg_total = restante_bultos * pesoPorBulto;
     const restante_enteros  = Math.floor(restante_bultos);
     const restante_kg_suelto = Math.round((restante_bultos - restante_enteros) * pesoPorBulto * 10) / 10;
+
+    // Alerta si quedan ≤ 10 kg en inventario
+    await verificarStockCriticoAlimento(inventario).catch(e =>
+      console.error('[STOCK] Error alerta 10kg:', e.message)
+    );
 
     res.status(201).json({
       ok: true,

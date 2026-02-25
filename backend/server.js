@@ -194,6 +194,7 @@ app.use('/api/fcm', fcmRoutes);
     revisarTareasDiarias,
     enviarResumenDiarioAgua,
     resetearNotificacionesDiarias,
+    verificarPesajeSemanal,
     getTareaDiariaEjecutada,
     setTareaDiariaEjecutada,
     getResumenAguaEnviado,
@@ -234,6 +235,7 @@ app.use('/api/fcm', fcmRoutes);
         await setTareaDiariaEjecutada(hoy);
         console.log('[CRON] Ejecutando tareas diarias de salud...');
         await revisarTareasDiarias();
+        await verificarPesajeSemanal();
       }
 
       // Resumen de agua: enviar una vez al día a las 7 PM

@@ -36,6 +36,20 @@ const numVal = (v, dec = false) => {
   return isNaN(n) ? '' : n
 }
 
+// Formatea bultos decimales como "X bultos + Y kg" o "X bultos + Z g"
+// Ej: 2.8 bultos × 40 kg → "2 bultos + 32 kg"
+const formatBultos = (bultos, pesoPorBulto = 40) => {
+  if (!bultos && bultos !== 0) return '—'
+  if (bultos <= 0) return '0 bultos'
+  const enteros = Math.floor(bultos)
+  const fraccion = bultos - enteros
+  const kgSuelto = fraccion * pesoPorBulto
+  const s = enteros === 1 ? 'bulto' : 'bultos'
+  if (fraccion < 0.001) return `${enteros} ${s}`
+  if (kgSuelto < 1) return `${enteros} ${s} + ${Math.round(kgSuelto * 1000)} g`
+  return `${enteros} ${s} + ${kgSuelto.toFixed(1)} kg`
+}
+
 // Coordenadas Lorica para clima
 const LAT = 9.2397
 const LON = -75.8091
@@ -1666,10 +1680,15 @@ const crearCosto = async (datos) => {
 
 const crearCerdo = async (datos) => {
   try {
-    await axios.post(`${API_URL}/api/inventario`, datos, {
+    // Si hay un lote activo seleccionado, vincular el cerdo automáticamente
+    const payload = { ...datos }
+    if (loteDetalle?._id) payload.lote = loteDetalle._id
+    await axios.post(`${API_URL}/api/inventario`, payload, {
       headers: { Authorization: `Bearer ${token}` }
     })
     cargarInventario()
+    // Refrescar el lote para reflejar el nuevo cantidad_cerdos
+    if (loteDetalle?._id) seleccionarLote(loteDetalle._id)
   } catch (error) {
     alert('Error registrando cerdo: ' + (error.response?.data?.mensaje || error.message))
   }
@@ -1682,6 +1701,8 @@ const eliminarCerdo = async (id, codigo) => {
       headers: { Authorization: `Bearer ${token}` }
     })
     cargarInventario()
+    // Refrescar lote si hay uno seleccionado
+    if (loteDetalle?._id) seleccionarLote(loteDetalle._id)
   } catch (error) {
     alert('Error eliminando cerdo: ' + (error.response?.data?.mensaje || error.message))
   }
@@ -5576,7 +5597,7 @@ const cargarHistoricoPesos = async () => {
             </div>
             {resumenInventarioAlimento.bajo_stock.map((item, i) => (
               <div key={i} style={{padding:'6px 0', borderBottom: i < resumenInventarioAlimento.bajo_stock.length - 1 ? '1px solid #fbbf24' : 'none', color:'#78350f'}}>
-                <strong>{item.nombre}</strong> ({item.tipo}) — Quedan <strong style={{color:'#dc2626'}}>{item.cantidad} bultos</strong> (mínimo requerido: {item.minimo})
+                <strong>{item.nombre}</strong> ({item.tipo}) — Quedan <strong style={{color:'#dc2626'}}>{formatBultos(item.cantidad, 40)}</strong> (mínimo: {item.minimo} bultos)
               </div>
             ))}
           </div>
@@ -5589,34 +5610,46 @@ const cargarHistoricoPesos = async () => {
             {inventarioAlimento.length === 0 ? (
               <p className="sin-datos">No hay productos de alimento registrados</p>
             ) : (
-              inventarioAlimento.map(inv => (
-                <div key={inv._id} style={{
-                  flex:'1', minWidth:'220px', padding:'16px', borderRadius:'12px', border:'1px solid #e2e8f0',
-                  background: (inv.cantidad_bultos || 0) <= (inv.stock_minimo_bultos || 5) ? '#fef3c7' : '#f8fafc'
-                }}>
-                  <div style={{fontWeight:'700', fontSize:'15px', marginBottom:'4px'}}>{inv.nombre}</div>
-                  <div style={{fontSize:'12px', color:'#64748b', marginBottom:'8px'}}>Tipo: {inv.tipo}</div>
-                  <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-                    <div>
-                      <div style={{fontSize:'28px', fontWeight:'800', color: (inv.cantidad_bultos || 0) <= (inv.stock_minimo_bultos || 5) ? '#dc2626' : '#1e293b'}}>
-                        {inv.cantidad_bultos || 0}
-                        <span style={{fontSize:'14px', fontWeight:'400', color:'#64748b'}}> bultos</span>
+              inventarioAlimento.map(inv => {
+                const kgTotal     = (inv.cantidad_bultos || 0) * (inv.peso_por_bulto_kg || 40)
+                const critico10kg = kgTotal <= 10 && kgTotal > 0
+                const bajo        = !critico10kg && (inv.cantidad_bultos || 0) <= (inv.stock_minimo_bultos || 5)
+                const bgColor     = critico10kg ? '#fef2f2' : bajo ? '#fef3c7' : '#f8fafc'
+                const borderColor = critico10kg ? '#fecaca' : bajo ? '#fde68a' : '#e2e8f0'
+                return (
+                  <div key={inv._id} style={{
+                    flex:'1', minWidth:'220px', padding:'16px', borderRadius:'12px',
+                    border:`1px solid ${borderColor}`, background: bgColor
+                  }}>
+                    <div style={{fontWeight:'700', fontSize:'15px', marginBottom:'2px'}}>{inv.nombre}</div>
+                    <div style={{fontSize:'12px', color:'#64748b', marginBottom:'8px'}}>Tipo: {inv.tipo} · {inv.peso_por_bulto_kg} kg/bulto</div>
+
+                    {/* Cantidad principal en formato legible */}
+                    <div style={{fontSize:'22px', fontWeight:'800', color: critico10kg ? '#dc2626' : bajo ? '#d97706' : '#1e293b', marginBottom:'2px'}}>
+                      {formatBultos(inv.cantidad_bultos, inv.peso_por_bulto_kg)}
+                    </div>
+                    <div style={{fontSize:'13px', color:'#64748b', marginBottom:'8px'}}>
+                      = <strong>{kgTotal % 1 === 0 ? kgTotal : kgTotal.toFixed(1)} kg</strong> en total
+                    </div>
+
+                    <div style={{display:'flex', justifyContent:'space-between', fontSize:'12px', color:'#64748b'}}>
+                      <span>${(inv.precio_bulto || 0).toLocaleString()}/bulto</span>
+                      <span>Mín: {inv.stock_minimo_bultos || 5} bultos</span>
+                    </div>
+
+                    {critico10kg && (
+                      <div style={{marginTop:'8px', padding:'6px 8px', background:'#fee2e2', borderRadius:'6px', fontSize:'12px', color:'#991b1b', fontWeight:'700', display:'flex', alignItems:'center', gap:'4px'}}>
+                        <AlertTriangle size={13} /> CRÍTICO: solo {kgTotal.toFixed(1)} kg — Reabastecer urgente
                       </div>
-                      <div style={{fontSize:'13px', color:'#64748b'}}>{((inv.cantidad_bultos || 0) * (inv.peso_por_bulto_kg || 40))} kg en total</div>
-                    </div>
-                    <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:'12px', color:'#64748b'}}>Precio/bulto</div>
-                      <div style={{fontWeight:'600'}}>${(inv.precio_bulto || 0).toLocaleString()}</div>
-                      <div style={{fontSize:'12px', color:'#64748b', marginTop:'4px'}}>Mín: {inv.stock_minimo_bultos || 5} bultos</div>
-                    </div>
+                    )}
+                    {bajo && !critico10kg && (
+                      <div style={{marginTop:'8px', padding:'4px 8px', background:'#fef3c7', borderRadius:'6px', fontSize:'12px', color:'#92400e', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px'}}>
+                        <AlertTriangle size={12} /> STOCK BAJO — Reabastecer pronto
+                      </div>
+                    )}
                   </div>
-                  {(inv.cantidad_bultos || 0) <= (inv.stock_minimo_bultos || 5) && (
-                    <div style={{marginTop:'8px', padding:'4px 8px', background:'#fef3c7', borderRadius:'6px', fontSize:'12px', color:'#92400e', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px'}}>
-                      <AlertTriangle size={12} /> STOCK BAJO — Reabastecer pronto
-                    </div>
-                  )}
-                </div>
-              ))
+                )
+              })
             )}
             {/* Tarjeta resumen total */}
             {inventarioAlimento.length > 0 && (
