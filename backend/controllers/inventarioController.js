@@ -80,11 +80,9 @@ exports.registrarCerdo = async (req, res) => {
     
     await nuevoCerdo.save();
 
-    // Sincronizar cantidad_cerdos en el lote si el cerdo está vinculado a uno
-    if (nuevoCerdo.lote) {
-      const count = await Inventario.countDocuments({ lote: nuevoCerdo.lote, estado: 'activo' });
-      await Lote.findByIdAndUpdate(nuevoCerdo.lote, { cantidad_cerdos: count });
-    }
+    // NO modificamos lote.cantidad_cerdos aquí: ese campo refleja el total del lote (ingresado
+    // al crear el lote), no la cantidad de registros individuales. El inventario individual
+    // es una sección separada del inventario de lote.
 
     console.log(`[INVENTARIO] Nuevo cerdo registrado: ${nuevoCerdo.codigo}`);
 
@@ -255,11 +253,7 @@ exports.eliminarCerdo = async (req, res) => {
       return res.status(404).json({ mensaje: 'Cerdo no encontrado' });
     }
 
-    // Sincronizar cantidad_cerdos en el lote
-    if (cerdo.lote) {
-      const count = await Inventario.countDocuments({ lote: cerdo.lote, estado: 'activo' });
-      await Lote.findByIdAndUpdate(cerdo.lote, { cantidad_cerdos: count });
-    }
+    // NO modificamos lote.cantidad_cerdos (ver comentario en crear)
 
     console.log(`[INVENTARIO] Cerdo eliminado: ${cerdo.codigo}`);
     res.json({ mensaje: `Cerdo ${cerdo.codigo} eliminado correctamente` });

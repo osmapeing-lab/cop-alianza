@@ -831,7 +831,7 @@ const PanelContabilidad = ({ resumen, comparativo, onNuevoCosto }) => {
 // COMPONENTE: PANEL DE INVENTARIO
 // ═══════════════════════════════════════════════════════════════════════
 
-const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo, onEliminarCerdo, lotes = [] }) => {
+const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo, onEliminarCerdo, lotes = [], onActualizarLote }) => {
   const [modalCerdo, setModalCerdo] = useState(false)
   const [nuevoCerdo, setNuevoCerdo] = useState({
     tipo: 'engorde',
@@ -840,6 +840,15 @@ const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo, onEliminarCer
     corral: '',
     origen: 'nacido_granja'
   })
+  const [editandoCerdos, setEditandoCerdos] = useState(null)
+  const [cantidadEdit, setCantidadEdit] = useState('')
+
+  const guardarCantidadCerdos = async (loteId) => {
+    const n = parseInt(cantidadEdit)
+    if (isNaN(n) || n < 0) return
+    if (onActualizarLote) await onActualizarLote(loteId, { cantidad_cerdos: n })
+    setEditandoCerdos(null)
+  }
   
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -900,7 +909,26 @@ const PanelInventario = ({ inventario, estadisticas, onNuevoCerdo, onEliminarCer
                 return (
                   <tr key={lote._id}>
                     <td><strong>{lote.nombre}</strong></td>
-                    <td><strong style={{color:'#1d4ed8'}}>{lote.cantidad_cerdos}</strong></td>
+                    <td>
+                      {editandoCerdos === lote._id ? (
+                        <span style={{display:'flex', alignItems:'center', gap:'4px'}}>
+                          <input type="number" value={cantidadEdit}
+                            onChange={e => setCantidadEdit(e.target.value)}
+                            style={{width:'60px', padding:'2px 6px', borderRadius:'4px', border:'1px solid #3b82f6', fontSize:'13px'}}
+                            autoFocus
+                            onKeyDown={e => { if (e.key === 'Enter') guardarCantidadCerdos(lote._id); if (e.key === 'Escape') setEditandoCerdos(null) }}
+                          />
+                          <button onClick={() => guardarCantidadCerdos(lote._id)} style={{background:'#16a34a', color:'#fff', border:'none', borderRadius:'4px', padding:'2px 6px', cursor:'pointer', fontSize:'12px'}}>✓</button>
+                          <button onClick={() => setEditandoCerdos(null)} style={{background:'#94a3b8', color:'#fff', border:'none', borderRadius:'4px', padding:'2px 6px', cursor:'pointer', fontSize:'12px'}}>✕</button>
+                        </span>
+                      ) : (
+                        <span style={{display:'flex', alignItems:'center', gap:'6px'}}>
+                          <strong style={{color:'#1d4ed8'}}>{lote.cantidad_cerdos}</strong>
+                          <button title="Corregir cantidad" onClick={() => { setEditandoCerdos(lote._id); setCantidadEdit(lote.cantidad_cerdos || '') }}
+                            style={{background:'none', border:'none', cursor:'pointer', color:'#94a3b8', padding:'1px', lineHeight:1, fontSize:'11px'}}>✎</button>
+                        </span>
+                      )}
+                    </td>
                     <td>{(lote.peso_promedio_actual || 0).toFixed(1)} kg</td>
                     <td><strong>{pesoTotal.toFixed(0)} kg</strong></td>
                     <td>{edadDias} días</td>
@@ -1136,6 +1164,8 @@ const [mostrarTablaFinca, setMostrarTablaFinca] = useState(false)
     lote: '',
     peso: 0,
     cantidad_cerdos_pesados: 1,
+    peso_min: '',
+    peso_max: '',
     notas: ''
   })
   // Estados de báscula en tiempo real
@@ -1723,7 +1753,7 @@ const crearCerdo = async (datos) => {
     })
     cargarInventario()
     // Refrescar el lote para reflejar el nuevo cantidad_cerdos
-    if (loteDetalle?._id) seleccionarLote(loteDetalle._id)
+    if (loteDetalle?._id) verDetalleLote(loteDetalle._id)
   } catch (error) {
     alert('Error registrando cerdo: ' + (error.response?.data?.mensaje || error.message))
   }
@@ -1737,7 +1767,7 @@ const eliminarCerdo = async (id, codigo) => {
     })
     cargarInventario()
     // Refrescar lote si hay uno seleccionado
-    if (loteDetalle?._id) seleccionarLote(loteDetalle._id)
+    if (loteDetalle?._id) verDetalleLote(loteDetalle._id)
   } catch (error) {
     alert('Error eliminando cerdo: ' + (error.response?.data?.mensaje || error.message))
   }
@@ -2136,11 +2166,17 @@ const eliminarGastoSemanal = async (loteId, gastoId) => {
 
   const crearPesaje = async () => {
     try {
-      await axios.post(`${API_URL}/api/pesajes`, { ...nuevoPesaje, peso: parseFloat(nuevoPesaje.peso) || 0 }, {
+      const payload = {
+        ...nuevoPesaje,
+        peso: parseFloat(nuevoPesaje.peso) || 0,
+        peso_min: nuevoPesaje.peso_min !== '' ? parseFloat(nuevoPesaje.peso_min) : undefined,
+        peso_max: nuevoPesaje.peso_max !== '' ? parseFloat(nuevoPesaje.peso_max) : undefined
+      }
+      await axios.post(`${API_URL}/api/pesajes`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       })
       setMostrarModalPesaje(false)
-      setNuevoPesaje({ lote: '', peso: 0, cantidad_cerdos_pesados: 1, notas: '' })
+      setNuevoPesaje({ lote: '', peso: 0, cantidad_cerdos_pesados: 1, peso_min: '', peso_max: '', notas: '' })
       cargarPesajes()
       cargarLotes()
     } catch (error) {
@@ -3472,6 +3508,10 @@ const cargarHistoricoPesos = async () => {
             <div className="stat-info">
               <span className="stat-valor">{loteDetalle.peso_promedio_actual?.toFixed(1) || 0} kg</span>
               <span className="stat-label">Peso Prom. por Cerdo</span>
+              {(() => {
+                const up = pesajes.filter(p => String(p.lote?._id || p.lote) === String(loteDetalle._id) && p.peso_min != null).sort((a,b) => new Date(b.createdAt)-new Date(a.createdAt))[0]
+                return up ? <span style={{fontSize:'11px', color:'#64748b', marginTop:'2px'}}>rango: {up.peso_min?.toFixed(1)}–{up.peso_max?.toFixed(1)} kg</span> : null
+              })()}
             </div>
           </div>
           <div className="lote-stat-card destacado">
@@ -3835,13 +3875,17 @@ const cargarHistoricoPesos = async () => {
                   const fechaPesaje = new Date(p.createdAt)
                   const diasDesdeInicio = Math.round((fechaPesaje - fechaInicio) / (1000 * 60 * 60 * 24))
                   const dia = edadManual + diasDesdeInicio
-                  if (!pesajesPorDia[dia]) pesajesPorDia[dia] = []
-                  pesajesPorDia[dia].push(p.peso_promedio)
+                  if (!pesajesPorDia[dia]) pesajesPorDia[dia] = { pesos: [], mins: [], maxs: [] }
+                  pesajesPorDia[dia].pesos.push(p.peso_promedio)
+                  if (p.peso_min != null) pesajesPorDia[dia].mins.push(p.peso_min)
+                  if (p.peso_max != null) pesajesPorDia[dia].maxs.push(p.peso_max)
                 })
               }
-              const puntosPesaje = Object.entries(pesajesPorDia).map(([dia, pesos]) => ({
+              const puntosPesaje = Object.entries(pesajesPorDia).map(([dia, data]) => ({
                 dia: parseInt(dia),
-                peso: Math.round((pesos.reduce((a, b) => a + b, 0) / pesos.length) * 100) / 100
+                peso: Math.round((data.pesos.reduce((a, b) => a + b, 0) / data.pesos.length) * 100) / 100,
+                peso_min: data.mins.length > 0 ? Math.min(...data.mins) : null,
+                peso_max: data.maxs.length > 0 ? Math.max(...data.maxs) : null
               })).sort((a, b) => a.dia - b.dia)
 
               // Curva esperada recortada hasta edad actual + 4 semanas
@@ -3853,22 +3897,32 @@ const cargarHistoricoPesos = async () => {
               const curvaRecortada = curvaEsperada.filter(p => p.dia <= limDia)
 
               // Construir datos con carry-forward (iniciar con peso inicial)
-              // Extender línea real hasta el siguiente punto de curva para que se vea la evolución
               const limReal = edadLote + 7
               let lastReal = (loteDetalle.peso_inicial_promedio || 0) > 0 ? loteDetalle.peso_inicial_promedio : null
+              let lastRealMin = null, lastRealMax = null
               const datosGrafica = curvaRecortada.map(punto => {
-                puntosPesaje.forEach(p => { if (p.dia <= punto.dia) lastReal = p.peso })
+                puntosPesaje.forEach(p => {
+                  if (p.dia <= punto.dia) {
+                    lastReal = p.peso
+                    if (p.peso_min != null) lastRealMin = p.peso_min
+                    if (p.peso_max != null) lastRealMax = p.peso_max
+                  }
+                })
+                const enRango = punto.dia <= limReal && lastReal !== null
                 return {
                   dia: punto.dia,
                   semana: `Sem ${punto.semana}`,
                   peso_esperado: punto.peso_esperado,
-                  peso_real: (punto.dia <= limReal && lastReal !== null) ? lastReal : null,
+                  peso_real: enRango ? lastReal : null,
+                  peso_rango_min: (enRango && lastRealMin !== null) ? lastRealMin : null,
+                  peso_rango_max: (enRango && lastRealMax !== null) ? lastRealMax : null,
                   tienePesaje: !!puntosPesaje.find(p => Math.abs(p.dia - punto.dia) <= 3),
                   fase: punto.fase
                 }
               })
 
-              const yMax = Math.max(...datosGrafica.map(d => Math.max(d.peso_esperado || 0, d.peso_real || 0))) + 10
+              const yMax = Math.max(...datosGrafica.map(d => Math.max(d.peso_esperado || 0, d.peso_real || 0, d.peso_rango_max || 0))) + 10
+              const hayRango = datosGrafica.some(d => d.peso_rango_min !== null)
 
               return (
                 <ResponsiveContainer width="100%" height={320}>
@@ -3882,6 +3936,10 @@ const cargarHistoricoPesos = async () => {
                         <stop offset="5%" stopColor="#22c55e" stopOpacity={0.2} />
                         <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
                       </linearGradient>
+                      <linearGradient id="gradRangoLote" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#22c55e" stopOpacity={0.12} />
+                        <stop offset="95%" stopColor="#22c55e" stopOpacity={0.02} />
+                      </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="semana" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" />
@@ -3890,7 +3948,9 @@ const cargarHistoricoPesos = async () => {
                       contentStyle={{ backgroundColor: 'rgba(255,255,255,0.97)', border: 'none', borderRadius: '10px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}
                       formatter={(value, name) => {
                         if (name === 'peso_esperado') return [`${value} kg`, 'Meta Plan']
-                        if (name === 'peso_real') return [`${value} kg`, 'Peso Real']
+                        if (name === 'peso_real') return [`${value} kg`, 'Peso Prom. Real']
+                        if (name === 'peso_rango_max') return [`${value} kg`, 'Peso máx (rango)']
+                        if (name === 'peso_rango_min') return [`${value} kg`, 'Peso mín (rango)']
                         return [value, name]
                       }}
                       labelFormatter={(label) => {
@@ -3902,13 +3962,20 @@ const cargarHistoricoPesos = async () => {
                         return texto
                       }}
                     />
-                    <Legend />
-                    <Area type="monotone" dataKey="peso_esperado" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6 3" fill="url(#gradMetaLote)" dot={false} name="Meta Plan" />
+                    <Legend formatter={name => ({
+                      'peso_esperado': 'Meta Plan',
+                      'peso_real': 'Peso Real',
+                      'peso_rango_max': 'Rango máx',
+                      'peso_rango_min': 'Rango mín'
+                    }[name] || name)} />
+                    <Area type="monotone" dataKey="peso_esperado" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6 3" fill="url(#gradMetaLote)" dot={false} name="peso_esperado" />
+                    {hayRango && <Area type="monotone" dataKey="peso_rango_max" stroke="#22c55e" strokeWidth={1} strokeDasharray="3 3" fill="url(#gradRangoLote)" dot={false} name="peso_rango_max" connectNulls />}
+                    {hayRango && <Area type="monotone" dataKey="peso_rango_min" stroke="#22c55e" strokeWidth={1} strokeDasharray="3 3" fill="white" dot={false} name="peso_rango_min" connectNulls />}
                     <Area type="monotone" dataKey="peso_real" stroke="#22c55e" strokeWidth={3} fill="url(#gradRealLote)" dot={(props) => {
                       const { cx, cy, payload } = props
                       if (!payload.peso_real || !payload.tienePesaje) return null
                       return <circle cx={cx} cy={cy} r={5} fill="#22c55e" stroke="#fff" strokeWidth={2} />
-                    }} name="Peso Real" connectNulls />
+                    }} name="peso_real" connectNulls />
                   </AreaChart>
                 </ResponsiveContainer>
               )
@@ -3942,6 +4009,10 @@ const cargarHistoricoPesos = async () => {
             const diffPeso = pesoReal - pesoMeta
             const semanaEnFase = refSemana ? refSemana.semana : '—'
             const consumoRef = refSemana ? (refSemana.consumo_dia || `${refSemana.consumo_dia_min}-${refSemana.consumo_dia_max}`) : '—'
+            // Rango de pesos del último pesaje registrado
+            const ultimoPesajeConRango = [...pesajes]
+              .filter(p => String(p.lote?._id || p.lote) === String(loteDetalle._id) && (p.peso_min != null || p.peso_max != null))
+              .sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
 
             return (
               <div className="finca-indicadores">
@@ -3949,6 +4020,11 @@ const cargarHistoricoPesos = async () => {
                   <span className="finca-label">Peso vs Meta</span>
                   <span className="finca-valor">{pesoReal.toFixed(1)} / {pesoMeta} kg</span>
                   <span className="finca-diff">{diffPeso >= 0 ? '+' : ''}{diffPeso.toFixed(1)} kg</span>
+                  {ultimoPesajeConRango && (
+                    <span style={{fontSize:'11px', color:'#64748b', marginTop:'2px'}}>
+                      rango: {ultimoPesajeConRango.peso_min?.toFixed(1)}–{ultimoPesajeConRango.peso_max?.toFixed(1)} kg
+                    </span>
+                  )}
                 </div>
                 <div className="finca-indicador info">
                   <span className="finca-label">Fase Actual</span>
@@ -4590,6 +4666,22 @@ const cargarHistoricoPesos = async () => {
                           value={nuevoPesaje.cantidad_cerdos_pesados > 0 ? (nuevoPesaje.peso / nuevoPesaje.cantidad_cerdos_pesados).toFixed(2) + ' kg' : '0 kg'}
                           disabled
                         />
+                      </div>
+                      <div className="form-group">
+                        <label style={{display:'flex', alignItems:'center', gap:'6px'}}>
+                          Intervalo de pesos (opcional)
+                          <span style={{fontSize:'11px', color:'#94a3b8', fontWeight:'400'}}>cerdo más liviano / más pesado</span>
+                        </label>
+                        <div style={{display:'flex', gap:'8px'}}>
+                          <input type="number" step="0.1" placeholder="Mín kg"
+                            value={nuevoPesaje.peso_min}
+                            onChange={e => setNuevoPesaje({ ...nuevoPesaje, peso_min: e.target.value })}
+                          />
+                          <input type="number" step="0.1" placeholder="Máx kg"
+                            value={nuevoPesaje.peso_max}
+                            onChange={e => setNuevoPesaje({ ...nuevoPesaje, peso_max: e.target.value })}
+                          />
+                        </div>
                       </div>
                       <div className="form-group">
                         <label>Notas</label>
@@ -5244,11 +5336,14 @@ const cargarHistoricoPesos = async () => {
               const edadDias = lote.edad_dias || Math.floor((Date.now() - new Date(lote.fecha_inicio)) / (1000*60*60*24))
 
               // Pesaje pendiente (>6 días sin pesar)
-              const pesajesLote = pesajes.filter(p => String(p.lote) === String(lote._id) || p.lote?._id === lote._id)
-              const ultimoPesaje = pesajesLote.sort((a,b) => new Date(b.fecha) - new Date(a.fecha))[0]
-              const diasSinPesar = ultimoPesaje
-                ? Math.floor((ahora - new Date(ultimoPesaje.fecha)) / (1000*60*60*24))
-                : edadDias
+              const pesajesLote = pesajes.filter(p => String(p.lote?._id || p.lote) === String(lote._id))
+              const ultimoPesaje = pesajesLote.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
+              const diasSinPesar = (() => {
+                if (!ultimoPesaje) return edadDias
+                const ts = new Date(ultimoPesaje.createdAt)
+                if (isNaN(ts.getTime())) return edadDias
+                return Math.floor((ahora - ts) / (1000*60*60*24))
+              })()
               if (diasSinPesar >= 6) {
                 const esHoy = diasSinPesar >= 7
                 eventosProximos.push({
@@ -5412,12 +5507,15 @@ const cargarHistoricoPesos = async () => {
                     <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:'12px' }}>
                       {lotes.filter(l => l.activo).map(lote => {
                         const edadDias = lote.edad_dias || Math.floor((Date.now() - new Date(lote.fecha_inicio)) / (1000*60*60*24))
-                        const pesajesLote = pesajes.filter(p => String(p.lote) === String(lote._id) || p.lote?._id === lote._id)
-                        const ultimoPesaje = pesajesLote.sort((a,b) => new Date(b.fecha) - new Date(a.fecha))[0]
-                        const diasSinPesar = ultimoPesaje
-                          ? Math.floor((ahora - new Date(ultimoPesaje.fecha)) / (1000*60*60*24))
-                          : edadDias
-                        const proximoPesaje = 7 - (diasSinPesar % 7)
+                        const pesajesLote = pesajes.filter(p => String(p.lote?._id || p.lote) === String(lote._id))
+                        const ultimoPesaje = pesajesLote.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt))[0]
+                        const diasSinPesar = (() => {
+                          if (!ultimoPesaje) return edadDias
+                          const ts = new Date(ultimoPesaje.createdAt)
+                          if (isNaN(ts.getTime())) return edadDias
+                          return Math.floor((ahora - ts) / (1000*60*60*24))
+                        })()
+                        const proximoPesaje = diasSinPesar >= 7 ? 0 : 7 - (diasSinPesar % 7)
                         const fase = getEtapaAutomatica(edadDias)
                         const semana = Math.ceil(edadDias / 7)
                         const pesajeVencido = diasSinPesar >= 7
@@ -5836,6 +5934,7 @@ const cargarHistoricoPesos = async () => {
         }}
         onNuevoCerdo={crearCerdo}
         onEliminarCerdo={eliminarCerdo}
+        onActualizarLote={async (id, datos) => { await actualizarLote(id, datos); await cargarLotes() }}
       />
     )}
 

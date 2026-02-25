@@ -25,6 +25,14 @@ const pesajeSchema = new mongoose.Schema({
   peso_promedio: {
     type: Number
   },
+  peso_min: {
+    type: Number,
+    default: null
+  },
+  peso_max: {
+    type: Number,
+    default: null
+  },
   unidad: {
     type: String,
     default: 'kg',
