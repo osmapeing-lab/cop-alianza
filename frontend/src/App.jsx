@@ -2176,6 +2176,19 @@ const eliminarRegistroContable = async (id) => {
   }
 }
 
+const eliminarProductoAlimento = async (id, nombre) => {
+  if (!confirm(`¿Eliminar el producto "${nombre}" y todo su historial? Esta acción no se puede deshacer.`)) return
+  try {
+    await axios.delete(`${API_URL}/api/inventario-alimento/${id}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    await cargarInventarioAlimento()
+    alert(`✓ Producto "${nombre}" eliminado.`)
+  } catch (error) {
+    alert('Error eliminando producto: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
 const eliminarCosto = async (id) => {
   if (!confirm('¿Eliminar este costo?')) return
   try {
@@ -4589,7 +4602,7 @@ const cargarHistoricoPesos = async () => {
                 <button className={`tab-btn ${tabFinanzas === 'resumen' ? 'activo' : ''}`} onClick={() => setTabFinanzas('resumen')}>Resumen</button>
                 <button className={`tab-btn ${tabFinanzas === 'costos' ? 'activo' : ''}`} onClick={() => setTabFinanzas('costos')}>Costos</button>
                 <button className={`tab-btn ${tabFinanzas === 'ventas' ? 'activo' : ''}`} onClick={() => setTabFinanzas('ventas')}>Ventas</button>
-                <button className={`tab-btn ${tabFinanzas === 'registros' ? 'activo' : ''}`} onClick={() => setTabFinanzas('registros')}>Registros</button>
+{/* Tab Registros legado oculto */}
                 <button className={`tab-btn ${tabFinanzas === 'gastos-lote' ? 'activo' : ''}`} onClick={() => setTabFinanzas('gastos-lote')}>Gastos por Lote</button>
               </div>
 
@@ -4769,8 +4782,8 @@ const cargarHistoricoPesos = async () => {
                 </div>
               )}
 
-              {/* ── TAB: REGISTROS (Sistema legado contabilidad) ── */}
-              {tabFinanzas === 'registros' && (
+              {/* ── TAB: REGISTROS (legado - oculto) ── */}
+              {false && tabFinanzas === 'registros' && (
                 <div className="finanzas-registros">
                   <div className="tab-header-actions">
                     <h3>Registros Contables</h3>
@@ -5188,35 +5201,165 @@ const cargarHistoricoPesos = async () => {
           {/* ════════════════════════════════════════════════════════════════ */}
           {/* PÁGINA: ALERTAS */}
           {/* ════════════════════════════════════════════════════════════════ */}
-          {pagina === 'alertas' && (
-            <div className="page-alertas">
-              <div className="page-header">
-                <h2>Historial de Alertas</h2>
-                <button className="btn-refresh" onClick={cargarAlertas}>
-                  <IconRefresh />
-                </button>
-              </div>
+          {pagina === 'alertas' && (() => {
+            const ahora = new Date()
+            const hace48h = new Date(ahora - 48 * 3600000)
+            const hace7d  = new Date(ahora - 7  * 24 * 3600000)
 
-              <div className="alertas-container">
-                {alertas.length === 0 ? (
-                  <p className="sin-datos">No hay alertas registradas</p>
-                ) : (
-                  alertas.map((alerta, i) => (
-                    <div key={i} className={`alerta-card ${alerta.tipo}`}>
-                      <div className="alerta-icon">
-                        <IconAlerta />
-                      </div>
-                      <div className="alerta-content">
-                        <span className={`alerta-tipo ${alerta.tipo}`}>{alerta.tipo.toUpperCase()}</span>
-                        <p>{alerta.mensaje}</p>
-                        <small>{formatearFecha(alerta.createdAt)}</small>
-                      </div>
-                    </div>
-                  ))
-                )}
+            // Separar alertas del sistema por urgencia
+            const urgentes  = alertas.filter(a => new Date(a.createdAt) >= hace48h)
+            const historial = alertas.filter(a => new Date(a.createdAt) < hace48h)
+
+            // Calcular eventos próximos desde los lotes activos
+            const eventosProximos = []
+            lotes.filter(l => l.activo).forEach(lote => {
+              const edadDias = lote.edad_dias || Math.floor((Date.now() - new Date(lote.fecha_inicio)) / (1000*60*60*24))
+
+              // Pesaje pendiente (>6 días sin pesar)
+              const pesajesLote = pesajes.filter(p => String(p.lote) === String(lote._id) || p.lote?._id === lote._id)
+              const ultimoPesaje = pesajesLote.sort((a,b) => new Date(b.fecha) - new Date(a.fecha))[0]
+              const diasSinPesar = ultimoPesaje
+                ? Math.floor((ahora - new Date(ultimoPesaje.fecha)) / (1000*60*60*24))
+                : edadDias
+              if (diasSinPesar >= 6) {
+                const esHoy = diasSinPesar >= 7
+                eventosProximos.push({
+                  prioridad: esHoy ? 'urgente' : 'proximo',
+                  tipo: 'pesaje',
+                  emoji: '⚖️',
+                  titulo: esHoy ? 'Pesaje VENCIDO' : 'Pesaje esta semana',
+                  mensaje: `${lote.nombre}: ${diasSinPesar} días sin pesar (pesaje semanal)`,
+                  lote: lote.nombre,
+                  dias: diasSinPesar
+                })
+              }
+
+              // Cambio de etapa próximo (±5 días de umbral)
+              const umbrales = [{ dia: 70, de: 'Inicio', a: 'Crecimiento' }, { dia: 120, de: 'Crecimiento', a: 'Engorde' }]
+              umbrales.forEach(u => {
+                const diff = u.dia - edadDias
+                if (diff >= 0 && diff <= 7) {
+                  eventosProximos.push({
+                    prioridad: diff <= 2 ? 'urgente' : 'proximo',
+                    tipo: 'etapa',
+                    emoji: '🔄',
+                    titulo: diff <= 2 ? 'Cambio de etapa HOY/MAÑANA' : `Cambio de etapa en ${diff} días`,
+                    mensaje: `${lote.nombre}: Pasa de ${u.de} → ${u.a} (día ${u.dia})`,
+                    lote: lote.nombre,
+                    dias: diff
+                  })
+                }
+              })
+
+              // Castración recomendada (lechones 7-14 días)
+              if (edadDias >= 7 && edadDias <= 16) {
+                eventosProximos.push({
+                  prioridad: 'urgente',
+                  tipo: 'castracion',
+                  emoji: '🏥',
+                  titulo: 'Castración recomendada',
+                  mensaje: `${lote.nombre}: lechones con ${edadDias} días (castración óptima 7-14 días)`,
+                  lote: lote.nombre,
+                  dias: 0
+                })
+              }
+
+              // Vacunas: Peste Porcina Clásica (21 días), Circovirus (14-21 días)
+              if (edadDias >= 12 && edadDias <= 23) {
+                eventosProximos.push({
+                  prioridad: edadDias >= 19 ? 'urgente' : 'proximo',
+                  tipo: 'vacuna',
+                  emoji: '💉',
+                  titulo: edadDias >= 19 ? 'Vacunación — REVISAR HOY' : `Vacunación próxima (día 21)`,
+                  mensaje: `${lote.nombre}: Circovirus / PPC recomendada a los 21 días (lote tiene ${edadDias} días)`,
+                  lote: lote.nombre,
+                  dias: 21 - edadDias
+                })
+              }
+            })
+
+            // Ordenar: urgentes primero, luego por días
+            eventosProximos.sort((a,b) => {
+              if (a.prioridad === 'urgente' && b.prioridad !== 'urgente') return -1
+              if (b.prioridad === 'urgente' && a.prioridad !== 'urgente') return 1
+              return a.dias - b.dias
+            })
+
+            const seccionStyles = {
+              urgente: { border: '#fca5a5', bg: '#fef2f2', titulo: '#dc2626', badge: '#dc2626' },
+              proximo: { border: '#fde68a', bg: '#fffbeb', titulo: '#d97706', badge: '#d97706' },
+              info:    { border: '#93c5fd', bg: '#eff6ff', titulo: '#1d4ed8', badge: '#2563eb' }
+            }
+
+            const AlertCard = ({ alerta, esEvento = false }) => {
+              const tipo = esEvento ? alerta.prioridad : (alerta.tipo === 'critico' ? 'urgente' : 'proximo')
+              const s = seccionStyles[tipo] || seccionStyles.info
+              return (
+                <div style={{ display:'flex', gap:'12px', padding:'12px 14px', borderRadius:'10px', border:`1px solid ${s.border}`, background: s.bg, marginBottom:'8px' }}>
+                  <div style={{ fontSize:'22px', lineHeight:1 }}>{esEvento ? alerta.emoji : (alerta.tipo === 'critico' ? '🔴' : '⚠️')}</div>
+                  <div style={{ flex:1 }}>
+                    {esEvento
+                      ? <div style={{ fontWeight:'700', fontSize:'14px', color: s.titulo }}>{alerta.titulo}</div>
+                      : <div style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'2px' }}>
+                          <span style={{ fontSize:'11px', fontWeight:'700', background: s.badge, color:'#fff', padding:'2px 7px', borderRadius:'20px', textTransform:'uppercase' }}>{alerta.tipo}</span>
+                        </div>
+                    }
+                    <p style={{ margin:'2px 0', fontSize:'13px', color:'#374151' }}>{esEvento ? alerta.mensaje : alerta.mensaje}</p>
+                    {!esEvento && <small style={{ color:'#9ca3af', fontSize:'11px' }}>{formatearFecha(alerta.createdAt)}</small>}
+                    {esEvento && alerta.lote && <small style={{ color:'#9ca3af', fontSize:'11px' }}>Lote: {alerta.lote}</small>}
+                  </div>
+                </div>
+              )
+            }
+
+            return (
+              <div className="page-alertas">
+                <div className="page-header">
+                  <h2><Bell size={22} /> Centro de Alertas y Notificaciones</h2>
+                  <button className="btn-refresh" onClick={cargarAlertas}><IconRefresh /></button>
+                </div>
+
+                {/* SECCIÓN 1: URGENTES */}
+                <div style={{ marginBottom:'28px' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px' }}>
+                    <span style={{ background:'#dc2626', color:'#fff', borderRadius:'8px', padding:'4px 12px', fontWeight:'700', fontSize:'13px' }}>🔴 URGENTE / HOY</span>
+                    <span style={{ color:'#64748b', fontSize:'12px' }}>Últimas 48 horas · requieren atención inmediata</span>
+                  </div>
+                  {[...eventosProximos.filter(e => e.prioridad === 'urgente'), ...urgentes].length === 0
+                    ? <p style={{ color:'#64748b', fontSize:'13px', padding:'10px 14px', background:'#f8fafc', borderRadius:'8px', border:'1px solid #e2e8f0' }}>Sin alertas urgentes activas</p>
+                    : <>
+                        {eventosProximos.filter(e => e.prioridad === 'urgente').map((e, i) => <AlertCard key={`ev-u-${i}`} alerta={e} esEvento />)}
+                        {urgentes.map((a, i) => <AlertCard key={`al-u-${i}`} alerta={a} />)}
+                      </>
+                  }
+                </div>
+
+                {/* SECCIÓN 2: PRÓXIMOS EVENTOS */}
+                <div style={{ marginBottom:'28px' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px' }}>
+                    <span style={{ background:'#d97706', color:'#fff', borderRadius:'8px', padding:'4px 12px', fontWeight:'700', fontSize:'13px' }}>⚠️ PRÓXIMOS EVENTOS</span>
+                    <span style={{ color:'#64748b', fontSize:'12px' }}>Calculado desde los lotes activos · próximos 7 días</span>
+                  </div>
+                  {eventosProximos.filter(e => e.prioridad === 'proximo').length === 0
+                    ? <p style={{ color:'#64748b', fontSize:'13px', padding:'10px 14px', background:'#f8fafc', borderRadius:'8px', border:'1px solid #e2e8f0' }}>No hay eventos próximos en los siguientes 7 días</p>
+                    : eventosProximos.filter(e => e.prioridad === 'proximo').map((e, i) => <AlertCard key={`ev-p-${i}`} alerta={e} esEvento />)
+                  }
+                </div>
+
+                {/* SECCIÓN 3: HISTORIAL */}
+                <div>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px' }}>
+                    <span style={{ background:'#475569', color:'#fff', borderRadius:'8px', padding:'4px 12px', fontWeight:'700', fontSize:'13px' }}>📋 HISTORIAL</span>
+                    <span style={{ color:'#64748b', fontSize:'12px' }}>Alertas del sistema anteriores a 48 horas</span>
+                  </div>
+                  {historial.length === 0
+                    ? <p style={{ color:'#64748b', fontSize:'13px', padding:'10px 14px', background:'#f8fafc', borderRadius:'8px', border:'1px solid #e2e8f0' }}>Sin historial de alertas</p>
+                    : historial.slice(0, 30).map((a, i) => <AlertCard key={`hist-${i}`} alerta={a} />)
+                  }
+                </div>
               </div>
-            </div>
-          )}
+            )
+          })()}
 
           {/* ════════════════════════════════════════════════════════════════ */}
           {/* PÁGINA: REPORTES */}
@@ -5348,75 +5491,7 @@ const cargarHistoricoPesos = async () => {
                   </div>
                 </div>
 
-                <div className="reporte-card">
-                  <div className="reporte-icon">
-                    <IconLote />
-                  </div>
-                  <h3>Resumen por Lote</h3>
-                  <p>Selecciona un lote para ver su información detallada</p>
-                  <select 
-                    className="select-lote"
-                    onChange={e => {
-                      if (e.target.value) {
-                        setLoteSeleccionado(lotes.find(l => l._id === e.target.value))
-                      }
-                    }}
-                  >
-                    <option value="">Seleccionar lote...</option>
-                    {lotes.map(lote => (
-                      <option key={lote._id} value={lote._id}>{lote.nombre}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="reporte-card">
-                  <div className="reporte-icon">
-                    <IconDinero />
-                  </div>
-                  <h3>Balance Contable</h3>
-                  <div className="balance-preview">
-                    <div className="balance-item">
-                      <span>Ingresos:</span>
-                      <strong className="positivo">{formatearDinero(resumenContable.total_ingresos)}</strong>
-                    </div>
-                    <div className="balance-item">
-                      <span>Gastos:</span>
-                      <strong className="negativo">{formatearDinero(resumenContable.total_gastos)}</strong>
-                    </div>
-                    <div className="balance-item total">
-                      <span>Balance:</span>
-                      <strong className={resumenContable.ganancia >= 0 ? 'positivo' : 'negativo'}>
-                        {formatearDinero(resumenContable.ganancia)}
-                      </strong>
-                    </div>
-                  </div>
-                </div>
               </div>
-
-              {/* Detalle del lote seleccionado */}
-              {loteSeleccionado && (
-                <div className="lote-detalle">
-                  <h3>Detalle: {loteSeleccionado.nombre}</h3>
-                  <div className="detalle-grid">
-                    <div className="detalle-item">
-                      <span>Cantidad Cerdos</span>
-                      <strong>{loteSeleccionado.cantidad_cerdos}</strong>
-                    </div>
-                    <div className="detalle-item">
-                      <span>Peso Prom. por Cerdo</span>
-                      <strong>{loteSeleccionado.peso_promedio_actual || 0} kg</strong>
-                    </div>
-                    <div className="detalle-item">
-                      <span>Peso Total Estimado</span>
-                      <strong>{((loteSeleccionado.peso_promedio_actual || 0) * loteSeleccionado.cantidad_cerdos).toFixed(0)} kg</strong>
-                    </div>
-                    <div className="detalle-item">
-                      <span>Valor Estimado Venta</span>
-                      <strong>{formatearDinero((loteSeleccionado.peso_promedio_actual || 0) * loteSeleccionado.cantidad_cerdos * config.precio_venta_kg)}</strong>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -5647,8 +5722,17 @@ const cargarHistoricoPesos = async () => {
                 return (
                   <div key={inv._id} style={{
                     flex:'1', minWidth:'220px', padding:'16px', borderRadius:'12px',
-                    border:`1px solid ${borderColor}`, background: bgColor
+                    border:`1px solid ${borderColor}`, background: bgColor, position:'relative'
                   }}>
+                    {(user?.rol === 'ingeniero' || user?.rol === 'superadmin') && (
+                      <button
+                        title="Eliminar producto (solo ingeniero)"
+                        onClick={() => eliminarProductoAlimento(inv._id, inv.nombre)}
+                        style={{ position:'absolute', top:'8px', right:'8px', background:'none', border:'none', cursor:'pointer', color:'#ef4444', padding:'2px' }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    )}
                     <div style={{fontWeight:'700', fontSize:'15px', marginBottom:'2px'}}>{inv.nombre}</div>
                     <div style={{fontSize:'12px', color:'#64748b', marginBottom:'8px'}}>Tipo: {inv.tipo} · {inv.peso_por_bulto_kg} kg/bulto</div>
 

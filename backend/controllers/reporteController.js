@@ -800,8 +800,12 @@ exports.enviarReportePorEmail = (req, res) => {
   const fechaArchivo = new Date().toISOString().split('T')[0];
 
   const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    connectionTimeout: 15000,
+    tls: { rejectUnauthorized: false }
   });
 
   construirWorkbook()
@@ -902,8 +906,12 @@ exports.testEmail = async (_req, res) => {
   }
 
   const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    connectionTimeout: 15000,
+    tls: { rejectUnauthorized: false }
   });
 
   try {
@@ -927,7 +935,10 @@ exports.testEmail = async (_req, res) => {
       ].join(' ');
     } else if (error.code === 'ECONNECTION' || error.code === 'ENOTFOUND') {
       problema = 'SIN_CONEXION';
-      solucion = 'El servidor no puede conectarse a Gmail. Verifica la conexión a internet del servidor.';
+      solucion = 'El servidor no puede conectarse a Gmail (smtp.gmail.com). Verifica la conexión a internet del servidor.';
+    } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNREFUSED') {
+      problema = 'CONEXION_TIMEOUT';
+      solucion = 'Tiempo de espera agotado al conectar con smtp.gmail.com:587. El proveedor de hosting puede estar bloqueando el puerto. Verifica que EMAIL_USER y EMAIL_PASS estén configuradas correctamente en las variables de entorno de Render.';
     } else if (error.message?.includes('Username and Password not accepted')) {
       problema = 'CONTRASEÑA_NO_ACEPTADA';
       solucion = 'Contraseña no aceptada. Usa una App Password de 16 dígitos generada en tu cuenta Google, no la contraseña normal de Gmail.';
