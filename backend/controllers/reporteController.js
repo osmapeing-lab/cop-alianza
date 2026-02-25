@@ -19,6 +19,7 @@
 
 const ExcelJS    = require('exceljs');
 const { Resend }  = require('resend');
+const nodemailer  = require('nodemailer');
 const Reading    = require('../models/Reading');
 const Weighing   = require('../models/pesaje');
 const Lote       = require('../models/lote');
@@ -819,14 +820,52 @@ exports.generarReporteExcel = async (_req, res) => {
 // Body: { correo: "destino@ejemplo.com" }
 // ═══════════════════════════════════════════════════════════════════════
 
+// Crea el transporter según variables disponibles: Brevo > Resend
+const crearTransporter = () => {
+  if (process.env.BREVO_USER && process.env.BREVO_PASS) {
+    return nodemailer.createTransport({
+      host: 'smtp-relay.brevo.com',
+      port: 587,
+      secure: false,
+      auth: { user: process.env.BREVO_USER, pass: process.env.BREVO_PASS }
+    });
+  }
+  return null; // usa Resend como fallback
+};
+
+const enviarEmail = async ({ to, subject, html, attachments }) => {
+  const transporter = crearTransporter();
+  if (transporter) {
+    // ── Brevo SMTP ───────────────────────────────────────────────────
+    await transporter.sendMail({
+      from: `"COO Alianzas" <${process.env.BREVO_USER}>`,
+      to, subject, html,
+      attachments
+    });
+  } else if (process.env.RESEND_API_KEY) {
+    // ── Resend API (fallback) ────────────────────────────────────────
+    const resend   = new Resend(process.env.RESEND_API_KEY);
+    const fromAddr = process.env.RESEND_FROM || 'COO Alianzas <onboarding@resend.dev>';
+    const resAttach = attachments?.map(a => ({
+      filename: a.filename,
+      content:  Buffer.isBuffer(a.content) ? a.content.toString('base64') : a.content,
+      contentType: a.contentType
+    }));
+    const { error } = await resend.emails.send({ from: fromAddr, to, subject, html, attachments: resAttach });
+    if (error) throw new Error(error.message);
+  } else {
+    throw new Error('No hay proveedor de email configurado (BREVO_USER/BREVO_PASS o RESEND_API_KEY)');
+  }
+};
+
 exports.enviarReportePorEmail = (req, res) => {
   const { correo } = req.body;
 
   if (!correo || !correo.includes('@')) {
     return res.status(400).json({ mensaje: 'Correo electrónico inválido' });
   }
-  if (!process.env.RESEND_API_KEY) {
-    return res.status(500).json({ mensaje: 'RESEND_API_KEY no está configurada en el servidor.' });
+  if (!process.env.BREVO_USER && !process.env.RESEND_API_KEY) {
+    return res.status(500).json({ mensaje: 'No hay proveedor de email configurado en el servidor.' });
   }
 
   // ── Responder inmediatamente para evitar timeout ─────────────────────
@@ -835,13 +874,10 @@ exports.enviarReportePorEmail = (req, res) => {
   // ── Generar y enviar en segundo plano ────────────────────────────────
   const fecha        = new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Bogota' });
   const fechaArchivo = new Date().toISOString().split('T')[0];
-  const resend       = new Resend(process.env.RESEND_API_KEY);
-  const fromAddr     = process.env.RESEND_FROM || 'COO Alianzas <onboarding@resend.dev>';
 
   construirWorkbook()
     .then(workbook => workbook.xlsx.writeBuffer())
-    .then(buffer => resend.emails.send({
-      from:    fromAddr,
+    .then(buffer => enviarEmail({
       to:      correo,
       subject: `Reporte Completo Granja Porcina — ${fecha}`,
       html: `
@@ -879,14 +915,11 @@ exports.enviarReportePorEmail = (req, res) => {
       `,
       attachments: [{
         filename:    `Reporte_COO_Alianzas_${fechaArchivo}.xlsx`,
-        content:     buffer.toString('base64'),
+        content:     buffer,
         contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       }]
     }))
-    .then(result => {
-      if (result.error) throw new Error(result.error.message);
-      console.log(`[REPORTE] Email enviado exitosamente a ${correo} (id: ${result.data?.id})`);
-    })
+    .then(() => console.log(`[REPORTE] Email enviado exitosamente a ${correo}`))
     .catch(err => console.error(`[REPORTE] Error enviando email a ${correo}:`, err.message));
 };
 

@@ -1,30 +1,33 @@
 const Alert = require('../models/Alert');
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
+const { Resend }  = require('resend');
 
 exports.enviarAlertaEmail = async (asunto, contenidoHTML) => {
   try {
-    if (!process.env.RESEND_API_KEY) {
-      console.log('[ALERTA] RESEND_API_KEY no configurada, omitiendo email');
-      return false;
-    }
-
-    const resend   = new Resend(process.env.RESEND_API_KEY);
-    const fromAddr = process.env.RESEND_FROM || 'COO Alianzas <onboarding@resend.dev>';
-    const toAddr   = process.env.EMAIL_USER  || process.env.ALERT_EMAIL;
-
+    const toAddr = process.env.EMAIL_USER || process.env.BREVO_USER || process.env.ALERT_EMAIL;
     if (!toAddr) {
-      console.log('[ALERTA] EMAIL_USER no configurado, no se sabe a quién enviar la alerta');
+      console.log('[ALERTA] Destino de email no configurado, omitiendo');
       return false;
     }
 
-    const { error } = await resend.emails.send({
-      from:    fromAddr,
-      to:      toAddr,
-      subject: asunto,
-      html:    contenidoHTML
-    });
+    if (process.env.BREVO_USER && process.env.BREVO_PASS) {
+      // ── Brevo SMTP ─────────────────────────────────────────────────
+      const t = nodemailer.createTransport({
+        host: 'smtp-relay.brevo.com', port: 587, secure: false,
+        auth: { user: process.env.BREVO_USER, pass: process.env.BREVO_PASS }
+      });
+      await t.sendMail({ from: `"COO Alianzas" <${process.env.BREVO_USER}>`, to: toAddr, subject: asunto, html: contenidoHTML });
+    } else if (process.env.RESEND_API_KEY) {
+      // ── Resend fallback ────────────────────────────────────────────
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      const from   = process.env.RESEND_FROM || 'COO Alianzas <onboarding@resend.dev>';
+      const { error } = await resend.emails.send({ from, to: toAddr, subject: asunto, html: contenidoHTML });
+      if (error) throw new Error(error.message);
+    } else {
+      console.log('[ALERTA] Sin proveedor de email configurado');
+      return false;
+    }
 
-    if (error) throw new Error(error.message);
     console.log('[ALERTA] Email enviado:', asunto);
     return true;
   } catch (error) {
