@@ -2124,12 +2124,14 @@ const registrarAlimentacionDesdeInventario = async () => {
 
     setMostrarModalAlimInv(false)
     setNuevaAlimInv({ inventario_id: '', cantidad_kg: '', notas: '' })
-    // Recargar datos relacionados
-    await Promise.all([
+    // Recargar datos relacionados (incluyendo loteDetalle para actualizar alimento_total_kg e ICA)
+    const [, , , resLote] = await Promise.all([
       cargarAlimentacionLote(loteDetalle._id),
       cargarInventarioAlimento(),
-      cargarCostos()
+      cargarCostos(),
+      axios.get(`${API_URL}/api/lotes/${loteDetalle._id}`, { headers: { Authorization: `Bearer ${token}` } })
     ])
+    setLoteDetalle(resLote.data)
     alert(res.data.mensaje)
   } catch (error) {
     alert('Error: ' + (error.response?.data?.mensaje || error.message))

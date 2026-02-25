@@ -77,21 +77,23 @@ pesajeSchema.post('save', async function(doc) {
     const Lote = mongoose.model('Lote');
     const Pesaje = mongoose.model('Pesaje');
     
-    // Obtener TODOS los pesajes del lote
+    // Obtener TODOS los pesajes del lote ordenados por fecha
     const pesajes = await Pesaje.find({ lote: doc.lote }).sort({ createdAt: -1 });
-    
+
     if (pesajes.length > 0) {
-      // Calcular nuevo peso promedio
-      const sumaPesos = pesajes.reduce((total, p) => total + (p.peso_promedio || 0), 0);
-      const nuevoPesoPromedio = sumaPesos / pesajes.length;
-      
+      // Usar solo los pesajes del DÍA MÁS RECIENTE (igual que el chart)
+      const ultimaFecha = new Date(pesajes[0].createdAt).toDateString();
+      const delUltimoDia = pesajes.filter(p => new Date(p.createdAt).toDateString() === ultimaFecha);
+      const sumaPesos = delUltimoDia.reduce((total, p) => total + (p.peso_promedio || 0), 0);
+      const nuevoPesoPromedio = sumaPesos / delUltimoDia.length;
+
       // Actualizar el lote
       await Lote.findByIdAndUpdate(doc.lote, {
         peso_promedio_actual: nuevoPesoPromedio,
         updatedAt: new Date()
       });
-      
-      console.log(`✅ Lote actualizado: ${nuevoPesoPromedio.toFixed(2)} kg`);
+
+      console.log(`✅ Lote actualizado: ${nuevoPesoPromedio.toFixed(2)} kg (promedio de ${delUltimoDia.length} pesajes del último día)`);
     }
   } catch (error) {
     console.error('❌ Error actualizando lote después de pesaje:', error);
@@ -108,12 +110,14 @@ pesajeSchema.post('deleteOne', { document: true, query: false }, async function(
     const Lote = mongoose.model('Lote');
     const Pesaje = mongoose.model('Pesaje');
     
-    // Obtener pesajes restantes
-    const pesajes = await Pesaje.find({ lote: doc.lote });
-    
+    // Obtener pesajes restantes, usar solo el día más reciente
+    const pesajes = await Pesaje.find({ lote: doc.lote }).sort({ createdAt: -1 });
+
     if (pesajes.length > 0) {
-      const sumaPesos = pesajes.reduce((total, p) => total + (p.peso_promedio || 0), 0);
-      const nuevoPesoPromedio = sumaPesos / pesajes.length;
+      const ultimaFecha = new Date(pesajes[0].createdAt).toDateString();
+      const delUltimoDia = pesajes.filter(p => new Date(p.createdAt).toDateString() === ultimaFecha);
+      const sumaPesos = delUltimoDia.reduce((total, p) => total + (p.peso_promedio || 0), 0);
+      const nuevoPesoPromedio = sumaPesos / delUltimoDia.length;
       
       await Lote.findByIdAndUpdate(doc.lote, {
         peso_promedio_actual: nuevoPesoPromedio
