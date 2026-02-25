@@ -298,21 +298,49 @@ async function construirWorkbook() {
   ];
   estilizarHeader(contaSheet);
 
-  const contabilidad = await Contabilidad.find().populate('lote', 'nombre').sort({ fecha: -1 });
+  // Combinar Costos (gastos) + Ventas (ingresos) — la colección Contabilidad está en desuso
+  const [costos, ventas] = await Promise.all([
+    Costo.find({ estado: { $ne: 'anulado' } }).populate('lote', 'nombre').sort({ fecha: -1 }),
+    Venta.find().populate('lote', 'nombre').sort({ fecha: -1 })
+  ]);
+
+  const registrosConta = [
+    ...costos.map(c => ({
+      fecha:       c.fecha || c.createdAt,
+      tipo:        'gasto',
+      categoria:   c.categoria || c.tipo_costo || '-',
+      descripcion: c.descripcion || '-',
+      cantidad:    c.cantidad || 1,
+      precio:      c.precio_unitario || c.total || 0,
+      total:       c.total || 0,
+      lote:        c.lote?.nombre || '-'
+    })),
+    ...ventas.map(v => ({
+      fecha:       v.fecha || v.createdAt,
+      tipo:        'ingreso',
+      categoria:   'venta_cerdos',
+      descripcion: v.descripcion || `Venta — ${v.cantidad_cerdos || 1} cerdo(s)`,
+      cantidad:    v.cantidad_cerdos || 1,
+      precio:      v.precio_kg || v.total || 0,
+      total:       v.total || 0,
+      lote:        v.lote?.nombre || '-'
+    }))
+  ].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
   let totalIngresos = 0, totalGastosConta = 0;
 
-  contabilidad.forEach(c => {
-    if (c.tipo === 'ingreso') totalIngresos  += c.total;
-    if (c.tipo === 'gasto')   totalGastosConta += c.total;
+  registrosConta.forEach(c => {
+    if (c.tipo === 'ingreso') totalIngresos    += c.total;
+    else                      totalGastosConta += c.total;
     const addedRow = contaSheet.addRow({
-      fecha:       c.fecha?.toLocaleDateString('es-CO') || '-',
+      fecha:       new Date(c.fecha).toLocaleDateString('es-CO'),
       tipo:        c.tipo === 'ingreso' ? 'Ingreso' : 'Gasto',
       categoria:   c.categoria,
-      descripcion: c.descripcion || '-',
+      descripcion: c.descripcion,
       cantidad:    c.cantidad,
-      precio:      c.precio_unitario,
+      precio:      c.precio,
       total:       c.total,
-      lote:        c.lote?.nombre || '-'
+      lote:        c.lote
     });
     addedRow.getCell('tipo').font = {
       bold: true,
@@ -346,8 +374,17 @@ async function construirWorkbook() {
   ];
   estilizarHeader(alertasSheet);
 
-  const alertas = await Alert.find().sort({ createdAt: -1 }).limit(100);
-  alertas.forEach(a => {
+  // Traer alertas y deduplicar: solo 1 por tipo dentro del mismo bloque de 1 hora
+  const todasAlertas = await Alert.find().sort({ createdAt: -1 }).limit(500);
+  const alertasDedup = [];
+  const vistas = new Set();
+  todasAlertas.forEach(a => {
+    const hora = a.createdAt ? new Date(a.createdAt).toISOString().slice(0, 13) : 'x';
+    const clave = `${a.tipo}_${hora}`;
+    if (!vistas.has(clave)) { vistas.add(clave); alertasDedup.push(a); }
+  });
+
+  alertasDedup.forEach(a => {
     const addedRow = alertasSheet.addRow({
       fecha:   a.createdAt?.toLocaleString('es-CO', { timeZone: 'America/Bogota' }) || '-',
       tipo:    a.tipo,
@@ -801,8 +838,8 @@ exports.enviarReportePorEmail = (req, res) => {
 
   const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
+    port: 465,
+    secure: true,
     auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
     connectionTimeout: 15000,
     tls: { rejectUnauthorized: false }
@@ -907,8 +944,8 @@ exports.testEmail = async (_req, res) => {
 
   const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false,
+    port: 465,
+    secure: true,
     auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
     connectionTimeout: 15000,
     tls: { rejectUnauthorized: false }
