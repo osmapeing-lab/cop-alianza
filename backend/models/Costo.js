@@ -109,6 +109,18 @@ const costoSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Lote'
   },
+
+  inventario_ref: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'InventarioAlimento',
+    default: null
+  },
+
+  // Bultos que representa este costo (para revertir inventario al borrar)
+  bultos_ref: {
+    type: Number,
+    default: null
+  },
   
   granja: {
     type: mongoose.Schema.Types.ObjectId,

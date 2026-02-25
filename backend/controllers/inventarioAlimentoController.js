@@ -156,7 +156,9 @@ exports.registrarEntrada = async (req, res) => {
         precio_unitario: precioPorKg,
         total: cantidad_bultos * precioBultoFinal,
         estado: 'registrado',
-        metodo_pago: 'efectivo'
+        metodo_pago: 'efectivo',
+        inventario_ref: inventario._id,
+        bultos_ref: cantidad_bultos
       });
       await costoCompra.save();
     } catch (costoErr) {

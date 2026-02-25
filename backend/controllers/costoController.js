@@ -4,9 +4,10 @@
  * ═══════════════════════════════════════════════════════════════════════
  */
 
-const Costo = require('../models/Costo');
-const Venta = require('../models/Venta');
-const Lote  = require('../models/lote');
+const Costo             = require('../models/Costo');
+const Venta             = require('../models/Venta');
+const Lote              = require('../models/lote');
+const InventarioAlimento = require('../models/InventarioAlimento');
 
 // ═══════════════════════════════════════════════════════════════════════
 // OBTENER TODOS LOS COSTOS
@@ -104,6 +105,23 @@ exports.anularCosto = async (req, res) => {
           lote.total_gastos = lote.gastos_semanales.reduce((s, g) => s + (g.monto || 0), 0);
           await lote.save();
         }
+      }
+    }
+
+    // Si el costo tiene inventario_ref, revertir los bultos en inventario
+    if (costo.inventario_ref && costo.bultos_ref > 0) {
+      const inv = await InventarioAlimento.findById(costo.inventario_ref);
+      if (inv) {
+        inv.cantidad_bultos = Math.max(0, (inv.cantidad_bultos || 0) - costo.bultos_ref);
+        inv.movimientos.push({
+          tipo: 'salida',
+          cantidad_bultos: costo.bultos_ref,
+          cantidad_kg: costo.bultos_ref * (inv.peso_por_bulto_kg || 40),
+          precio_unitario: inv.precio_bulto || 0,
+          total: costo.total || 0,
+          descripcion: `Reversión por eliminación de costo: ${costo.descripcion}`
+        });
+        await inv.save();
       }
     }
 
