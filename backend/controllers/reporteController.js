@@ -19,7 +19,7 @@
 
 const ExcelJS    = require('exceljs');
 const { Resend }  = require('resend');
-const nodemailer  = require('nodemailer');
+const axios       = require('axios');
 const Reading    = require('../models/Reading');
 const Weighing   = require('../models/pesaje');
 const Lote       = require('../models/lote');
@@ -820,28 +820,26 @@ exports.generarReporteExcel = async (_req, res) => {
 // Body: { correo: "destino@ejemplo.com" }
 // ═══════════════════════════════════════════════════════════════════════
 
-// Crea el transporter según variables disponibles: Brevo > Resend
-const crearTransporter = () => {
-  if (process.env.BREVO_USER && process.env.BREVO_PASS) {
-    return nodemailer.createTransport({
-      host: 'smtp-relay.brevo.com',
-      port: 587,
-      secure: false,
-      auth: { user: process.env.BREVO_USER, pass: process.env.BREVO_PASS }
-    });
-  }
-  return null; // usa Resend como fallback
-};
-
+// Envía email via API HTTP (Brevo API > Resend). No usa SMTP, funciona en Render.
 const enviarEmail = async ({ to, subject, html, attachments }) => {
-  const transporter = crearTransporter();
-  if (transporter) {
-    // ── Brevo SMTP ───────────────────────────────────────────────────
-    await transporter.sendMail({
-      from: `"COO Alianzas" <${process.env.BREVO_USER}>`,
-      to, subject, html,
-      attachments
+  if (process.env.BREVO_API_KEY) {
+    // ── Brevo API HTTP (no SMTP, no bloqueado por Render) ────────────
+    const body = {
+      sender:      { name: 'COO Alianzas', email: process.env.BREVO_USER || process.env.EMAIL_USER },
+      to:          [{ email: to }],
+      subject,
+      htmlContent: html
+    };
+    if (attachments?.length) {
+      body.attachment = attachments.map(a => ({
+        name:    a.filename,
+        content: Buffer.isBuffer(a.content) ? a.content.toString('base64') : a.content
+      }));
+    }
+    const resp = await axios.post('https://api.brevo.com/v3/smtp/email', body, {
+      headers: { 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json' }
     });
+    if (resp.status >= 300) throw new Error(`Brevo error ${resp.status}`);
   } else if (process.env.RESEND_API_KEY) {
     // ── Resend API (fallback) ────────────────────────────────────────
     const resend   = new Resend(process.env.RESEND_API_KEY);
@@ -854,7 +852,7 @@ const enviarEmail = async ({ to, subject, html, attachments }) => {
     const { error } = await resend.emails.send({ from: fromAddr, to, subject, html, attachments: resAttach });
     if (error) throw new Error(error.message);
   } else {
-    throw new Error('No hay proveedor de email configurado (BREVO_USER/BREVO_PASS o RESEND_API_KEY)');
+    throw new Error('No hay proveedor de email configurado (BREVO_API_KEY o RESEND_API_KEY)');
   }
 };
 
@@ -864,8 +862,8 @@ exports.enviarReportePorEmail = (req, res) => {
   if (!correo || !correo.includes('@')) {
     return res.status(400).json({ mensaje: 'Correo electrónico inválido' });
   }
-  if (!process.env.BREVO_USER && !process.env.RESEND_API_KEY) {
-    return res.status(500).json({ mensaje: 'No hay proveedor de email configurado en el servidor.' });
+  if (!process.env.BREVO_API_KEY && !process.env.RESEND_API_KEY) {
+    return res.status(500).json({ mensaje: 'No hay proveedor de email configurado en el servidor (BREVO_API_KEY o RESEND_API_KEY).' });
   }
 
   // ── Responder inmediatamente para evitar timeout ─────────────────────
@@ -962,23 +960,36 @@ exports.obtenerResumen = async (_req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 
 exports.testEmail = async (_req, res) => {
-  if (!process.env.RESEND_API_KEY) {
+  if (!process.env.BREVO_API_KEY && !process.env.RESEND_API_KEY) {
     return res.status(400).json({
       ok: false,
       problema: 'VARIABLES_FALTANTES',
-      mensaje: 'La variable RESEND_API_KEY no está configurada en el servidor.',
-      solucion: 'Agrega RESEND_API_KEY en las variables de entorno de Render con tu API Key de resend.com.'
+      mensaje: 'Falta BREVO_API_KEY (o RESEND_API_KEY) en las variables de entorno.',
+      solucion: 'Agrega BREVO_API_KEY en Render con tu API Key de brevo.com.'
     });
   }
 
   try {
+    if (process.env.BREVO_API_KEY) {
+      // Verificar Brevo API Key (llamada a endpoint de cuenta)
+      const resp = await axios.get('https://api.brevo.com/v3/account', {
+        headers: { 'api-key': process.env.BREVO_API_KEY }
+      });
+      return res.json({
+        ok: true,
+        proveedor: 'Brevo',
+        mensaje: `API Key de Brevo válida. Cuenta: ${resp.data?.email || 'OK'}`,
+        sender: process.env.BREVO_USER || process.env.EMAIL_USER || '(configura BREVO_USER)'
+      });
+    }
+    // Fallback Resend
     const resend = new Resend(process.env.RESEND_API_KEY);
-    // Verificar la clave intentando listar dominios (no envía correo, solo valida)
     const { data, error } = await resend.domains.list();
     if (error) throw new Error(error.message);
     res.json({
       ok: true,
-      mensaje: `API Key de Resend válida. Dominios verificados: ${data?.data?.length || 0}.`,
+      proveedor: 'Resend',
+      mensaje: `API Key de Resend válida. Dominios: ${data?.data?.length || 0}.`,
       from_configurado: process.env.RESEND_FROM || 'onboarding@resend.dev (predeterminado)'
     });
   } catch (error) {

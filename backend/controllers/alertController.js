@@ -1,6 +1,6 @@
-const Alert = require('../models/Alert');
-const nodemailer = require('nodemailer');
-const { Resend }  = require('resend');
+const Alert  = require('../models/Alert');
+const axios  = require('axios');
+const { Resend } = require('resend');
 
 exports.enviarAlertaEmail = async (asunto, contenidoHTML) => {
   try {
@@ -10,13 +10,16 @@ exports.enviarAlertaEmail = async (asunto, contenidoHTML) => {
       return false;
     }
 
-    if (process.env.BREVO_USER && process.env.BREVO_PASS) {
-      // ── Brevo SMTP ─────────────────────────────────────────────────
-      const t = nodemailer.createTransport({
-        host: 'smtp-relay.brevo.com', port: 587, secure: false,
-        auth: { user: process.env.BREVO_USER, pass: process.env.BREVO_PASS }
-      });
-      await t.sendMail({ from: `"COO Alianzas" <${process.env.BREVO_USER}>`, to: toAddr, subject: asunto, html: contenidoHTML });
+    if (process.env.BREVO_API_KEY) {
+      // ── Brevo API HTTP (no SMTP, funciona en Render) ────────────────
+      const senderEmail = process.env.BREVO_USER || process.env.EMAIL_USER;
+      const { status } = await axios.post('https://api.brevo.com/v3/smtp/email', {
+        sender:      { name: 'COO Alianzas', email: senderEmail },
+        to:          [{ email: toAddr }],
+        subject:     asunto,
+        htmlContent: contenidoHTML
+      }, { headers: { 'api-key': process.env.BREVO_API_KEY, 'content-type': 'application/json' } });
+      if (status >= 300) throw new Error(`Brevo status ${status}`);
     } else if (process.env.RESEND_API_KEY) {
       // ── Resend fallback ────────────────────────────────────────────
       const resend = new Resend(process.env.RESEND_API_KEY);
