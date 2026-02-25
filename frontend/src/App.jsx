@@ -1153,6 +1153,8 @@ const PantallaMantenimiento = () => (
     notas: ''
   })
 const [loteDetalle, setLoteDetalle] = useState(null)
+const [editandoCerdosDetalle, setEditandoCerdosDetalle] = useState(false)
+const [cantidadCerdosEdit, setCantidadCerdosEdit] = useState('')
 const [alimentacionLote, setAlimentacionLote] = useState([])
 const [graficaEvolucionLote, setGraficaEvolucionLote] = useState([])
 const [mostrarTablaFinca, setMostrarTablaFinca] = useState(false)
@@ -3522,10 +3524,34 @@ const cargarHistoricoPesos = async () => {
               <span className="stat-label">Edad del Lote</span>
             </div>
           </div>
-          <div className="lote-stat-card">
+          <div className="lote-stat-card" style={{cursor: editandoCerdosDetalle ? 'default' : 'pointer'}}
+            onClick={() => { if (!editandoCerdosDetalle) { setEditandoCerdosDetalle(true); setCantidadCerdosEdit(String(loteDetalle.cantidad_cerdos)) } }}>
             <PiggyBank size={24} />
             <div className="stat-info">
-              <span className="stat-valor">{loteDetalle.cantidad_cerdos}</span>
+              {editandoCerdosDetalle ? (
+                <div style={{display:'flex', gap:'4px', alignItems:'center'}} onClick={e => e.stopPropagation()}>
+                  <input type="number" min="0" value={cantidadCerdosEdit}
+                    onChange={e => setCantidadCerdosEdit(e.target.value)}
+                    onKeyDown={async e => {
+                      if (e.key === 'Enter') {
+                        const n = parseInt(cantidadCerdosEdit)
+                        if (!isNaN(n) && n >= 0) { await actualizarLote(loteDetalle._id, { cantidad_cerdos: n }); verDetalleLote(loteDetalle._id) }
+                        setEditandoCerdosDetalle(false)
+                      } else if (e.key === 'Escape') setEditandoCerdosDetalle(false)
+                    }}
+                    style={{width:'60px', fontSize:'18px', fontWeight:'800', border:'1px solid #3b82f6', borderRadius:'6px', padding:'2px 4px'}}
+                    autoFocus />
+                  <button onClick={async () => {
+                    const n = parseInt(cantidadCerdosEdit)
+                    if (!isNaN(n) && n >= 0) { await actualizarLote(loteDetalle._id, { cantidad_cerdos: n }); verDetalleLote(loteDetalle._id) }
+                    setEditandoCerdosDetalle(false)
+                  }} style={{background:'#22c55e', color:'white', border:'none', borderRadius:'4px', padding:'2px 6px', cursor:'pointer', fontSize:'12px'}}>✓</button>
+                  <button onClick={() => setEditandoCerdosDetalle(false)}
+                    style={{background:'none', border:'none', color:'#94a3b8', cursor:'pointer', fontSize:'14px'}}>✕</button>
+                </div>
+              ) : (
+                <span className="stat-valor" title="Clic para editar">{loteDetalle.cantidad_cerdos} <span style={{fontSize:'12px', color:'#94a3b8'}}>✎</span></span>
+              )}
               <span className="stat-label">Cerdos</span>
             </div>
           </div>
