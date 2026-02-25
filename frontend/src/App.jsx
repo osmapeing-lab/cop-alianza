@@ -3609,6 +3609,29 @@ const cargarHistoricoPesos = async () => {
             </div>
           </div>
           {(() => {
+            const gananciaTotal = (loteDetalle.ganancia_peso || 0) * (loteDetalle.cantidad_cerdos || 0)
+            const alimento = loteDetalle.alimento_total_kg || 0
+            const icaReal = gananciaTotal > 0 && alimento > 0 ? alimento / gananciaTotal : null
+            const edadDias = loteDetalle.edad_dias || 0
+            const refFinca = TABLA_FINCA.find(s => edadDias <= s.edad)
+            const icaRef = refFinca ? refFinca.conversion : null
+            const faseActual = getFaseActual(edadDias)
+            const icaRefStr = icaRef != null ? icaRef.toFixed(3) : (faseActual ? faseActual.conversion : null)
+            const isGood = icaReal != null && icaRef != null ? icaReal <= icaRef : null
+            return (
+              <div className="lote-stat-card">
+                <Activity size={24} />
+                <div className="stat-info">
+                  <span className="stat-valor" style={icaReal != null ? {color: isGood === true ? '#16a34a' : isGood === false ? '#ef4444' : undefined} : {}}>
+                    {icaReal != null ? icaReal.toFixed(2) : '—'}
+                  </span>
+                  <span className="stat-label">I.C.A. Real</span>
+                  {icaRefStr && <span style={{fontSize:'11px', color:'#64748b', marginTop:'2px'}}>ref: {icaRefStr}</span>}
+                </div>
+              </div>
+            )
+          })()}
+          {(() => {
             const consumo = getConsumoEstimado(loteDetalle.edad_dias || 0, loteDetalle.cantidad_cerdos || 1)
             return (
               <>
@@ -3689,6 +3712,25 @@ const cargarHistoricoPesos = async () => {
                 <div style={{fontWeight:'700', fontSize:'18px', color:'#16a34a'}}>{((loteDetalle.alimento_total_kg || 0) / loteDetalle.cantidad_cerdos).toFixed(1)} kg</div>
               </div>
             )}
+            {(() => {
+              const gananciaTotal = (loteDetalle.ganancia_peso || 0) * (loteDetalle.cantidad_cerdos || 0)
+              const alimento = loteDetalle.alimento_total_kg || 0
+              if (gananciaTotal <= 0 || alimento <= 0) return null
+              const icaReal = alimento / gananciaTotal
+              const edadDias = loteDetalle.edad_dias || 0
+              const refFinca = TABLA_FINCA.find(s => edadDias <= s.edad)
+              const icaRef = refFinca ? refFinca.conversion : null
+              const faseActual = getFaseActual(edadDias)
+              const icaRefStr = icaRef != null ? icaRef.toFixed(3) : (faseActual ? faseActual.conversion : null)
+              const isGood = icaRef != null ? icaReal <= icaRef : null
+              return (
+                <div style={{padding:'10px 16px', background: isGood === true ? '#f0fdf4' : isGood === false ? '#fef2f2' : '#f8fafc', borderRadius:'8px', flex:'1', minWidth:'140px', border: isGood === false ? '1px solid #fca5a5' : isGood === true ? '1px solid #86efac' : '1px solid #e2e8f0'}}>
+                  <div style={{fontSize:'11px', color:'#64748b'}}>I.C.A. Real</div>
+                  <div style={{fontWeight:'700', fontSize:'18px', color: isGood === true ? '#16a34a' : isGood === false ? '#ef4444' : '#374151'}}>{icaReal.toFixed(2)}</div>
+                  {icaRefStr && <div style={{fontSize:'11px', color:'#94a3b8', marginTop:'2px'}}>ref: {icaRefStr}</div>}
+                </div>
+              )
+            })()}
           </div>
 
           {/* Historial de alimentación */}
