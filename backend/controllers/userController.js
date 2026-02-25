@@ -71,7 +71,7 @@ function detectarDispositivo(ua) {
 // ═══════════════════════════════════════════════════════════════════════
 exports.login = async (req, res) => {
   try {
-    const { password, forzar, captchaToken } = req.body;
+    const { password, forzar, captchaToken, recordar } = req.body;
     const usuario = (req.body.usuario || '').trim();
 
     // Verificar reCAPTCHA
@@ -133,7 +133,7 @@ exports.login = async (req, res) => {
       { activa: false, fecha_salida: new Date() }
     );
 
-    // Generar token JWT
+    // Generar token JWT (30 días si "recordar sesión", 8h normal)
     const token = jwt.sign(
       {
         id: user._id,
@@ -141,7 +141,7 @@ exports.login = async (req, res) => {
         usuario: user.usuario
       },
       process.env.JWT_SECRET,
-      { expiresIn: '8h' }
+      { expiresIn: recordar ? '30d' : '8h' }
     );
 
     // Detectar dispositivo actual

@@ -1129,6 +1129,7 @@ const PantallaMantenimiento = () => (
   const [cargando, setCargando] = useState(false)
   const [conflictoSesion, setConflictoSesion] = useState(null)
   const [captchaToken, setCaptchaToken] = useState(null)
+  const [recordarSesion, setRecordarSesion] = useState(false)
   const captchaRef = useRef(null)
   
   // Estados de navegación
@@ -1437,7 +1438,8 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
         usuario,
         password,
         forzar,
-        captchaToken
+        captchaToken,
+        recordar: recordarSesion
       })
 
       const { token: nuevoToken, usuario: userData } = res.data
@@ -2751,6 +2753,12 @@ const cargarHistoricoPesos = async () => {
                 onExpired={() => setCaptchaToken(null)}
               />
             </div>
+
+            <label style={{display:'flex', alignItems:'center', gap:'8px', fontSize:'13px', color:'#64748b', cursor:'pointer', margin:'4px 0 12px'}}>
+              <input type="checkbox" checked={recordarSesion} onChange={e => setRecordarSesion(e.target.checked)}
+                style={{width:'16px', height:'16px', accentColor:'#16a34a', cursor:'pointer'}} />
+              Mantener sesión iniciada (30 días)
+            </label>
 
             <button type="submit" className="btn-login" disabled={cargando || !captchaToken}>
               {cargando ? 'Ingresando...' : 'Ingresar'}
