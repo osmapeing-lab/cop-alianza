@@ -26,9 +26,22 @@ const { verificarStockCriticoAlimento } = require('../utils/notificationManager'
 // CRUD BÁSICO DE LOTES
 // ═══════════════════════════════════════════════════════════════════════
 
+// Auto-corrige cantidad_cerdos = 0 usando los pesajes registrados
+async function repararCantidadCerdos(lote) {
+  if ((lote.cantidad_cerdos || 0) === 0) {
+    const pesajes = await Weighing.find({ lote: lote._id });
+    if (pesajes.length > 0) {
+      const total = pesajes.reduce((s, p) => s + (p.cantidad_cerdos_pesados || 1), 0);
+      lote.cantidad_cerdos = total;
+      await Lote.findByIdAndUpdate(lote._id, { cantidad_cerdos: total });
+    }
+  }
+}
+
 exports.getLotes = async (req, res) => {
   try {
     const lotes = await Lote.find().sort({ createdAt: -1 });
+    await Promise.all(lotes.map(l => repararCantidadCerdos(l)));
     res.json(lotes);
   } catch (error) {
     res.status(500).json({ mensaje: error.message });
@@ -38,6 +51,7 @@ exports.getLotes = async (req, res) => {
 exports.getLotesActivos = async (req, res) => {
   try {
     const lotes = await Lote.find({ activo: true }).sort({ createdAt: -1 });
+    await Promise.all(lotes.map(l => repararCantidadCerdos(l)));
     res.json(lotes);
   } catch (error) {
     res.status(500).json({ mensaje: error.message });
@@ -50,6 +64,7 @@ exports.getLote = async (req, res) => {
     if (!lote) {
       return res.status(404).json({ mensaje: 'Lote no encontrado' });
     }
+    await repararCantidadCerdos(lote);
     res.json(lote.toObject({ virtuals: true }));
   } catch (error) {
     res.status(500).json({ mensaje: error.message });
