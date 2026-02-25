@@ -3611,27 +3611,46 @@ const cargarHistoricoPesos = async () => {
             </div>
           </div>
           {(() => {
-            const edadDias = loteDetalle.edad_dias || 0
+            const edadDias    = loteDetalle.edad_dias || 0
             const gananciaCerdo = loteDetalle.ganancia_peso || 0
-            // Consumo acumulado del plan por cerdo (no del inventario/tolva)
+            const refFinca    = TABLA_FINCA.find(s => edadDias <= s.edad)
+            const icaRef      = refFinca ? refFinca.conversion : null
+            const faseActual  = getFaseActual(edadDias)
+            const icaRefStr   = icaRef != null ? icaRef.toFixed(3) : (faseActual ? faseActual.conversion : null)
+
+            // ICA ESTIMADO: alimento del plan (tablas de evolución) ÷ ganancia real por cerdo
             const consumoPlan = getConsumoEstimado(edadDias, 1).consumo_acum_cerdo
-            const ica = gananciaCerdo > 0 && consumoPlan > 0 ? consumoPlan / gananciaCerdo : null
-            const refFinca = TABLA_FINCA.find(s => edadDias <= s.edad)
-            const icaRef = refFinca ? refFinca.conversion : null
-            const faseActual = getFaseActual(edadDias)
-            const icaRefStr = icaRef != null ? icaRef.toFixed(3) : (faseActual ? faseActual.conversion : null)
-            const isGood = ica != null && icaRef != null ? ica <= icaRef : null
+            const icaEst  = gananciaCerdo > 0 && consumoPlan > 0 ? consumoPlan / gananciaCerdo : null
+            const estBueno = icaEst != null && icaRef != null ? icaEst <= icaRef : null
+
+            // ICA REAL: alimento ingresado en sistema ÷ ganancia real por cerdo
+            const alimCerdo = (loteDetalle.alimento_total_kg || 0) / (loteDetalle.cantidad_cerdos || 1)
+            const icaReal   = gananciaCerdo > 0 && alimCerdo > 0 ? alimCerdo / gananciaCerdo : null
+            const realBueno = icaReal != null && icaRef != null ? icaReal <= icaRef : null
+
             return (
-              <div className="lote-stat-card">
-                <Activity size={24} />
-                <div className="stat-info">
-                  <span className="stat-valor" style={ica != null ? {color: isGood === true ? '#16a34a' : isGood === false ? '#ef4444' : undefined} : {}}>
-                    {ica != null ? ica.toFixed(2) : '—'}
-                  </span>
-                  <span className="stat-label">I.C.A.</span>
-                  {icaRefStr && <span style={{fontSize:'11px', color:'#64748b', marginTop:'2px'}}>ref: {icaRefStr}</span>}
+              <>
+                <div className="lote-stat-card">
+                  <Activity size={24} />
+                  <div className="stat-info">
+                    <span className="stat-valor" style={icaEst != null ? {color: estBueno === true ? '#16a34a' : estBueno === false ? '#ef4444' : undefined} : {}}>
+                      {icaEst != null ? icaEst.toFixed(2) : '—'}
+                    </span>
+                    <span className="stat-label">I.C.A. Estimado</span>
+                    {icaRefStr && <span style={{fontSize:'11px', color:'#64748b', marginTop:'2px'}}>ref: {icaRefStr}</span>}
+                  </div>
                 </div>
-              </div>
+                <div className="lote-stat-card">
+                  <Activity size={24} />
+                  <div className="stat-info">
+                    <span className="stat-valor" style={icaReal != null ? {color: realBueno === true ? '#16a34a' : realBueno === false ? '#ef4444' : undefined} : {}}>
+                      {icaReal != null ? icaReal.toFixed(2) : '—'}
+                    </span>
+                    <span className="stat-label">I.C.A. Real</span>
+                    {icaRefStr && <span style={{fontSize:'11px', color:'#64748b', marginTop:'2px'}}>ref: {icaRefStr}</span>}
+                  </div>
+                </div>
+              </>
             )
           })()}
           {(() => {
@@ -3716,22 +3735,48 @@ const cargarHistoricoPesos = async () => {
               </div>
             )}
             {(() => {
-              const edadDias = loteDetalle.edad_dias || 0
+              const edadDias     = loteDetalle.edad_dias || 0
               const gananciaCerdo = loteDetalle.ganancia_peso || 0
-              const consumoPlan = getConsumoEstimado(edadDias, 1).consumo_acum_cerdo
-              if (gananciaCerdo <= 0 || consumoPlan <= 0) return null
-              const ica = consumoPlan / gananciaCerdo
-              const refFinca = TABLA_FINCA.find(s => edadDias <= s.edad)
-              const icaRef = refFinca ? refFinca.conversion : null
-              const faseActual = getFaseActual(edadDias)
-              const icaRefStr = icaRef != null ? icaRef.toFixed(3) : (faseActual ? faseActual.conversion : null)
-              const isGood = icaRef != null ? ica <= icaRef : null
+              const refFinca     = TABLA_FINCA.find(s => edadDias <= s.edad)
+              const icaRef       = refFinca ? refFinca.conversion : null
+              const faseActual   = getFaseActual(edadDias)
+              const icaRefStr    = icaRef != null ? icaRef.toFixed(3) : (faseActual ? faseActual.conversion : null)
+              if (gananciaCerdo <= 0) return null
+
+              // ICA Estimado (tablas de evolución)
+              const consumoPlan  = getConsumoEstimado(edadDias, 1).consumo_acum_cerdo
+              const icaEst       = consumoPlan > 0 ? consumoPlan / gananciaCerdo : null
+              const estBueno     = icaEst != null && icaRef != null ? icaEst <= icaRef : null
+
+              // ICA Real (alimento ingresado en sistema)
+              const alimCerdo    = (loteDetalle.alimento_total_kg || 0) / (loteDetalle.cantidad_cerdos || 1)
+              const icaReal      = alimCerdo > 0 ? alimCerdo / gananciaCerdo : null
+              const realBueno    = icaReal != null && icaRef != null ? icaReal <= icaRef : null
+
+              const cardStyle = (ok) => ({
+                padding:'10px 16px', borderRadius:'8px', flex:'1', minWidth:'140px',
+                background: ok === true ? '#f0fdf4' : ok === false ? '#fef2f2' : '#f8fafc',
+                border: ok === false ? '1px solid #fca5a5' : ok === true ? '1px solid #86efac' : '1px solid #e2e8f0'
+              })
+              const valColor = (ok) => ok === true ? '#16a34a' : ok === false ? '#ef4444' : '#374151'
+
               return (
-                <div style={{padding:'10px 16px', background: isGood === true ? '#f0fdf4' : isGood === false ? '#fef2f2' : '#f8fafc', borderRadius:'8px', flex:'1', minWidth:'140px', border: isGood === false ? '1px solid #fca5a5' : isGood === true ? '1px solid #86efac' : '1px solid #e2e8f0'}}>
-                  <div style={{fontSize:'11px', color:'#64748b'}}>I.C.A.</div>
-                  <div style={{fontWeight:'700', fontSize:'18px', color: isGood === true ? '#16a34a' : isGood === false ? '#ef4444' : '#374151'}}>{ica.toFixed(2)}</div>
-                  {icaRefStr && <div style={{fontSize:'11px', color:'#94a3b8', marginTop:'2px'}}>ref: {icaRefStr}</div>}
-                </div>
+                <>
+                  {icaEst != null && (
+                    <div style={cardStyle(estBueno)}>
+                      <div style={{fontSize:'11px', color:'#64748b'}}>I.C.A. Estimado</div>
+                      <div style={{fontWeight:'700', fontSize:'18px', color: valColor(estBueno)}}>{icaEst.toFixed(2)}</div>
+                      {icaRefStr && <div style={{fontSize:'11px', color:'#94a3b8', marginTop:'2px'}}>ref: {icaRefStr}</div>}
+                    </div>
+                  )}
+                  {icaReal != null && (
+                    <div style={cardStyle(realBueno)}>
+                      <div style={{fontSize:'11px', color:'#64748b'}}>I.C.A. Real</div>
+                      <div style={{fontWeight:'700', fontSize:'18px', color: valColor(realBueno)}}>{icaReal.toFixed(2)}</div>
+                      {icaRefStr && <div style={{fontSize:'11px', color:'#94a3b8', marginTop:'2px'}}>ref: {icaRefStr}</div>}
+                    </div>
+                  )}
+                </>
               )
             })()}
           </div>
