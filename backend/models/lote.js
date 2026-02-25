@@ -118,6 +118,11 @@ const loteSchema = new mongoose.Schema({
     registrado_por: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
+    },
+    costo_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Costo',
+      default: null
     }
   }],
   

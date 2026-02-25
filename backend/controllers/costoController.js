@@ -6,6 +6,7 @@
 
 const Costo = require('../models/Costo');
 const Venta = require('../models/Venta');
+const Lote  = require('../models/lote');
 
 // ═══════════════════════════════════════════════════════════════════════
 // OBTENER TODOS LOS COSTOS
@@ -84,17 +85,29 @@ exports.actualizarCosto = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.anularCosto = async (req, res) => {
   try {
-    const costo = await Costo.findByIdAndUpdate(
-      req.params.id,
-      { estado: 'anulado' },
-      { new: true }
-    );
-    
+    const costo = await Costo.findByIdAndDelete(req.params.id);
+
     if (!costo) {
       return res.status(404).json({ mensaje: 'Costo no encontrado' });
     }
-    
-    res.json({ mensaje: 'Costo anulado' });
+
+    // Si el costo pertenece a un lote, eliminar también el gasto semanal asociado
+    if (costo.lote) {
+      const lote = await Lote.findById(costo.lote);
+      if (lote) {
+        const idx = lote.gastos_semanales.findIndex(
+          g => (g.costo_id && g.costo_id.toString() === costo._id.toString())
+            || (g.monto === costo.total && g.descripcion === costo.descripcion)
+        );
+        if (idx !== -1) {
+          lote.gastos_semanales.splice(idx, 1);
+          lote.total_gastos = lote.gastos_semanales.reduce((s, g) => s + (g.monto || 0), 0);
+          await lote.save();
+        }
+      }
+    }
+
+    res.json({ mensaje: 'Costo eliminado' });
   } catch (error) {
     res.status(500).json({ mensaje: 'Error', error: error.message });
   }

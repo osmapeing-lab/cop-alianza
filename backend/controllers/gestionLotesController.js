@@ -266,7 +266,10 @@ exports.registrarGastoSemanal = async (req, res) => {
 
     await costo.save();
 
+    // Guardar costo_id en el gasto para poder sincronizar al borrar
     const gastoCreado = lote.gastos_semanales[lote.gastos_semanales.length - 1];
+    gastoCreado.costo_id = costo._id;
+    await lote.save();
 
     res.status(201).json({
       mensaje: 'Gasto semanal registrado correctamente',
@@ -323,6 +326,20 @@ exports.eliminarGastoSemanal = async (req, res) => {
 
     if (idx === -1) {
       return res.status(404).json({ mensaje: 'Gasto no encontrado' });
+    }
+
+    const gasto = lote.gastos_semanales[idx];
+
+    // Eliminar el Costo asociado si existe
+    if (gasto.costo_id) {
+      await Costo.findByIdAndDelete(gasto.costo_id);
+    } else {
+      // Fallback para gastos antiguos: buscar por descripción + monto + lote
+      await Costo.findOneAndDelete({
+        lote: lote._id,
+        total: gasto.monto,
+        descripcion: gasto.descripcion
+      });
     }
 
     lote.gastos_semanales.splice(idx, 1);
