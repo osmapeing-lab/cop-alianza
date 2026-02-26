@@ -101,7 +101,7 @@ async function inicializarDatosFlujo(intento = 1) {
       tipo: 'diario'
     });
 
-    ultimosDatosFlujo.fecha_inicio_dia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+    ultimosDatosFlujo.fecha_inicio_dia = new Date(); // UTC real — esNuevoDia usa toLocaleDateString para comparar
 
     if (consumoHoy) {
       ultimosDatosFlujo.volumen_diario = consumoHoy.litros;
@@ -155,7 +155,7 @@ setInterval(() => {
       ultimosDatosFlujo.volumen_offset = 0;
       ultimosDatosFlujo.volumen_inicio_sesion = null;
       ultimosDatosFlujo.volumen_diario = 0;
-      ultimosDatosFlujo.fecha_inicio_dia = ahoraColombia;
+      ultimosDatosFlujo.fecha_inicio_dia = new Date(); // UTC real
       console.log('[FLUJO] ✓ Reset diario ejecutado a medianoche Colombia');
     }
   }
@@ -232,13 +232,10 @@ let pesoEnTiempoReal = {
 
 function esNuevoDia(fechaAnterior) {
   if (!fechaAnterior) return true;
-  
-  const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-  const anteriorColombia = new Date(new Date(fechaAnterior).toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-  
-  return ahoraColombia.getFullYear() !== anteriorColombia.getFullYear() ||
-         ahoraColombia.getMonth() !== anteriorColombia.getMonth() ||
-         ahoraColombia.getDate() !== anteriorColombia.getDate();
+  // Comparar fechas directamente en zona Colombia (formato "YYYY-MM-DD")
+  const hoyStr     = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  const anteriorStr = new Date(fechaAnterior).toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
+  return hoyStr !== anteriorStr;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -443,7 +440,7 @@ exports.recibirFlujo = async (req, res) => {
       // Nuevo día: reset completo
       ultimosDatosFlujo.volumen_offset = 0;
       ultimosDatosFlujo.volumen_inicio_sesion = volumen;
-      ultimosDatosFlujo.fecha_inicio_dia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+      ultimosDatosFlujo.fecha_inicio_dia = new Date(); // UTC real
       volumenDiarioCalculado = 0;
       console.log('[FLUJO] Nuevo día. Sesión inicia en:', volumen, 'L');
 
@@ -689,7 +686,7 @@ exports.corregirConsumo = async (req, res) => {
     if (targetDate.getTime() === hoy.getTime()) {
       ultimosDatosFlujo.volumen_diario = litros;
       ultimosDatosFlujo.volumen_offset = litros;
-      ultimosDatosFlujo.fecha_inicio_dia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+      ultimosDatosFlujo.fecha_inicio_dia = new Date(); // UTC real
       ultimosDatosFlujo.volumen_inicio_sesion = null;
     }
 

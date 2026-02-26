@@ -3234,6 +3234,24 @@ const cargarHistoricoPesos = async () => {
 <div className="dashboard-section grafica-section">
   <div className="grafica-header-agua">
     <h3><Droplets size={20} /> Consumo de Agua</h3>
+    <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
+    {(user?.rol === 'superadmin' || user?.rol === 'ingeniero') && (
+      <button
+        title="Corregir consumo de hoy"
+        style={{background:'none',border:'1px solid #e2e8f0',borderRadius:'8px',padding:'4px 10px',fontSize:'12px',color:'#64748b',cursor:'pointer'}}
+        onClick={async () => {
+          const val = window.prompt('Ingresa el consumo real de hoy en litros (0 para resetear):')
+          if (val === null) return
+          const litros = parseFloat(val)
+          if (isNaN(litros) || litros < 0) { alert('Valor inválido'); return }
+          try {
+            await axios.put(`${API_URL}/api/esp/flujo/corregir`, { litros }, { headers: { Authorization: `Bearer ${token}` } })
+            await cargarHistoricoAgua(periodoAgua)
+            alert(`Consumo de hoy corregido a ${litros} L`)
+          } catch(e) { alert('Error al corregir: ' + (e.response?.data?.mensaje || e.message)) }
+        }}
+      >Corregir hoy</button>
+    )}
     <div className="periodo-selector">
       <button 
         className={`periodo-btn ${periodoAgua === 'diario' ? 'activo' : ''}`}
@@ -3265,6 +3283,7 @@ const cargarHistoricoPesos = async () => {
       >
         Mensual
       </button>
+    </div>
     </div>
   </div>
   <div className="grafica-container">
