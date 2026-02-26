@@ -3688,9 +3688,16 @@ const cargarHistoricoPesos = async () => {
             const icaEst  = gananciaCerdo > 0 && consumoPlan > 0 ? consumoPlan / gananciaCerdo : null
             const estBueno = icaEst != null && icaRef != null ? icaEst <= icaRef : null
 
-            // ICA REAL: alimento ingresado en sistema ÷ ganancia real por cerdo
-            const alimCerdo = (loteDetalle.alimento_total_kg || 0) / (loteDetalle.cantidad_cerdos || 1)
-            const icaReal   = gananciaCerdo > 0 && alimCerdo > 0 ? alimCerdo / gananciaCerdo : null
+            // ICA REAL: proyectado desde tasa de última carga de tolva × semanas en producción
+            // Fórmula: (kg última carga ÷ cerdos) × semanas_en_producción ÷ ganancia_cerdo
+            const semanasProduccion = Math.max(1, (edadDias - 43) / 7)
+            const ultimaAlim1 = alimentacionLote.length > 0
+              ? [...alimentacionLote].sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0]
+              : null
+            const consumoProyCerdo1 = ultimaAlim1 && (loteDetalle.cantidad_cerdos || 0) > 0
+              ? (ultimaAlim1.cantidad_kg / loteDetalle.cantidad_cerdos) * semanasProduccion
+              : (loteDetalle.alimento_total_kg || 0) / (loteDetalle.cantidad_cerdos || 1)
+            const icaReal   = gananciaCerdo > 0 && consumoProyCerdo1 > 0 ? consumoProyCerdo1 / gananciaCerdo : null
             const realBueno = icaReal != null && icaRef != null ? icaReal <= icaRef : null
 
             return (
@@ -3813,9 +3820,15 @@ const cargarHistoricoPesos = async () => {
               const icaEst       = consumoPlan > 0 ? consumoPlan / gananciaCerdo : null
               const estBueno     = icaEst != null && icaRef != null ? icaEst <= icaRef : null
 
-              // ICA Real (alimento ingresado en sistema)
-              const alimCerdo    = (loteDetalle.alimento_total_kg || 0) / (loteDetalle.cantidad_cerdos || 1)
-              const icaReal      = alimCerdo > 0 ? alimCerdo / gananciaCerdo : null
+              // ICA Real: proyectado desde tasa de última carga × semanas en producción
+              const semProd2      = Math.max(1, (edadDias - 43) / 7)
+              const ultimaAlim2  = alimentacionLote.length > 0
+                ? [...alimentacionLote].sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0]
+                : null
+              const consumoProy2 = ultimaAlim2 && (loteDetalle.cantidad_cerdos || 0) > 0
+                ? (ultimaAlim2.cantidad_kg / loteDetalle.cantidad_cerdos) * semProd2
+                : (loteDetalle.alimento_total_kg || 0) / (loteDetalle.cantidad_cerdos || 1)
+              const icaReal      = consumoProy2 > 0 ? consumoProy2 / gananciaCerdo : null
               const realBueno    = icaReal != null && icaRef != null ? icaReal <= icaRef : null
 
               const cardStyle = (ok) => ({
@@ -4156,8 +4169,20 @@ const cargarHistoricoPesos = async () => {
               TABLA_ENGORDE.forEach(s => curvaEsperada.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
               const curvaRecortada = curvaEsperada.filter(p => p.dia <= limDia)
 
-              // Construir datos con carry-forward (iniciar con peso inicial)
-              const limReal = edadLote + 7
+              // Añadir peso actual como punto de hoy si no hay pesaje reciente
+              const pesoActualHoy = loteDetalle.peso_promedio_actual || 0
+              if (pesoActualHoy > 0) {
+                const hayPesajeHoy = puntosPesaje.some(p => Math.abs(p.dia - edadLote) <= 4)
+                if (!hayPesajeHoy) {
+                  puntosPesaje.push({ dia: edadLote, peso: pesoActualHoy, peso_min: null, peso_max: null })
+                  puntosPesaje.sort((a, b) => a.dia - b.dia)
+                }
+              }
+
+              // Construir datos con carry-forward
+              // limReal = semana actual (mismo punto que la línea "Hoy"), sin avanzar más
+              const semanaHoyDia = Math.floor(edadLote / 7) * 7
+              const limReal = Math.max(edadLote, semanaHoyDia)
               let lastReal = (loteDetalle.peso_inicial_promedio || 0) > 0 ? loteDetalle.peso_inicial_promedio : null
               let lastRealMin = null, lastRealMax = null
               const datosGrafica = curvaRecortada.map(punto => {

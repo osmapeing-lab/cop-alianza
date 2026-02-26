@@ -4021,7 +4021,6 @@ table td.sin-datos {
 }
 
 .tabla-finca thead {
-  background: linear-gradient(135deg, #166534 0%, #16a34a 100%);
   position: sticky;
   top: 0;
   z-index: 1;
@@ -4029,6 +4028,7 @@ table td.sin-datos {
 
 .tabla-finca th {
   padding: 12px 14px;
+  background: linear-gradient(135deg, #166534 0%, #16a34a 100%);
   color: white !important;
   font-size: 0.75rem;
   font-weight: 700;
