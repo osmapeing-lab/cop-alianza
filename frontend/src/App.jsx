@@ -3683,21 +3683,15 @@ const cargarHistoricoPesos = async () => {
             const faseActual  = getFaseActual(edadDias)
             const icaRefStr   = icaRef != null ? icaRef.toFixed(3) : (faseActual ? faseActual.conversion : null)
 
-            // ICA ESTIMADO: alimento del plan (tablas de evolución) ÷ ganancia real por cerdo
+            // ICA Plan/Ganancia: alimento del plan ÷ ganancia real por cerdo
             const consumoPlan = getConsumoEstimado(edadDias, 1).consumo_acum_cerdo
             const icaEst  = gananciaCerdo > 0 && consumoPlan > 0 ? consumoPlan / gananciaCerdo : null
             const estBueno = icaEst != null && icaRef != null ? icaEst <= icaRef : null
 
-            // ICA REAL: proyectado desde tasa de última carga de tolva × semanas en producción
-            // Fórmula: (kg última carga ÷ cerdos) × semanas_en_producción ÷ ganancia_cerdo
-            const semanasProduccion = Math.max(1, (edadDias - 43) / 7)
-            const ultimaAlim1 = alimentacionLote.length > 0
-              ? [...alimentacionLote].sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0]
-              : null
-            const consumoProyCerdo1 = ultimaAlim1 && (loteDetalle.cantidad_cerdos || 0) > 0
-              ? (ultimaAlim1.cantidad_kg / loteDetalle.cantidad_cerdos) * semanasProduccion
-              : (loteDetalle.alimento_total_kg || 0) / (loteDetalle.cantidad_cerdos || 1)
-            const icaReal   = gananciaCerdo > 0 && consumoProyCerdo1 > 0 ? consumoProyCerdo1 / gananciaCerdo : null
+            // ICA Plan/Peso: alimento del plan ÷ peso promedio actual
+            // (no usa consumo registrado; refleja cuánto alimento del plan se necesita por kg vivo)
+            const pesoActual1 = loteDetalle.peso_promedio_actual || 0
+            const icaReal   = consumoPlan > 0 && pesoActual1 > 0 ? consumoPlan / pesoActual1 : null
             const realBueno = icaReal != null && icaRef != null ? icaReal <= icaRef : null
 
             return (
@@ -3708,7 +3702,7 @@ const cargarHistoricoPesos = async () => {
                     <span className="stat-valor" style={icaEst != null ? {color: estBueno === true ? '#16a34a' : estBueno === false ? '#ef4444' : undefined} : {}}>
                       {icaEst != null ? icaEst.toFixed(2) : '—'}
                     </span>
-                    <span className="stat-label">I.C.A. Estimado</span>
+                    <span className="stat-label">I.C.A. Plan/Ganancia</span>
                     {icaRefStr && <span style={{fontSize:'11px', color:'#64748b', marginTop:'2px'}}>ref: {icaRefStr}</span>}
                   </div>
                 </div>
@@ -3718,7 +3712,7 @@ const cargarHistoricoPesos = async () => {
                     <span className="stat-valor" style={icaReal != null ? {color: realBueno === true ? '#16a34a' : realBueno === false ? '#ef4444' : undefined} : {}}>
                       {icaReal != null ? icaReal.toFixed(2) : '—'}
                     </span>
-                    <span className="stat-label">I.C.A. Real</span>
+                    <span className="stat-label">I.C.A. Plan/Peso Actual</span>
                     {icaRefStr && <span style={{fontSize:'11px', color:'#64748b', marginTop:'2px'}}>ref: {icaRefStr}</span>}
                   </div>
                 </div>
@@ -3815,20 +3809,15 @@ const cargarHistoricoPesos = async () => {
               const icaRefStr    = icaRef != null ? icaRef.toFixed(3) : (faseActual ? faseActual.conversion : null)
               if (gananciaCerdo <= 0) return null
 
-              // ICA Estimado (tablas de evolución)
+              // ICA Plan/Ganancia: alimento del plan ÷ ganancia real por cerdo
               const consumoPlan  = getConsumoEstimado(edadDias, 1).consumo_acum_cerdo
-              const icaEst       = consumoPlan > 0 ? consumoPlan / gananciaCerdo : null
+              const icaEst       = consumoPlan > 0 && gananciaCerdo > 0 ? consumoPlan / gananciaCerdo : null
               const estBueno     = icaEst != null && icaRef != null ? icaEst <= icaRef : null
 
-              // ICA Real: proyectado desde tasa de última carga × semanas en producción
-              const semProd2      = Math.max(1, (edadDias - 43) / 7)
-              const ultimaAlim2  = alimentacionLote.length > 0
-                ? [...alimentacionLote].sort((a, b) => new Date(b.fecha) - new Date(a.fecha))[0]
-                : null
-              const consumoProy2 = ultimaAlim2 && (loteDetalle.cantidad_cerdos || 0) > 0
-                ? (ultimaAlim2.cantidad_kg / loteDetalle.cantidad_cerdos) * semProd2
-                : (loteDetalle.alimento_total_kg || 0) / (loteDetalle.cantidad_cerdos || 1)
-              const icaReal      = consumoProy2 > 0 ? consumoProy2 / gananciaCerdo : null
+              // ICA Plan/Peso Actual: alimento del plan ÷ peso promedio actual
+              // (sin usar consumo registrado)
+              const pesoActual2  = loteDetalle.peso_promedio_actual || 0
+              const icaReal      = consumoPlan > 0 && pesoActual2 > 0 ? consumoPlan / pesoActual2 : null
               const realBueno    = icaReal != null && icaRef != null ? icaReal <= icaRef : null
 
               const cardStyle = (ok) => ({
@@ -3842,14 +3831,14 @@ const cargarHistoricoPesos = async () => {
                 <>
                   {icaEst != null && (
                     <div style={cardStyle(estBueno)}>
-                      <div style={{fontSize:'11px', color:'#64748b'}}>I.C.A. Estimado</div>
+                      <div style={{fontSize:'11px', color:'#64748b'}}>I.C.A. Plan/Ganancia</div>
                       <div style={{fontWeight:'700', fontSize:'18px', color: valColor(estBueno)}}>{icaEst.toFixed(2)}</div>
                       {icaRefStr && <div style={{fontSize:'11px', color:'#94a3b8', marginTop:'2px'}}>ref: {icaRefStr}</div>}
                     </div>
                   )}
                   {icaReal != null && (
                     <div style={cardStyle(realBueno)}>
-                      <div style={{fontSize:'11px', color:'#64748b'}}>I.C.A. Real</div>
+                      <div style={{fontSize:'11px', color:'#64748b'}}>I.C.A. Plan/Peso Actual</div>
                       <div style={{fontWeight:'700', fontSize:'18px', color: valColor(realBueno)}}>{icaReal.toFixed(2)}</div>
                       {icaRefStr && <div style={{fontSize:'11px', color:'#94a3b8', marginTop:'2px'}}>ref: {icaRefStr}</div>}
                     </div>
