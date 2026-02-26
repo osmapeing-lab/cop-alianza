@@ -3850,7 +3850,7 @@ const cargarHistoricoPesos = async () => {
                       <Plus size={16} /> Registrar consumo de esta semana
                     </button>
                   )}
-                  {(user?.role === 'superadmin' || user?.role === 'ingeniero') && (
+                  {(user?.rol === 'superadmin' || user?.rol === 'ingeniero') && (
                     <button className="btn-secondary btn-sm" style={{fontSize:'12px'}} onClick={() => setMostrarModalHistorico(true)}>
                       + Semana anterior
                     </button>
