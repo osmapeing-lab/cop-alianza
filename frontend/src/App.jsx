@@ -121,6 +121,29 @@ const getRefSemana = (edadDias) => {
 }
 
 
+// Devuelve el string de semana ISO (Colombia) para una fecha dada
+// Formato: "YYYY-WNN" (e.g. "2026-W08")
+const getSemanaISO = (date = new Date()) => {
+  const col = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(date)
+  const [y, m, d] = col.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  const day = dt.getUTCDay() || 7
+  dt.setUTCDate(dt.getUTCDate() + 4 - day)
+  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1))
+  const week = Math.ceil(((dt - yearStart) / 86400000 + 1) / 7)
+  return `${dt.getUTCFullYear()}-W${String(week).padStart(2, '0')}`
+}
+
+// Label legible para semana ISO: "2026-W08" → "Sem 8 / 2026"
+const labelSemana = (iso) => {
+  if (!iso) return ''
+  const [year, w] = iso.split('-W')
+  return `Sem ${parseInt(w)} / ${year}`
+}
+
 // Calcula el consumo diario estimado y acumulado por cerdo según la edad
 const getConsumoEstimado = (edadDias, cantidadCerdos = 1) => {
   let consumoDiario = 0
@@ -1274,6 +1297,11 @@ const [mostrarModalAlimInv, setMostrarModalAlimInv] = useState(false)
 const [nuevaAlimInv, setNuevaAlimInv] = useState({ inventario_id: '', cantidad_kg: '', notas: '' })
 const [cargandoAlimInv, setCargandoAlimInv] = useState(false)
 
+// Estados consumo histórico semanal (superadmin)
+const [mostrarModalHistorico, setMostrarModalHistorico] = useState(false)
+const [nuevoHistorico, setNuevoHistorico] = useState({ semana_iso: '', cantidad_kg: '', precio_kg: '', notas: '', tipo_alimento: 'iniciador' })
+const [cargandoHistorico, setCargandoHistorico] = useState(false)
+
 // Estados para crear nuevo producto de inventario alimento
 const [mostrarModalNuevoProducto, setMostrarModalNuevoProducto] = useState(false)
 const [nuevoProductoAlimento, setNuevoProductoAlimento] = useState({
@@ -2182,6 +2210,35 @@ const registrarAlimentacionDesdeInventario = async () => {
     alert('Error: ' + (error.response?.data?.mensaje || error.message))
   } finally {
     setCargandoAlimInv(false)
+  }
+}
+
+// Registra consumo histórico de semanas pasadas (superadmin, sin descontar inventario)
+const registrarConsumoHistoricoFn = async () => {
+  if (!nuevoHistorico.semana_iso) { alert('Selecciona la semana'); return }
+  if (!nuevoHistorico.cantidad_kg || Number(nuevoHistorico.cantidad_kg) <= 0) { alert('Ingresa la cantidad de kg'); return }
+  setCargandoHistorico(true)
+  try {
+    const res = await axios.post(`${API_URL}/api/lotes/consumo-historico`, {
+      lote_id:       loteDetalle._id,
+      semana_iso:    nuevoHistorico.semana_iso,
+      cantidad_kg:   Number(nuevoHistorico.cantidad_kg),
+      precio_kg:     nuevoHistorico.precio_kg ? Number(nuevoHistorico.precio_kg) : 0,
+      notas:         nuevoHistorico.notas,
+      tipo_alimento: nuevoHistorico.tipo_alimento
+    }, { headers: { Authorization: `Bearer ${token}` } })
+    setMostrarModalHistorico(false)
+    setNuevoHistorico({ semana_iso: '', cantidad_kg: '', precio_kg: '', notas: '', tipo_alimento: 'iniciador' })
+    const [, resLote] = await Promise.all([
+      cargarAlimentacionLote(loteDetalle._id),
+      axios.get(`${API_URL}/api/lotes/${loteDetalle._id}`, { headers: { Authorization: `Bearer ${token}` } })
+    ])
+    setLoteDetalle(resLote.data)
+    alert(res.data.mensaje)
+  } catch (error) {
+    alert('Error: ' + (error.response?.data?.mensaje || error.message))
+  } finally {
+    setCargandoHistorico(false)
   }
 }
 
@@ -3688,10 +3745,10 @@ const cargarHistoricoPesos = async () => {
             const icaEst  = gananciaCerdo > 0 && consumoPlan > 0 ? consumoPlan / gananciaCerdo : null
             const estBueno = icaEst != null && icaRef != null ? icaEst <= icaRef : null
 
-            // ICA Plan/Peso: alimento del plan ÷ peso promedio actual
-            // (no usa consumo registrado; refleja cuánto alimento del plan se necesita por kg vivo)
-            const pesoActual1 = loteDetalle.peso_promedio_actual || 0
-            const icaReal   = consumoPlan > 0 && pesoActual1 > 0 ? consumoPlan / pesoActual1 : null
+            // ICA Real: alimento total registrado ÷ ganancia real por cerdo
+            // (preciso porque se registra una carga semanal por lote)
+            const alimCerdo1 = (loteDetalle.alimento_total_kg || 0) / (loteDetalle.cantidad_cerdos || 1)
+            const icaReal   = gananciaCerdo > 0 && alimCerdo1 > 0 ? alimCerdo1 / gananciaCerdo : null
             const realBueno = icaReal != null && icaRef != null ? icaReal <= icaRef : null
 
             return (
@@ -3777,11 +3834,30 @@ const cargarHistoricoPesos = async () => {
 
         {/* ═══ ALIMENTACIÓN DEL LOTE (desde inventario) ═══ */}
         <div className="dashboard-section" style={{marginBottom:'24px'}}>
-          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px'}}>
-            <h3><Package size={20} /> Alimentación del Lote — <span style={{color:'#1d4ed8'}}>{loteDetalle.alimento_total_kg?.toFixed(1) || 0} kg registrados</span></h3>
-            <button className="btn-primary btn-sm" onClick={async () => { await cargarInventarioAlimento(); setMostrarModalAlimInv(true) }}>
-              <Plus size={16} /> Registrar Consumo
-            </button>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px', flexWrap:'wrap', gap:'10px'}}>
+            <h3 style={{margin:0}}><Package size={20} /> Alimentación del Lote — <span style={{color:'#1d4ed8'}}>{loteDetalle.alimento_total_kg?.toFixed(1) || 0} kg registrados</span></h3>
+            {(() => {
+              const semActual = getSemanaISO()
+              const yaReg = alimentacionLote.some(a => a.semana_iso === semActual && !a.es_historico)
+              return (
+                <div style={{display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap'}}>
+                  {yaReg ? (
+                    <span style={{fontSize:'13px', fontWeight:'600', color:'#16a34a', background:'#f0fdf4', border:'1px solid #86efac', padding:'5px 12px', borderRadius:'20px'}}>
+                      ✓ {labelSemana(semActual)} registrada
+                    </span>
+                  ) : (
+                    <button className="btn-primary btn-sm" onClick={async () => { await cargarInventarioAlimento(); setMostrarModalAlimInv(true) }}>
+                      <Plus size={16} /> Registrar consumo de esta semana
+                    </button>
+                  )}
+                  {(user?.role === 'superadmin' || user?.role === 'ingeniero') && (
+                    <button className="btn-secondary btn-sm" style={{fontSize:'12px'}} onClick={() => setMostrarModalHistorico(true)}>
+                      + Semana anterior
+                    </button>
+                  )}
+                </div>
+              )
+            })()}
           </div>
 
           {/* Totales de alimento */}
@@ -3814,10 +3890,9 @@ const cargarHistoricoPesos = async () => {
               const icaEst       = consumoPlan > 0 && gananciaCerdo > 0 ? consumoPlan / gananciaCerdo : null
               const estBueno     = icaEst != null && icaRef != null ? icaEst <= icaRef : null
 
-              // ICA Plan/Peso Actual: alimento del plan ÷ peso promedio actual
-              // (sin usar consumo registrado)
-              const pesoActual2  = loteDetalle.peso_promedio_actual || 0
-              const icaReal      = consumoPlan > 0 && pesoActual2 > 0 ? consumoPlan / pesoActual2 : null
+              // ICA Real: alimento total registrado ÷ ganancia real por cerdo
+              const alimCerdo2   = (loteDetalle.alimento_total_kg || 0) / (loteDetalle.cantidad_cerdos || 1)
+              const icaReal      = gananciaCerdo > 0 && alimCerdo2 > 0 ? alimCerdo2 / gananciaCerdo : null
               const realBueno    = icaReal != null && icaRef != null ? icaReal <= icaRef : null
 
               const cardStyle = (ok) => ({
@@ -3838,7 +3913,7 @@ const cargarHistoricoPesos = async () => {
                   )}
                   {icaReal != null && (
                     <div style={cardStyle(realBueno)}>
-                      <div style={{fontSize:'11px', color:'#64748b'}}>I.C.A. Plan/Peso Actual</div>
+                      <div style={{fontSize:'11px', color:'#64748b'}}>I.C.A. Real</div>
                       <div style={{fontWeight:'700', fontSize:'18px', color: valColor(realBueno)}}>{icaReal.toFixed(2)}</div>
                       {icaRefStr && <div style={{fontSize:'11px', color:'#94a3b8', marginTop:'2px'}}>ref: {icaRefStr}</div>}
                     </div>
@@ -3856,7 +3931,7 @@ const cargarHistoricoPesos = async () => {
               <table>
                 <thead>
                   <tr>
-                    <th>Fecha</th>
+                    <th>Semana</th>
                     <th>Tipo</th>
                     <th>Cantidad</th>
                     <th>Precio/kg</th>
@@ -3868,7 +3943,7 @@ const cargarHistoricoPesos = async () => {
                 <tbody>
                   {alimentacionLote.slice(0, 10).map(a => (
                     <tr key={a._id}>
-                      <td>{new Date(a.fecha).toLocaleDateString('es-CO')}</td>
+                      <td>{a.semana_iso ? labelSemana(a.semana_iso) : new Date(a.fecha).toLocaleDateString('es-CO')}{a.es_historico && <span style={{fontSize:'10px', color:'#94a3b8', marginLeft:'4px'}}>(hist.)</span>}</td>
                       <td><span className="tipo-badge">{a.tipo_alimento}</span></td>
                       <td><strong>{a.cantidad_kg?.toFixed(1)} kg</strong></td>
                       <td>${(a.precio_kg || 0).toLocaleString()}/kg</td>
@@ -3891,7 +3966,9 @@ const cargarHistoricoPesos = async () => {
             <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setMostrarModalAlimInv(false) }}>
               <div className="modal-content" style={{maxWidth:'500px'}}>
                 <div className="modal-header">
-                  <h3><Package size={18} /> Registrar Carga Semanal de Tolva</h3>
+                  <h3><Package size={18} /> Registrar Carga Semanal de Tolva
+                    <span style={{fontSize:'12px', fontWeight:'normal', color:'#64748b', marginLeft:'10px'}}>({labelSemana(getSemanaISO())})</span>
+                  </h3>
                   <button className="btn-close" onClick={() => setMostrarModalAlimInv(false)}>×</button>
                 </div>
                 <div style={{padding:'16px'}}>
@@ -4021,6 +4098,91 @@ const cargarHistoricoPesos = async () => {
                     <button className="btn-cancelar" onClick={() => setMostrarModalAlimInv(false)}>Cancelar</button>
                     <button className="btn-primary" onClick={registrarAlimentacionDesdeInventario} disabled={cargandoAlimInv}>
                       {cargandoAlimInv ? 'Registrando...' : 'Registrar y Descontar Inventario'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ══ Modal: Semanas anteriores (superadmin/ingeniero) ══ */}
+          {mostrarModalHistorico && (
+            <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setMostrarModalHistorico(false) }}>
+              <div className="modal-content" style={{maxWidth:'460px'}}>
+                <div className="modal-header">
+                  <h3><Package size={18} /> Ingresar semana anterior</h3>
+                  <button className="btn-close" onClick={() => setMostrarModalHistorico(false)}>×</button>
+                </div>
+                <div style={{padding:'16px'}}>
+                  <div style={{background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'8px', padding:'10px 14px', marginBottom:'16px', fontSize:'13px', color:'#92400e'}}>
+                    Este registro <strong>no descuenta inventario</strong>. Úsalo para ingresar datos históricos de semanas pasadas y mejorar el cálculo del ICA.
+                  </div>
+
+                  <div className="form-row" style={{marginBottom:'12px'}}>
+                    <div className="form-group">
+                      <label>Semana (formato YYYY-WNN) *</label>
+                      <input
+                        type="text"
+                        value={nuevoHistorico.semana_iso}
+                        onChange={e => setNuevoHistorico({...nuevoHistorico, semana_iso: e.target.value})}
+                        placeholder="ej: 2026-W07"
+                      />
+                      <small style={{color:'#64748b'}}>
+                        Semana actual: <strong>{getSemanaISO()}</strong> — para semanas anteriores resta 1, 2, etc. al número
+                      </small>
+                    </div>
+                    <div className="form-group">
+                      <label>Tipo de alimento</label>
+                      <select value={nuevoHistorico.tipo_alimento} onChange={e => setNuevoHistorico({...nuevoHistorico, tipo_alimento: e.target.value})}>
+                        <option value="iniciador">Iniciador</option>
+                        <option value="levante">Levante</option>
+                        <option value="engorde">Engorde</option>
+                        <option value="otro">Otro</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="form-row" style={{marginBottom:'12px'}}>
+                    <div className="form-group">
+                      <label>Kg cargados en tolva esa semana *</label>
+                      <input
+                        type="number" min="0.1" step="0.1"
+                        value={nuevoHistorico.cantidad_kg}
+                        onChange={e => setNuevoHistorico({...nuevoHistorico, cantidad_kg: e.target.value})}
+                        placeholder="ej: 56"
+                        autoFocus
+                      />
+                      {nuevoHistorico.cantidad_kg > 0 && loteDetalle.cantidad_cerdos > 0 && (
+                        <small style={{color:'#16a34a', fontWeight:'600'}}>
+                          = {(Number(nuevoHistorico.cantidad_kg) / loteDetalle.cantidad_cerdos).toFixed(2)} kg/cerdo · {(Number(nuevoHistorico.cantidad_kg) / loteDetalle.cantidad_cerdos / 7).toFixed(3)} kg/cerdo/día
+                        </small>
+                      )}
+                    </div>
+                    <div className="form-group">
+                      <label>Precio/kg (opcional)</label>
+                      <input
+                        type="number" min="0" step="1"
+                        value={nuevoHistorico.precio_kg}
+                        onChange={e => setNuevoHistorico({...nuevoHistorico, precio_kg: e.target.value})}
+                        placeholder="ej: 2807"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{marginBottom:'16px'}}>
+                    <label>Notas (opcional)</label>
+                    <input
+                      type="text"
+                      value={nuevoHistorico.notas}
+                      onChange={e => setNuevoHistorico({...nuevoHistorico, notas: e.target.value})}
+                      placeholder="ej: Registro retroactivo"
+                    />
+                  </div>
+
+                  <div className="modal-actions">
+                    <button className="btn-cancelar" onClick={() => setMostrarModalHistorico(false)}>Cancelar</button>
+                    <button className="btn-primary" onClick={registrarConsumoHistoricoFn} disabled={cargandoHistorico}>
+                      {cargandoHistorico ? 'Registrando...' : 'Guardar semana anterior'}
                     </button>
                   </div>
                 </div>

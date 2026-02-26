@@ -80,6 +80,21 @@ const alimentacionLoteSchema = new mongoose.Schema({
   },
 
   // ═══════════════════════════════════════════════════════════════════
+  // SEMANA ISO (control de registro único por semana)
+  // ═══════════════════════════════════════════════════════════════════
+  semana_iso: {
+    type: String,  // e.g. "2026-W08"
+    default: ''
+  },
+
+  // Registro histórico: ingresado por superadmin para semanas pasadas
+  // (no descuenta inventario)
+  es_historico: {
+    type: Boolean,
+    default: false
+  },
+
+  // ═══════════════════════════════════════════════════════════════════
   // NOTAS
   // ═══════════════════════════════════════════════════════════════════
   notas: {

@@ -23,6 +23,29 @@ const InventarioAlimento = require('../models/InventarioAlimento');
 const { verificarStockCriticoAlimento } = require('../utils/notificationManager');
 
 // ═══════════════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Devuelve el string ISO de semana para una fecha en zona horaria Colombia.
+ * Formato: "YYYY-WNN" (e.g. "2026-W08")
+ */
+function getSemanaISO(fecha = new Date()) {
+  const col = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Bogota',
+    year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(fecha);
+  const [y, m, d] = col.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d));
+  // ISO week: Thursday rule
+  const day = date.getUTCDay() || 7;
+  date.setUTCDate(date.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((date - yearStart) / 86400000 + 1) / 7);
+  return `${date.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // CRUD BÁSICO DE LOTES
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -381,6 +404,21 @@ exports.registrarAlimentacionConInventario = async (req, res) => {
     if (!lote.activo) return res.status(400).json({ mensaje: 'No se puede registrar en un lote finalizado' });
     if (!inventario)  return res.status(404).json({ mensaje: 'Producto de inventario no encontrado' });
 
+    // ── Validar unicidad semanal (una carga por semana por lote) ──────────
+    const semanaActual = getSemanaISO();
+    const yaRegistrado = await AlimentacionLote.findOne({
+      lote: lote_id,
+      semana_iso: semanaActual,
+      es_historico: false
+    });
+    if (yaRegistrado) {
+      return res.status(409).json({
+        mensaje: `Ya hay un registro para la semana ${semanaActual}. Solo se permite uno por semana.`,
+        semana_iso: semanaActual,
+        registro_id: yaRegistrado._id
+      });
+    }
+
     const kg           = Number(cantidad_kg);
     const pesoPorBulto = inventario.peso_por_bulto_kg || 40;
 
@@ -421,6 +459,7 @@ exports.registrarAlimentacionConInventario = async (req, res) => {
       tipo_alimento,
       cantidad_kg:      kg,
       precio_kg,
+      semana_iso:       semanaActual,
       notas:            notas || `${inventario.nombre} — ${kg.toFixed(1)} kg`,
       inventario_ref:   inventario_id,
       bultos_consumidos: bultos_decimal,
@@ -456,6 +495,62 @@ exports.registrarAlimentacionConInventario = async (req, res) => {
     });
   } catch (error) {
     console.error('[LOTES] Error alimentacion+inventario:', error.message);
+    res.status(400).json({ mensaje: error.message });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// CONSUMO HISTÓRICO SEMANAL (solo superadmin — no descuenta inventario)
+// ═══════════════════════════════════════════════════════════════════════
+
+exports.registrarConsumoHistorico = async (req, res) => {
+  try {
+    const { lote_id, semana_iso, cantidad_kg, precio_kg, notas, tipo_alimento } = req.body;
+
+    if (!lote_id || !semana_iso || !cantidad_kg || Number(cantidad_kg) <= 0) {
+      return res.status(400).json({ mensaje: 'lote_id, semana_iso y cantidad_kg son requeridos' });
+    }
+
+    // Validar formato semana_iso: "YYYY-WNN"
+    if (!/^\d{4}-W\d{2}$/.test(semana_iso)) {
+      return res.status(400).json({ mensaje: 'semana_iso debe tener formato YYYY-WNN (ej: 2026-W08)' });
+    }
+
+    const lote = await Lote.findById(lote_id);
+    if (!lote) return res.status(404).json({ mensaje: 'Lote no encontrado' });
+
+    // Verificar si ya existe registro para esa semana
+    const existente = await AlimentacionLote.findOne({ lote: lote_id, semana_iso });
+    if (existente) {
+      return res.status(409).json({
+        mensaje: `Ya existe un registro para la semana ${semana_iso}.`,
+        registro_id: existente._id
+      });
+    }
+
+    const kg = Number(cantidad_kg);
+    const pkgVal = precio_kg ? Number(precio_kg) : 0;
+
+    const alimentacion = new AlimentacionLote({
+      lote:          lote_id,
+      tipo_alimento: tipo_alimento || 'otro',
+      cantidad_kg:   kg,
+      precio_kg:     pkgVal,
+      semana_iso,
+      es_historico:  true,
+      notas:         notas || `Histórico semana ${semana_iso}`,
+      registrado_por: req.user?._id
+    });
+
+    await alimentacion.save();
+
+    res.status(201).json({
+      ok: true,
+      mensaje: `Semana ${semana_iso} registrada: ${kg} kg`,
+      alimentacion_id: alimentacion._id
+    });
+  } catch (error) {
+    console.error('[LOTES] Error consumo histórico:', error.message);
     res.status(400).json({ mensaje: error.message });
   }
 };

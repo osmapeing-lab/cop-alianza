@@ -17,6 +17,7 @@ const {
   getResumenLote,
   registrarAlimentacion,
   registrarAlimentacionConInventario,
+  registrarConsumoHistorico,
   getAlimentacionLote,
   eliminarAlimentacion,
   getGraficaPeso,
@@ -44,6 +45,7 @@ router.delete('/:id', deleteLote);
 // ═══════════════════════════════════════════════════════════════════════
 router.post('/alimentacion', registrarAlimentacion);
 router.post('/alimentacion-inventario', registrarAlimentacionConInventario);
+router.post('/consumo-historico', registrarConsumoHistorico);   // superadmin: semanas pasadas sin inventario
 router.get('/:id/alimentacion', getAlimentacionLote);
 router.delete('/alimentacion/:alimentacionId', eliminarAlimentacion);
 
