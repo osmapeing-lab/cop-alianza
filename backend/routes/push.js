@@ -3,12 +3,16 @@ const router   = express.Router();
 const webpush  = require('web-push');
 const PushSub  = require('../models/PushSubscription');
 
-// Configurar VAPID
-webpush.setVapidDetails(
-  `mailto:${process.env.BREVO_USER || process.env.EMAIL_USER || 'cooalianzas@gmail.com'}`,
-  process.env.VAPID_PUBLIC_KEY,
-  process.env.VAPID_PRIVATE_KEY
-);
+// Configurar VAPID solo si las claves están disponibles
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    `mailto:${process.env.BREVO_USER || process.env.EMAIL_USER || 'cooalianzas@gmail.com'}`,
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+} else {
+  console.warn('[PUSH] VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY no configuradas — push desactivado');
+}
 
 // GET /api/push/vapid-public-key  → devuelve la clave pública al frontend
 router.get('/vapid-public-key', (_req, res) => {
