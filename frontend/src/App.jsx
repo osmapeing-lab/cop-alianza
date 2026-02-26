@@ -3,7 +3,7 @@ import axios from 'axios'
 import { io } from 'socket.io-client'
 import ReCAPTCHA from 'react-google-recaptcha'
 import './App.css'
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts'
 import {
   Thermometer, Droplets, Weight, TrendingUp, TrendingDown,
   PiggyBank, Package, Bell, Activity,
@@ -3648,8 +3648,9 @@ const cargarHistoricoPesos = async () => {
                 // Agrupar pesajes del lote por fecha (día), tomar el día más reciente
                 const lotePs = pesajes.filter(p => String(p.lote?._id || p.lote) === String(loteDetalle._id) && p.peso_promedio)
                 if (lotePs.length === 0) return null
-                // Hallar la fecha del pesaje más reciente
-                const ultimaFecha = lotePs.map(p => new Date(p.createdAt).toDateString()).sort().at(-1)
+                // Hallar la fecha del pesaje más reciente (por timestamp real, no por string de día)
+                const masRecientePs = lotePs.reduce((a, b) => new Date(a.createdAt) > new Date(b.createdAt) ? a : b)
+                const ultimaFecha = new Date(masRecientePs.createdAt).toDateString()
                 const delDia = lotePs.filter(p => new Date(p.createdAt).toDateString() === ultimaFecha)
                 // Calcular min/max: usar peso_min/peso_max si existen, o derivar de los pesos individuales
                 const todosMin = delDia.map(p => p.peso_min ?? p.peso_promedio)
@@ -3888,7 +3889,7 @@ const cargarHistoricoPesos = async () => {
             <div className="modal-overlay" onClick={e => { if (e.target === e.currentTarget) setMostrarModalAlimInv(false) }}>
               <div className="modal-content" style={{maxWidth:'500px'}}>
                 <div className="modal-header">
-                  <h3><Package size={18} /> Registrar Consumo de Alimento</h3>
+                  <h3><Package size={18} /> Registrar Carga Semanal de Tolva</h3>
                   <button className="btn-close" onClick={() => setMostrarModalAlimInv(false)}>×</button>
                 </div>
                 <div style={{padding:'16px'}}>
@@ -3948,12 +3949,12 @@ const cargarHistoricoPesos = async () => {
                         {/* Input kg */}
                         <div className="form-row" style={{marginBottom:'8px'}}>
                           <div className="form-group">
-                            <label>Kg a echar en tolva *</label>
+                            <label>Kg cargados en tolva esta semana *</label>
                             <input
                               type="number" min="0.1" step="0.1"
                               value={nuevaAlimInv.cantidad_kg}
                               onChange={e => setNuevaAlimInv({...nuevaAlimInv, cantidad_kg: e.target.value})}
-                              placeholder="Ej: 8"
+                              placeholder="Ej: 56"
                               style={excede ? {borderColor:'#ef4444'} : {}}
                               autoFocus
                             />
@@ -3973,9 +3974,26 @@ const cargarHistoricoPesos = async () => {
                         {/* Resultado en tiempo real */}
                         {kg_ingresado > 0 && !excede && (
                           <div style={{padding:'12px 14px', background:'#f0fdf4', borderRadius:'8px', border:'1px solid #bbf7d0', fontSize:'13px'}}>
+                            {/* Cálculo por cerdo */}
+                            {loteDetalle?.cantidad_cerdos > 0 && (
+                              <div style={{background:'#ecfdf5', border:'1px solid #6ee7b7', borderRadius:'6px', padding:'8px 12px', marginBottom:'10px', display:'flex', gap:'20px', flexWrap:'wrap'}}>
+                                <div style={{textAlign:'center'}}>
+                                  <div style={{fontSize:'11px', color:'#065f46', fontWeight:'600'}}>KG/CERDO SEMANA</div>
+                                  <div style={{fontSize:'18px', fontWeight:'800', color:'#064e3b'}}>{(kg_ingresado / loteDetalle.cantidad_cerdos).toFixed(2)} kg</div>
+                                </div>
+                                <div style={{textAlign:'center'}}>
+                                  <div style={{fontSize:'11px', color:'#065f46', fontWeight:'600'}}>KG/CERDO/DÍA</div>
+                                  <div style={{fontSize:'18px', fontWeight:'800', color:'#064e3b'}}>{(kg_ingresado / loteDetalle.cantidad_cerdos / 7).toFixed(3)} kg</div>
+                                </div>
+                                <div style={{textAlign:'center'}}>
+                                  <div style={{fontSize:'11px', color:'#065f46', fontWeight:'600'}}>CERDOS</div>
+                                  <div style={{fontSize:'18px', fontWeight:'800', color:'#064e3b'}}>{loteDetalle.cantidad_cerdos}</div>
+                                </div>
+                              </div>
+                            )}
                             <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px'}}>
                               <div>
-                                <div style={{color:'#6b7280', fontSize:'11px', marginBottom:'2px'}}>CONSUMO</div>
+                                <div style={{color:'#6b7280', fontSize:'11px', marginBottom:'2px'}}>TOTAL TOLVA</div>
                                 <div style={{fontWeight:'700', color:'#15803d'}}>{kg_ingresado.toFixed(1)} kg</div>
                                 <div style={{color:'#374151'}}>= {bultos_consume.toFixed(3)} bultos</div>
                                 <div style={{color:'#374151'}}>Costo: <strong>${Math.round(costo_consume).toLocaleString()}</strong></div>
@@ -4091,7 +4109,14 @@ const cargarHistoricoPesos = async () => {
 
         {/* Gráfica Comparativa: Peso Real vs Esperado */}
         <div className="dashboard-section grafica-section">
-          <h3><LineChartIcon size={20} /> Peso Real vs Plan de Producción</h3>
+          <div style={{display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap', marginBottom:'4px'}}>
+            <h3 style={{margin:0}}><LineChartIcon size={20} /> Peso Real vs Plan de Producción</h3>
+            {(loteDetalle.edad_dias || 0) >= 43 && (
+              <span style={{fontSize:'12px', fontWeight:'600', color:'#d97706', background:'#fef3c7', border:'1px solid #fcd34d', padding:'3px 10px', borderRadius:'20px'}}>
+                Estamos en la Semana {Math.floor((loteDetalle.edad_dias || 0) / 7)} — Día {loteDetalle.edad_dias}
+              </span>
+            )}
+          </div>
           <div className="grafica-container">
             {(() => {
               const edadLote = loteDetalle.edad_dias || 0
@@ -4203,6 +4228,13 @@ const cargarHistoricoPesos = async () => {
                       'peso_rango_max': 'Rango máx',
                       'peso_rango_min': 'Rango mín'
                     }[name] || name)} />
+                    {/* Línea vertical: posición actual */}
+                    {(() => {
+                      const semHoy = `Sem ${Math.floor(edadLote / 7)}`
+                      const existe = datosGrafica.some(d => d.semana === semHoy)
+                      if (!existe) return null
+                      return <ReferenceLine x={semHoy} stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 3" label={{ value: 'Hoy', position: 'top', fontSize: 10, fill: '#d97706', fontWeight: '700' }} />
+                    })()}
                     <Area type="monotone" dataKey="peso_esperado" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6 3" fill="url(#gradMetaLote)" dot={false} name="peso_esperado" />
                     {hayRango && <Area type="monotone" dataKey="peso_rango_max" stroke="#22c55e" strokeWidth={1} strokeDasharray="3 3" fill="url(#gradRangoLote)" dot={false} name="peso_rango_max" connectNulls />}
                     {hayRango && <Area type="monotone" dataKey="peso_rango_min" stroke="#22c55e" strokeWidth={1} strokeDasharray="3 3" fill="white" dot={false} name="peso_rango_min" connectNulls />}
@@ -4246,8 +4278,9 @@ const cargarHistoricoPesos = async () => {
             const consumoRef = refSemana ? (refSemana.consumo_dia || `${refSemana.consumo_dia_min}-${refSemana.consumo_dia_max}`) : '—'
             // Rango de pesos: derivar del último día de pesajes (min/max explícito o de pesos individuales)
             const lotePs = pesajes.filter(p => String(p.lote?._id || p.lote) === String(loteDetalle._id) && p.peso_promedio)
-            const ultimaFechaFinca = lotePs.map(p => new Date(p.createdAt).toDateString()).sort().at(-1)
-            const delDiaFinca = lotePs.filter(p => new Date(p.createdAt).toDateString() === ultimaFechaFinca)
+            const masRecienteFinca = lotePs.length > 0 ? lotePs.reduce((a, b) => new Date(a.createdAt) > new Date(b.createdAt) ? a : b) : null
+            const ultimaFechaFinca = masRecienteFinca ? new Date(masRecienteFinca.createdAt).toDateString() : null
+            const delDiaFinca = ultimaFechaFinca ? lotePs.filter(p => new Date(p.createdAt).toDateString() === ultimaFechaFinca) : []
             const fincaMn = delDiaFinca.length > 0 ? Math.min(...delDiaFinca.map(p => p.peso_min ?? p.peso_promedio)) : null
             const fincaMx = delDiaFinca.length > 0 ? Math.max(...delDiaFinca.map(p => p.peso_max ?? p.peso_promedio)) : null
             const hayRangoFinca = fincaMn !== null && fincaMx !== null && fincaMn !== fincaMx
