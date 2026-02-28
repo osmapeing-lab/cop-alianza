@@ -95,9 +95,10 @@ async function inicializarDatosFlujo(intento = 1) {
   try {
     const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
     const hoy = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate()));
+    const mananaInit = new Date(hoy.getTime() + 86400000);
 
     const consumoHoy = await WaterConsumption.findOne({
-      fecha: { $gte: hoy },
+      fecha: { $gte: hoy, $lt: mananaInit },
       tipo: 'diario'
     });
 
@@ -436,7 +437,12 @@ exports.recibirFlujo = async (req, res) => {
     let volumenDiarioCalculado = 0;
     const prevVolumenTotal = ultimosDatosFlujo.volumen_total || 0;
 
-    if (esNuevoDia(ultimosDatosFlujo.fecha_inicio_dia)) {
+    // ⚠️ CRÍTICO: evaluar esNuevoDia ANTES de modificar fecha_inicio_dia
+    // Si se evalúa después, la protección anti-caída (paso 3) dispara incorrectamente
+    // y preserva el volumen de ayer como si fuera de hoy.
+    const esDiaNuevo = esNuevoDia(ultimosDatosFlujo.fecha_inicio_dia);
+
+    if (esDiaNuevo) {
       // Nuevo día: reset completo
       ultimosDatosFlujo.volumen_offset = 0;
       ultimosDatosFlujo.volumen_inicio_sesion = volumen;
@@ -461,14 +467,13 @@ exports.recibirFlujo = async (req, res) => {
       // Operación normal
       volumenDiarioCalculado = ultimosDatosFlujo.volumen_offset + (volumen - ultimosDatosFlujo.volumen_inicio_sesion);
     }
-    
+
     volumenDiarioCalculado = Math.round(volumenDiarioCalculado * 100) / 100;
 
-    // 3. Protección en memoria (primera capa)
-    const noEsDiaNuevo = !esNuevoDia(ultimosDatosFlujo.fecha_inicio_dia);
+    // 3. Protección en memoria (primera capa) — solo aplica si es el MISMO día
     const volumenPrevioEnMemoria = ultimosDatosFlujo.volumen_diario || 0;
-    
-    if (volumenDiarioCalculado < volumenPrevioEnMemoria && noEsDiaNuevo) {
+
+    if (volumenDiarioCalculado < volumenPrevioEnMemoria && !esDiaNuevo) {
       console.log(`[FLUJO] PROTECCIÓN MEMORIA: ${volumenDiarioCalculado}L < ${volumenPrevioEnMemoria}L → manteniendo`);
       volumenDiarioCalculado = volumenPrevioEnMemoria;
     }
@@ -481,13 +486,14 @@ exports.recibirFlujo = async (req, res) => {
     const hoy = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate()));
     
     // 4. GUARDAR EN BD Y OBTENER DOCUMENTO ACTUALIZADO
+    const manana = new Date(hoy.getTime() + 86400000);
     const resultadoBD = await WaterConsumption.findOneAndUpdate(
-      { fecha: { $gte: hoy }, tipo: 'diario' },
+      { fecha: { $gte: hoy, $lt: manana }, tipo: 'diario' },
       {
         $max: { litros: volumenDiarioCalculado },
         $setOnInsert: { fecha: hoy, tipo: 'diario' }
       },
-      { 
+      {
         upsert: true,
         new: true  // ⚡ CRÍTICO: Devuelve el documento DESPUÉS del update
       }
@@ -626,9 +632,10 @@ exports.obtenerDatosFlujo = async (req, res) => {
     
     const ahoraCol = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
     const hoy = new Date(Date.UTC(ahoraCol.getFullYear(), ahoraCol.getMonth(), ahoraCol.getDate()));
-    
+    const mananaGet = new Date(hoy.getTime() + 86400000);
+
     const consumoHoy = await WaterConsumption.findOne({
-      fecha: { $gte: hoy },
+      fecha: { $gte: hoy, $lt: mananaGet },
       tipo: 'diario'
     });
     
