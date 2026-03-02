@@ -355,14 +355,15 @@ const IconRefresh = () => (
 // ═══════════════════════════════════════════════════════════════════════
 
 const PaginaCamara = ({ apiUrl }) => {
-  const VMS_URL  = 'https://use1-vms.tplinkcloud.com/#/vms/video'
-  const SNAP_URL = `${apiUrl}/api/camaras/tplink/snapshot`
+  const VMS_LOGIN = 'https://use1-vms.tplinkcloud.com'
+  const VMS_VIDEO = 'https://use1-vms.tplinkcloud.com/#/vms/video'
+  const SNAP_URL  = `${apiUrl}/api/camaras/tplink/snapshot`
 
-  const [iframeOk,  setIframeOk]  = useState(null)   // null=cargando, true=ok, false=bloqueado
-  const [snapSrc,   setSnapSrc]   = useState(null)
-  const [snapError, setSnapError] = useState(false)
-  const [snapTs,    setSnapTs]    = useState(null)
-  const [modoVista, setModoVista] = useState('iframe')
+  const [sesionConfirmada, setSesionConfirmada] = useState(false)
+  const [snapSrc,          setSnapSrc]          = useState(null)
+  const [snapError,        setSnapError]        = useState(false)
+  const [snapTs,           setSnapTs]           = useState(null)
+  const [modoVista,        setModoVista]        = useState('iframe')
   const intervalRef = useRef(null)
 
   useEffect(() => {
@@ -384,62 +385,65 @@ const PaginaCamara = ({ apiUrl }) => {
     setModoVista(modo)
   }
 
+  const abrirLoginTPLink = () => {
+    window.open(VMS_LOGIN, '_blank')
+  }
+
   return (
     <div className="page-content">
+      {/* Header */}
       <div className="page-header" style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'12px'}}>
         <div>
           <h2 style={{margin:0, display:'flex', alignItems:'center', gap:'8px'}}>
             <IconCamara size={22} /> Cámara — VIGI C540-W
           </h2>
-          <p style={{margin:'4px 0 0', fontSize:'13px', color:'#64748b'}}>TP-Link VIGI Cloud · Solo visible para superadmin</p>
+          <p style={{margin:'4px 0 0', fontSize:'13px', color:'#64748b'}}>TP-Link VIGI Cloud · Solo superadmin</p>
         </div>
         <div style={{display:'flex', gap:'8px', flexWrap:'wrap'}}>
-          <button className={`btn-${modoVista === 'iframe' ? 'primary' : 'secondary'} btn-sm`} onClick={() => cambiarModo('iframe')}>
-            📺 Vista integrada
-          </button>
-          <button className={`btn-${modoVista === 'snapshot' ? 'primary' : 'secondary'} btn-sm`} onClick={() => cambiarModo('snapshot')}>
-            📷 Snapshots (3s)
-          </button>
-          <button className="btn-secondary btn-sm" onClick={() => window.open(VMS_URL, '_blank')}
-            style={{display:'flex', alignItems:'center', gap:'6px'}}>
-            🔗 Abrir en TP-Link
-          </button>
+          <button className={`btn-${modoVista === 'iframe' ? 'primary' : 'secondary'} btn-sm`} onClick={() => cambiarModo('iframe')}>📺 Vista integrada</button>
+          <button className={`btn-${modoVista === 'snapshot' ? 'primary' : 'secondary'} btn-sm`} onClick={() => cambiarModo('snapshot')}>📷 Snapshots (3s)</button>
+          <button className="btn-secondary btn-sm" onClick={() => window.open(VMS_VIDEO, '_blank')}>🔗 Abrir en TP-Link</button>
         </div>
       </div>
 
       {/* ── MODO IFRAME ── */}
       {modoVista === 'iframe' && (
         <div style={{marginTop:'16px'}}>
-          {iframeOk === false && (
-            <div style={{background:'#fef2f2', border:'1px solid #fca5a5', borderRadius:'10px', padding:'20px', marginBottom:'12px', textAlign:'center'}}>
-              <p style={{margin:'0 0 8px', fontWeight:'600', color:'#dc2626'}}>⚠️ El portal de TP-Link bloqueó el embed</p>
-              <p style={{margin:'0 0 12px', fontSize:'13px', color:'#64748b'}}>Usa el modo Snapshots o abre directamente en TP-Link</p>
-              <button className="btn-primary btn-sm" onClick={() => cambiarModo('snapshot')}>Cambiar a Snapshots</button>
+          {/* Paso 1: login requerido */}
+          {!sesionConfirmada && (
+            <div style={{background:'#fffbeb', border:'1px solid #fcd34d', borderRadius:'10px', padding:'16px 20px', marginBottom:'14px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap'}}>
+              <div style={{flex:1, minWidth:'200px'}}>
+                <p style={{margin:'0 0 4px', fontWeight:'600', color:'#92400e', fontSize:'14px'}}>⚠️ Requiere sesión activa de TP-Link</p>
+                <p style={{margin:0, fontSize:'12px', color:'#78350f'}}>
+                  Paso 1: abre TP-Link e inicia sesión. Paso 2: vuelve aquí y marca "Ya inicié sesión".
+                </p>
+              </div>
+              <div style={{display:'flex', gap:'8px', flexShrink:0}}>
+                <button className="btn-primary btn-sm" onClick={abrirLoginTPLink}>1. Abrir TP-Link</button>
+                <button className="btn-secondary btn-sm" onClick={() => setSesionConfirmada(true)}>2. Ya inicié sesión ✓</button>
+              </div>
             </div>
           )}
+          {sesionConfirmada && (
+            <div style={{background:'#f0fdf4', border:'1px solid #86efac', borderRadius:'8px', padding:'8px 14px', marginBottom:'10px', fontSize:'12px', color:'#15803d', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <span>✅ Sesión confirmada — el video debería cargar en el panel</span>
+              <span style={{cursor:'pointer', color:'#94a3b8', fontSize:'11px'}} onClick={() => setSesionConfirmada(false)}>Cambiar</span>
+            </div>
+          )}
+
+          {/* iframe */}
           <div style={{position:'relative', width:'100%', paddingTop:'56.25%', background:'#0f172a', borderRadius:'12px', overflow:'hidden', boxShadow:'0 4px 24px rgba(0,0,0,0.3)'}}>
-            {iframeOk === null && (
-              <div style={{position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'#94a3b8', gap:'10px'}}>
-                <div style={{width:'36px', height:'36px', border:'3px solid #334155', borderTop:'3px solid #3b82f6', borderRadius:'50%', animation:'spin 1s linear infinite'}} />
-                <span style={{fontSize:'13px'}}>Cargando portal TP-Link…</span>
-              </div>
-            )}
             <iframe
-              src={VMS_URL}
+              src={VMS_VIDEO}
               title="TP-Link VIGI Camera"
               style={{position:'absolute', top:0, left:0, width:'100%', height:'100%', border:'none'}}
-              allow="camera; microphone; fullscreen"
-              onLoad={() => setIframeOk(true)}
-              onError={() => setIframeOk(false)}
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+              allow="camera; microphone; fullscreen; autoplay"
+              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
             />
           </div>
-          <p style={{fontSize:'11px', color:'#94a3b8', marginTop:'8px', textAlign:'center'}}>
-            Si ves pantalla en blanco →{' '}
-            <span style={{cursor:'pointer', color:'#3b82f6', textDecoration:'underline'}} onClick={() => window.open(VMS_URL, '_blank')}>
-              inicia sesión en TP-Link primero
-            </span>
-            {' '}y luego regresa.
+          <p style={{fontSize:'11px', color:'#94a3b8', marginTop:'6px', textAlign:'center'}}>
+            Si sigue en blanco, intenta abrir en nueva pestaña →{' '}
+            <span style={{cursor:'pointer', color:'#3b82f6', textDecoration:'underline'}} onClick={() => window.open(VMS_VIDEO, '_blank')}>ver cámara directamente</span>
           </p>
         </div>
       )}
@@ -447,31 +451,32 @@ const PaginaCamara = ({ apiUrl }) => {
       {/* ── MODO SNAPSHOT ── */}
       {modoVista === 'snapshot' && (
         <div style={{marginTop:'16px'}}>
-          <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'12px'}}>
-            <span style={{display:'inline-flex', alignItems:'center', gap:'6px', background:'#f0fdf4', border:'1px solid #86efac', borderRadius:'20px', padding:'4px 12px', fontSize:'12px', color:'#16a34a', fontWeight:'600'}}>
-              <span style={{width:'8px', height:'8px', borderRadius:'50%', background:'#16a34a', display:'inline-block', animation:'pulse 2s infinite'}} />
-              Actualizando cada 3 segundos
+          <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'12px', flexWrap:'wrap'}}>
+            <span style={{display:'inline-flex', alignItems:'center', gap:'6px', background: snapError && !snapSrc ? '#fef2f2' : '#f0fdf4', border:`1px solid ${snapError && !snapSrc ? '#fca5a5' : '#86efac'}`, borderRadius:'20px', padding:'4px 12px', fontSize:'12px', color: snapError && !snapSrc ? '#dc2626' : '#16a34a', fontWeight:'600'}}>
+              <span style={{width:'8px', height:'8px', borderRadius:'50%', background: snapError && !snapSrc ? '#dc2626' : '#16a34a', display:'inline-block'}} />
+              {snapError && !snapSrc ? 'Sin señal' : 'Actualizando cada 3s'}
             </span>
             {snapTs && <span style={{fontSize:'12px', color:'#94a3b8'}}>Última: {snapTs.toLocaleTimeString('es-CO')}</span>}
           </div>
+
           {snapError && !snapSrc && (
             <div style={{background:'#fef2f2', border:'1px solid #fca5a5', borderRadius:'10px', padding:'24px', textAlign:'center'}}>
-              <p style={{margin:'0 0 6px', fontWeight:'600', color:'#dc2626'}}>No se pudo obtener el snapshot</p>
-              <p style={{margin:'0 0 12px', fontSize:'13px', color:'#64748b'}}>
-                La API de TP-Link VIGI puede requerir configuración adicional.<br/>
-                Usa la vista integrada o abre directamente en TP-Link.
+              <p style={{margin:'0 0 4px', fontWeight:'600', color:'#dc2626'}}>La API de TP-Link VIGI no permite snapshots directos</p>
+              <p style={{margin:'0 0 14px', fontSize:'13px', color:'#64748b'}}>
+                TP-Link no expone un endpoint REST público para imágenes.<br/>
+                Usa la <strong>Vista integrada</strong> (requiere sesión) o abre directamente.
               </p>
-              <button className="btn-secondary btn-sm" onClick={() => window.open(VMS_URL, '_blank')}>🔗 Abrir en TP-Link</button>
+              <div style={{display:'flex', gap:'8px', justifyContent:'center', flexWrap:'wrap'}}>
+                <button className="btn-primary btn-sm" onClick={() => cambiarModo('iframe')}>📺 Usar vista integrada</button>
+                <button className="btn-secondary btn-sm" onClick={() => window.open(VMS_VIDEO, '_blank')}>🔗 Abrir en TP-Link</button>
+              </div>
             </div>
           )}
+
           {snapSrc && (
             <div style={{position:'relative', borderRadius:'12px', overflow:'hidden', boxShadow:'0 4px 24px rgba(0,0,0,0.2)', background:'#0f172a'}}>
               <img src={snapSrc} alt="Snapshot cámara" style={{width:'100%', display:'block', maxHeight:'70vh', objectFit:'contain'}} />
-              {snapError && (
-                <div style={{position:'absolute', top:'8px', right:'8px', background:'rgba(239,68,68,0.9)', color:'#fff', fontSize:'11px', padding:'3px 8px', borderRadius:'8px'}}>
-                  ⚠️ Error al actualizar
-                </div>
-              )}
+              {snapError && <div style={{position:'absolute', top:'8px', right:'8px', background:'rgba(239,68,68,0.9)', color:'#fff', fontSize:'11px', padding:'3px 8px', borderRadius:'8px'}}>⚠️ Error actualizando</div>}
               <div style={{position:'absolute', bottom:'8px', left:'8px', background:'rgba(0,0,0,0.6)', color:'#fff', fontSize:'11px', padding:'3px 10px', borderRadius:'8px'}}>
                 🔴 EN VIVO — {snapTs?.toLocaleTimeString('es-CO')}
               </div>

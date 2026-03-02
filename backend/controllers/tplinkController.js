@@ -1,61 +1,50 @@
 /*
- * ═══════════════════════════════════════════════════════════════════════
  * TP-LINK VIGI — Controller
- * ═══════════════════════════════════════════════════════════════════════
- * Estrategia:
- *  1. Autenticar con VIGI VMS cloud (use1-vms.tplinkcloud.com)
- *  2. Obtener snapshot de la cámara y servirlo como imagen
- *  3. El frontend hace polling cada 3s para simular video en tiempo real
- * ═══════════════════════════════════════════════════════════════════════
+ * API base: use1-vms-api.tplinkcloud.com  (distinto del portal web use1-vms.tplinkcloud.com)
  */
 
-const axios = require('axios');
+const axios  = require('axios');
 const crypto = require('crypto');
 
-const VMS_BASE  = (process.env.TPLINK_VMS_URL || 'https://use1-vms.tplinkcloud.com').replace(/\/$/, '');
-const EMAIL     = process.env.TPLINK_EMAIL    || '';
-const PASSWORD  = process.env.TPLINK_PASSWORD || '';
+const VMS_PORTAL = 'https://use1-vms.tplinkcloud.com';
+const API_BASE   = 'https://use1-vms-api.tplinkcloud.com';
+const EMAIL      = process.env.TPLINK_EMAIL    || '';
+const PASSWORD   = process.env.TPLINK_PASSWORD || '';
 
-// Cache del token (se renueva al expirar)
 let _cache = { token: null, expiry: 0, deviceId: null };
-
-// ─────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────
 
 function sha256(str) {
   return crypto.createHash('sha256').update(str).digest('hex');
 }
 
+// Prueba múltiples combinaciones de endpoint + hash hasta que una funcione
 async function login() {
-  const body = {
-    email:    EMAIL,
-    password: sha256(PASSWORD),
-    timeZone: 'America/Bogota'
-  };
+  const intentos = [
+    { url: `${API_BASE}/vms/user/login`,    body: { email: EMAIL, password: sha256(PASSWORD), timeZone: 'America/Bogota' } },
+    { url: `${API_BASE}/api/v1/user/login`, body: { email: EMAIL, password: sha256(PASSWORD) } },
+    { url: `${API_BASE}/vms/user/login`,    body: { email: EMAIL, password: PASSWORD } },
+    { url: `${API_BASE}/api/v2/user/login`, body: { email: EMAIL, password: sha256(PASSWORD) } },
+  ];
 
-  const res = await axios.post(`${VMS_BASE}/vms/user/login`, body, {
-    headers: { 'Content-Type': 'application/json' },
-    timeout: 8000
-  });
-
-  const data = res.data;
-  // El token puede venir en distintas rutas según versión del API
-  const token = data?.result?.token
-    || data?.token
-    || data?.data?.token
-    || data?.accessToken;
-
-  if (!token) {
-    console.error('[TPLINK] Login response sin token:', JSON.stringify(data).slice(0, 300));
-    throw new Error('No se obtuvo token de autenticación de TP-Link');
+  let lastErr = null;
+  for (const { url, body } of intentos) {
+    try {
+      const res  = await axios.post(url, body, { headers: { 'Content-Type': 'application/json' }, timeout: 8000 });
+      const data = res.data;
+      const token = data?.result?.token || data?.token || data?.data?.token || data?.accessToken;
+      if (token) {
+        _cache.token  = token;
+        _cache.expiry = Date.now() + 50 * 60 * 1000;
+        console.log('[TPLINK] ✓ Login OK con:', url);
+        return token;
+      }
+      console.log('[TPLINK] Login sin token en:', url, JSON.stringify(data).slice(0, 200));
+    } catch (e) {
+      lastErr = e;
+      console.log('[TPLINK] Login falló en:', url, e.response?.status, e.message);
+    }
   }
-
-  // Guardar en cache 50 minutos (tokens suelen durar 1h)
-  _cache.token  = token;
-  _cache.expiry = Date.now() + 50 * 60 * 1000;
-  console.log('[TPLINK] ✓ Autenticado con VIGI VMS');
-  return token;
+  throw lastErr || new Error('Todos los intentos de login fallaron');
 }
 
 async function getToken() {
@@ -66,109 +55,118 @@ async function getToken() {
 async function getDeviceId(token) {
   if (_cache.deviceId) return _cache.deviceId;
 
-  const res = await axios.get(`${VMS_BASE}/vms/device/list`, {
-    headers: { Authorization: `Bearer ${token}` },
-    timeout: 8000
-  });
+  const endpoints = [
+    `${API_BASE}/vms/device/list`,
+    `${API_BASE}/api/v1/device/list`,
+    `${API_BASE}/vms/devices`,
+  ];
 
-  const devices = res.data?.result?.devices
-    || res.data?.devices
-    || res.data?.data
-    || [];
-
-  if (!devices.length) throw new Error('No se encontraron cámaras en la cuenta');
-
-  // Tomar el primer dispositivo (o el que tenga tipo cámara)
-  const cam = devices.find(d =>
-    d.deviceType?.toLowerCase().includes('cam') ||
-    d.type?.toLowerCase().includes('cam')
-  ) || devices[0];
-
-  _cache.deviceId = cam.deviceId || cam.id || cam.uuid;
-  console.log('[TPLINK] ✓ Cámara encontrada:', cam.deviceName || cam.name || _cache.deviceId);
-  return _cache.deviceId;
+  for (const url of endpoints) {
+    try {
+      const res     = await axios.get(url, { headers: { Authorization: `Bearer ${token}` }, timeout: 8000 });
+      const devices = res.data?.result?.devices || res.data?.devices || res.data?.data || [];
+      if (devices.length) {
+        const cam = devices.find(d =>
+          d.deviceType?.toLowerCase().includes('cam') ||
+          d.type?.toLowerCase().includes('cam')
+        ) || devices[0];
+        _cache.deviceId = cam.deviceId || cam.id || cam.uuid;
+        console.log('[TPLINK] ✓ Cámara:', cam.deviceName || cam.name || _cache.deviceId);
+        return _cache.deviceId;
+      }
+    } catch (e) {
+      console.log('[TPLINK] device/list falló en:', url, e.response?.status);
+    }
+  }
+  throw new Error('No se encontraron cámaras en la cuenta TP-Link');
 }
 
 // ─────────────────────────────────────────────────────────────────
-// GET /api/tplink/snapshot
-// Devuelve la imagen actual de la cámara (JPEG)
+// GET /api/camaras/tplink/snapshot
 // ─────────────────────────────────────────────────────────────────
-
-exports.getSnapshot = async (req, res) => {
+exports.getSnapshot = async (_req, res) => {
   if (!EMAIL || !PASSWORD) {
-    return res.status(503).json({ ok: false, mensaje: 'Variables TPLINK_EMAIL / TPLINK_PASSWORD no configuradas en .env' });
+    return res.status(503).json({ ok: false, mensaje: 'Faltan TPLINK_EMAIL / TPLINK_PASSWORD en .env' });
   }
 
   try {
     const token    = await getToken();
     const deviceId = await getDeviceId(token);
 
-    // Intentar endpoint de snapshot (distintos formatos según versión API)
-    let imgBuffer = null;
-    const endpoints = [
-      `${VMS_BASE}/vms/device/${deviceId}/snapshot`,
-      `${VMS_BASE}/vms/device/${deviceId}/capture`,
-      `${VMS_BASE}/vms/stream/${deviceId}/snapshot`
+    const snapEndpoints = [
+      `${API_BASE}/vms/device/${deviceId}/snapshot`,
+      `${API_BASE}/vms/device/${deviceId}/capture`,
+      `${API_BASE}/vms/stream/${deviceId}/snapshot`,
+      `${API_BASE}/api/v1/device/${deviceId}/snapshot`,
     ];
 
-    for (const url of endpoints) {
+    for (const url of snapEndpoints) {
       try {
         const snap = await axios.get(url, {
           headers:      { Authorization: `Bearer ${token}` },
           responseType: 'arraybuffer',
           timeout:      6000
         });
-        if (snap.status === 200 && snap.data?.byteLength > 1000) {
-          imgBuffer = snap.data;
-          break;
+        if (snap.status === 200 && snap.data?.byteLength > 500) {
+          res.set('Content-Type', 'image/jpeg');
+          res.set('Cache-Control', 'no-cache, no-store');
+          return res.send(snap.data);
         }
-      } catch (_) { /* probar siguiente */ }
+      } catch (_) {}
     }
 
-    if (!imgBuffer) {
-      return res.status(502).json({
-        ok: false,
-        mensaje: 'No se pudo obtener snapshot de la cámara. La API de TP-Link puede requerir acceso local.',
-        vms_url: `${VMS_BASE}/#/vms/video`
-      });
-    }
-
-    res.set('Content-Type', 'image/jpeg');
-    res.set('Cache-Control', 'no-cache, no-store');
-    res.send(imgBuffer);
+    return res.status(502).json({
+      ok: false,
+      mensaje: 'La API de TP-Link VIGI no expone snapshots REST. Usa la vista integrada (iframe) o abre el portal.',
+      portal: `${VMS_PORTAL}/#/vms/video`
+    });
 
   } catch (err) {
-    console.error('[TPLINK] Error snapshot:', err.message);
-    // Invalidar cache si hay error de auth
     if (err.response?.status === 401 || err.response?.status === 403) {
-      _cache.token  = null;
-      _cache.expiry = 0;
+      _cache.token = null; _cache.expiry = 0;
     }
-    res.status(502).json({
-      ok:      false,
-      mensaje: err.message,
-      vms_url: `${VMS_BASE}/#/vms/video`
-    });
+    console.error('[TPLINK] snapshot error:', err.message);
+    res.status(502).json({ ok: false, mensaje: err.message, portal: `${VMS_PORTAL}/#/vms/video` });
   }
 };
 
 // ─────────────────────────────────────────────────────────────────
-// GET /api/tplink/status
-// Verifica si la autenticación con TP-Link funciona
+// GET /api/camaras/tplink/status  — diagnóstico completo
 // ─────────────────────────────────────────────────────────────────
+exports.getStatus = async (_req, res) => {
+  const resultado = { email: EMAIL ? EMAIL.replace(/(.{2}).*(@.*)/, '$1***$2') : 'no configurado', pasos: [] };
 
-exports.getStatus = async (req, res) => {
   if (!EMAIL || !PASSWORD) {
-    return res.json({ ok: false, motivo: 'env_missing', vms_url: `${VMS_BASE}/#/vms/video` });
+    resultado.ok = false;
+    resultado.pasos.push('❌ Faltan TPLINK_EMAIL o TPLINK_PASSWORD en .env');
+    return res.json(resultado);
   }
 
   try {
-    const token    = await getToken();
-    const deviceId = await getDeviceId(token);
-    res.json({ ok: true, deviceId, vms_url: `${VMS_BASE}/#/vms/video` });
+    resultado.pasos.push('🔄 Intentando login...');
+    const token = await getToken();
+    resultado.pasos.push('✅ Login exitoso');
+    resultado.token_preview = token.slice(0, 12) + '...';
+
+    try {
+      const deviceId = await getDeviceId(token);
+      resultado.pasos.push(`✅ Cámara encontrada: ${deviceId}`);
+      resultado.deviceId = deviceId;
+      resultado.ok = true;
+    } catch (e) {
+      resultado.pasos.push(`⚠️ Login OK pero no se encontraron cámaras: ${e.message}`);
+      resultado.ok = false;
+    }
   } catch (err) {
-    _cache.token  = null;
-    _cache.expiry = 0;
-    res.json({ ok: false, motivo: err.message, vms_url: `${VMS_BASE}/#/vms/video` });
+    _cache.token = null; _cache.expiry = 0;
+    resultado.pasos.push(`❌ Login falló: ${err.message}`);
+    resultado.ok = false;
+    if (err.response) {
+      resultado.http_status   = err.response.status;
+      resultado.http_response = JSON.stringify(err.response.data).slice(0, 400);
+    }
   }
+
+  resultado.portal = `${VMS_PORTAL}/#/vms/video`;
+  res.json(resultado);
 };
