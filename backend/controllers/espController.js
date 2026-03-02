@@ -569,20 +569,21 @@ exports.recibirFlujo = async (req, res) => {
       const limiteAgua = configActual?.limite_consumo_bomba_1 ?? 600;
 
       if (volumenRealEnBD >= limiteAgua) {
+        // 1. Auto-apagar MB001 si está encendida
         const mb001 = await Motorbomb.findOne({
           $or: [{ codigo_bomba: 'MB001' }, { nombre: /bomba 1/i }]
         });
 
         if (mb001 && mb001.estado === false) { // false = encendida (lógica invertida)
-          mb001.estado      = true; // apagar
+          mb001.estado       = true; // apagar
           mb001.fecha_cambio = Date.now();
           await mb001.save();
 
-          const alerta = new Alert({
+          const alertaBomba = new Alert({
             tipo: 'alerta',
             mensaje: `Bomba 1 apagada automáticamente: límite diario de ${limiteAgua}L alcanzado (${volumenRealEnBD.toFixed(1)}L)`
           });
-          await alerta.save();
+          await alertaBomba.save();
 
           if (req.io) {
             req.io.emit('bomba_actualizada', {
@@ -592,11 +593,30 @@ exports.recibirFlujo = async (req, res) => {
               nombre:    mb001.nombre,
               timestamp: Date.now()
             });
-            req.io.emit('nueva_alerta', alerta);
+            req.io.emit('nueva_alerta', alertaBomba);
           }
 
           notificarBomba(mb001).catch(e => console.error('[AUTO-OFF] Notif bomba:', e.message));
           console.log(`[AUTO-OFF] MB001 apagada por límite de ${limiteAgua}L (${volumenRealEnBD.toFixed(1)}L)`);
+        }
+
+        // 2. Alerta de consumo alto — independiente del estado de la bomba
+        //    Solo una vez por día (evitar spam en cada lectura)
+        const ahoraCol2 = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
+        const inicioDia = new Date(Date.UTC(ahoraCol2.getFullYear(), ahoraCol2.getMonth(), ahoraCol2.getDate()));
+        const yaAlertado = await Alert.findOne({
+          mensaje: { $regex: /consumo.*agua.*alto|agua.*alto/i },
+          createdAt: { $gte: inicioDia }
+        });
+
+        if (!yaAlertado) {
+          const alertaAlta = new Alert({
+            tipo: 'advertencia',
+            mensaje: `⚠️ Consumo de agua alto: ${volumenRealEnBD.toFixed(1)}L hoy (límite configurado: ${limiteAgua}L)`
+          });
+          await alertaAlta.save();
+          if (req.io) req.io.emit('nueva_alerta', alertaAlta);
+          console.log(`[AGUA] Alerta consumo alto: ${volumenRealEnBD.toFixed(1)}L`);
         }
       }
     } catch (errAutoOff) {
