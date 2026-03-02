@@ -19,6 +19,8 @@ const {
   actualizarConfiguracion
 } = require('../controllers/camaraController');
 
+const { getSnapshot, getStatus } = require('../controllers/tplinkController');
+
 // CRUD Cámaras
 router.get('/', obtenerCamaras);
 router.get('/:id', obtenerCamaraPorId);
@@ -33,5 +35,9 @@ router.post('/heartbeat', heartbeat);
 router.put('/:id/estado', cambiarEstado);
 router.get('/:id/config', obtenerConfiguracion);
 router.put('/:id/config', actualizarConfiguracion);
+
+// TP-Link VIGI Cloud
+router.get('/tplink/snapshot', getSnapshot);
+router.get('/tplink/status',   getStatus);
 
 module.exports = router;

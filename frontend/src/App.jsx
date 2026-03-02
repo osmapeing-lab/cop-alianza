@@ -3040,15 +3040,15 @@ const cargarHistoricoPesos = async () => {
               <IconAlerta />
               <span>Alertas</span>
             </button>
-{/* Cámaras - temporalmente oculto
-            <button
-  className={`nav-item ${pagina === 'camaras' ? 'activo' : ''}`}
-  onClick={() => { setPagina('camaras'); setMenuAbierto(false) }}
->
-  <IconCamara />
-  <span>Cámaras</span>
-</button>
-*/}
+{user?.rol === 'superadmin' && (
+  <button
+    className={`nav-item ${pagina === 'camaras' ? 'activo' : ''}`}
+    onClick={() => { setPagina('camaras'); setMenuAbierto(false) }}
+  >
+    <IconCamara />
+    <span>Cámaras</span>
+  </button>
+)}
 
 
 <button
@@ -5855,6 +5855,158 @@ const cargarHistoricoPesos = async () => {
     )}
   </div>
 )}
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {/* PÁGINA: CÁMARAS (solo superadmin) */}
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {pagina === 'camaras' && user?.rol === 'superadmin' && (() => {
+            const VMS_URL = 'https://use1-vms.tplinkcloud.com/#/vms/video'
+            const SNAP_URL = `${API_URL}/api/camaras/tplink/snapshot`
+
+            // Estado local con useRef para evitar re-renders en el intervalo
+            const [iframeOk,     setIframeOk]     = React.useState(null)   // null=cargando, true=ok, false=bloqueado
+            const [snapSrc,      setSnapSrc]       = React.useState(null)
+            const [snapError,    setSnapError]     = React.useState(false)
+            const [snapTs,       setSnapTs]        = React.useState(null)
+            const [modoVista,    setModoVista]     = React.useState('iframe') // 'iframe' | 'snapshot'
+            const intervalRef    = React.useRef(null)
+
+            // Iniciar polling de snapshots
+            const iniciarSnapshot = React.useCallback(() => {
+              const cargar = () => {
+                // Agregar timestamp para forzar recarga sin caché
+                const url = `${SNAP_URL}?t=${Date.now()}`
+                const img = new Image()
+                img.onload = () => { setSnapSrc(url); setSnapTs(new Date()); setSnapError(false) }
+                img.onerror = () => setSnapError(true)
+                img.src = url
+              }
+              cargar()
+              intervalRef.current = setInterval(cargar, 3000)
+            }, [])
+
+            React.useEffect(() => {
+              if (modoVista === 'snapshot') iniciarSnapshot()
+              return () => clearInterval(intervalRef.current)
+            }, [modoVista])
+
+            return (
+              <div className="page-content">
+                <div className="page-header" style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'12px'}}>
+                  <div>
+                    <h2 style={{margin:0, display:'flex', alignItems:'center', gap:'8px'}}>
+                      <IconCamara size={22} /> Cámara — VIGI C540-W
+                    </h2>
+                    <p style={{margin:'4px 0 0', fontSize:'13px', color:'#64748b'}}>TP-Link VIGI Cloud · Solo visible para superadmin</p>
+                  </div>
+                  <div style={{display:'flex', gap:'8px', flexWrap:'wrap'}}>
+                    <button
+                      className={`btn-${modoVista === 'iframe' ? 'primary' : 'secondary'} btn-sm`}
+                      onClick={() => { clearInterval(intervalRef.current); setModoVista('iframe') }}
+                    >
+                      📺 Vista integrada
+                    </button>
+                    <button
+                      className={`btn-${modoVista === 'snapshot' ? 'primary' : 'secondary'} btn-sm`}
+                      onClick={() => { clearInterval(intervalRef.current); setModoVista('snapshot') }}
+                    >
+                      📷 Snapshots (3s)
+                    </button>
+                    <button
+                      className="btn-secondary btn-sm"
+                      onClick={() => window.open(VMS_URL, '_blank')}
+                      style={{display:'flex', alignItems:'center', gap:'6px'}}
+                    >
+                      🔗 Abrir en TP-Link
+                    </button>
+                  </div>
+                </div>
+
+                {/* ── MODO IFRAME ── */}
+                {modoVista === 'iframe' && (
+                  <div style={{marginTop:'16px'}}>
+                    {iframeOk === false && (
+                      <div style={{background:'#fef2f2', border:'1px solid #fca5a5', borderRadius:'10px', padding:'20px', marginBottom:'12px', textAlign:'center'}}>
+                        <p style={{margin:'0 0 8px', fontWeight:'600', color:'#dc2626'}}>⚠️ El portal de TP-Link bloqueó el embed</p>
+                        <p style={{margin:'0 0 12px', fontSize:'13px', color:'#64748b'}}>Usa el modo Snapshots o abre directamente en TP-Link</p>
+                        <button className="btn-primary btn-sm" onClick={() => { clearInterval(intervalRef.current); setModoVista('snapshot') }}>
+                          Cambiar a Snapshots
+                        </button>
+                      </div>
+                    )}
+                    <div style={{position:'relative', width:'100%', paddingTop:'56.25%', background:'#0f172a', borderRadius:'12px', overflow:'hidden', boxShadow:'0 4px 24px rgba(0,0,0,0.3)'}}>
+                      {iframeOk === null && (
+                        <div style={{position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', color:'#94a3b8', gap:'10px'}}>
+                          <div style={{width:'36px', height:'36px', border:'3px solid #334155', borderTop:'3px solid #3b82f6', borderRadius:'50%', animation:'spin 1s linear infinite'}} />
+                          <span style={{fontSize:'13px'}}>Cargando portal TP-Link…</span>
+                        </div>
+                      )}
+                      <iframe
+                        src={VMS_URL}
+                        title="TP-Link VIGI Camera"
+                        style={{position:'absolute', top:0, left:0, width:'100%', height:'100%', border:'none'}}
+                        allow="camera; microphone; fullscreen"
+                        onLoad={() => setIframeOk(true)}
+                        onError={() => setIframeOk(false)}
+                        sandbox="allow-same-origin allow-scripts allow-forms allow-popups"
+                      />
+                    </div>
+                    <p style={{fontSize:'11px', color:'#94a3b8', marginTop:'8px', textAlign:'center'}}>
+                      Si ves pantalla en blanco, es porque TP-Link requiere sesión activa en este navegador →{' '}
+                      <span style={{cursor:'pointer', color:'#3b82f6', textDecoration:'underline'}} onClick={() => window.open(VMS_URL, '_blank')}>
+                        inicia sesión aquí primero
+                      </span>
+                      {' '}y luego regresa.
+                    </p>
+                  </div>
+                )}
+
+                {/* ── MODO SNAPSHOT ── */}
+                {modoVista === 'snapshot' && (
+                  <div style={{marginTop:'16px'}}>
+                    <div style={{display:'flex', alignItems:'center', gap:'10px', marginBottom:'12px'}}>
+                      <span style={{display:'inline-flex', alignItems:'center', gap:'6px', background:'#f0fdf4', border:'1px solid #86efac', borderRadius:'20px', padding:'4px 12px', fontSize:'12px', color:'#16a34a', fontWeight:'600'}}>
+                        <span style={{width:'8px', height:'8px', borderRadius:'50%', background:'#16a34a', display:'inline-block', animation:'pulse 2s infinite'}} />
+                        Actualizando cada 3 segundos
+                      </span>
+                      {snapTs && <span style={{fontSize:'12px', color:'#94a3b8'}}>Última: {snapTs.toLocaleTimeString('es-CO')}</span>}
+                    </div>
+
+                    {snapError && !snapSrc && (
+                      <div style={{background:'#fef2f2', border:'1px solid #fca5a5', borderRadius:'10px', padding:'24px', textAlign:'center'}}>
+                        <p style={{margin:'0 0 6px', fontWeight:'600', color:'#dc2626'}}>No se pudo obtener el snapshot</p>
+                        <p style={{margin:'0 0 12px', fontSize:'13px', color:'#64748b'}}>
+                          La API de TP-Link VIGI puede requerir configuración adicional.<br/>
+                          Usa la vista integrada o abre directamente en TP-Link.
+                        </p>
+                        <button className="btn-secondary btn-sm" onClick={() => window.open(VMS_URL, '_blank')}>
+                          🔗 Abrir en TP-Link
+                        </button>
+                      </div>
+                    )}
+
+                    {snapSrc && (
+                      <div style={{position:'relative', borderRadius:'12px', overflow:'hidden', boxShadow:'0 4px 24px rgba(0,0,0,0.2)', background:'#0f172a'}}>
+                        <img
+                          src={snapSrc}
+                          alt="Snapshot cámara"
+                          style={{width:'100%', display:'block', maxHeight:'70vh', objectFit:'contain'}}
+                        />
+                        {snapError && (
+                          <div style={{position:'absolute', top:'8px', right:'8px', background:'rgba(239,68,68,0.9)', color:'#fff', fontSize:'11px', padding:'3px 8px', borderRadius:'8px'}}>
+                            ⚠️ Error al actualizar
+                          </div>
+                        )}
+                        <div style={{position:'absolute', bottom:'8px', left:'8px', background:'rgba(0,0,0,0.6)', color:'#fff', fontSize:'11px', padding:'3px 10px', borderRadius:'8px'}}>
+                          🔴 EN VIVO — {snapTs?.toLocaleTimeString('es-CO')}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
           {/* ════════════════════════════════════════════════════════════════ */}
           {/* PÁGINA: ALERTAS */}
           {/* ════════════════════════════════════════════════════════════════ */}
