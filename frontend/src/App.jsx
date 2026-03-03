@@ -355,51 +355,55 @@ const IconRefresh = () => (
 // COMPONENTE: PÁGINA CÁMARA TP-LINK VIGI (superadmin)
 // ═══════════════════════════════════════════════════════════════════════
 
-const PaginaCamara = () => {
-  const VMS_VIDEO  = 'https://use1-vms.tplinkcloud.com/#/vms/video'
-  // URL del stream HLS — se configura en frontend/.env como VITE_CAMERA_HLS_URL
-  const HLS_URL    = import.meta.env.VITE_CAMERA_HLS_URL || ''
+const PaginaCamara = ({ apiUrl }) => {
+  const VMS_VIDEO = 'https://use1-vms.tplinkcloud.com/#/vms/video'
+  const ENV_URL   = import.meta.env.VITE_CAMERA_HLS_URL || ''
 
-  const videoRef   = useRef(null)
-  const hlsRef     = useRef(null)
-  const [estado,   setEstado]   = useState('idle')  // idle | cargando | vivo | error | noconfigurado
-  const [errorMsg, setErrorMsg] = useState('')
+  const videoRef    = useRef(null)
+  const hlsRef      = useRef(null)
+  const [estado,    setEstado]    = useState('buscando')  // buscando | idle | cargando | vivo | error | sin_stream
+  const [errorMsg,  setErrorMsg]  = useState('')
+  const [streamUrl, setStreamUrl] = useState(ENV_URL)
 
-  const iniciarHLS = useCallback(() => {
-    if (!HLS_URL) { setEstado('noconfigurado'); return }
+  // Al montar: si no hay env var, buscar URL en la API cloud de TP-Link
+  useEffect(() => {
+    if (ENV_URL) { setEstado('idle'); return }
+    fetch(`${apiUrl}/api/camaras/tplink/stream`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.ok && d.streamUrl) { setStreamUrl(d.streamUrl); setEstado('idle') }
+        else setEstado('sin_stream')
+      })
+      .catch(() => setEstado('sin_stream'))
+  }, [])
+
+  const iniciarHLS = useCallback((url) => {
+    const src = url || streamUrl
+    if (!src) { setEstado('sin_stream'); return }
     const video = videoRef.current
     if (!video) return
 
     setEstado('cargando')
     setErrorMsg('')
-
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
 
     if (Hls.isSupported()) {
       const hls = new Hls({ lowLatencyMode: true, backBufferLength: 0 })
       hlsRef.current = hls
-      hls.loadSource(HLS_URL)
+      hls.loadSource(src)
       hls.attachMedia(video)
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(() => {})
-        setEstado('vivo')
-      })
+      hls.on(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); setEstado('vivo') })
       hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (data.fatal) {
-          setEstado('error')
-          setErrorMsg(data.details || 'Error de stream')
-        }
+        if (data.fatal) { setEstado('error'); setErrorMsg(data.details || 'Error de stream') }
       })
     } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-      // Safari nativo
-      video.src = HLS_URL
+      video.src = src
       video.addEventListener('loadedmetadata', () => { video.play(); setEstado('vivo') }, { once: true })
       video.addEventListener('error', () => { setEstado('error'); setErrorMsg('Error cargando stream') }, { once: true })
     } else {
-      setEstado('error')
-      setErrorMsg('Tu navegador no soporta HLS')
+      setEstado('error'); setErrorMsg('Tu navegador no soporta HLS')
     }
-  }, [HLS_URL])
+  }, [streamUrl])
 
   const detener = () => {
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
@@ -421,7 +425,9 @@ const PaginaCamara = () => {
         <div style={{display:'flex', gap:'8px', flexWrap:'wrap'}}>
           {estado === 'vivo' || estado === 'cargando'
             ? <button className="btn-secondary btn-sm" onClick={detener}>Detener</button>
-            : <button className="btn-primary btn-sm" onClick={iniciarHLS}>Iniciar stream</button>
+            : <button className="btn-primary btn-sm" onClick={() => iniciarHLS()} disabled={estado === 'buscando'}>
+                {estado === 'buscando' ? 'Buscando stream...' : 'Iniciar stream'}
+              </button>
           }
           <button className="btn-secondary btn-sm" onClick={() => window.open(VMS_VIDEO, '_blank')}>
             Abrir en TP-Link
@@ -440,12 +446,35 @@ const PaginaCamara = () => {
           playsInline
         />
 
+        {/* Overlay: buscando */}
+        {estado === 'buscando' && (
+          <div style={{position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'12px'}}>
+            <div style={{width:'40px', height:'40px', border:'3px solid #334155', borderTop:'3px solid #3b82f6', borderRadius:'50%', animation:'spin 1s linear infinite'}} />
+            <p style={{color:'#94a3b8', fontSize:'13px', margin:0}}>Buscando stream en VIGI Cloud...</p>
+          </div>
+        )}
+
         {/* Overlay: idle */}
         {estado === 'idle' && (
           <div style={{position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'16px'}}>
             <div style={{fontSize:'60px', opacity:.4}}>📷</div>
             <p style={{color:'#475569', fontSize:'14px', margin:0}}>Presiona "Iniciar stream" para ver la cámara</p>
-            <button className="btn-primary" onClick={iniciarHLS}>Iniciar stream en vivo</button>
+            <button className="btn-primary" onClick={() => iniciarHLS()}>Iniciar stream en vivo</button>
+          </div>
+        )}
+
+        {/* Overlay: sin_stream */}
+        {estado === 'sin_stream' && (
+          <div style={{position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'12px', padding:'24px', textAlign:'center'}}>
+            <div style={{fontSize:'40px'}}>📡</div>
+            <p style={{color:'#fbbf24', fontWeight:'600', margin:0}}>Stream no disponible desde la nube</p>
+            <p style={{color:'#64748b', fontSize:'12px', margin:0, maxWidth:'360px'}}>
+              La API de TP-Link VIGI no expone el stream directamente.<br/>
+              Usa el portal oficial para ver la cámara.
+            </p>
+            <button className="btn-primary btn-sm" onClick={() => window.open(VMS_VIDEO, '_blank')}>
+              Ver en portal TP-Link
+            </button>
           </div>
         )}
 
