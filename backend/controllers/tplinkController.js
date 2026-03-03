@@ -82,6 +82,74 @@ async function getDeviceId(token) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// GET /api/camaras/tplink/stream  — URL del stream en vivo
+// ─────────────────────────────────────────────────────────────────
+exports.getLiveStream = async (_req, res) => {
+  if (!EMAIL || !PASSWORD) {
+    return res.status(503).json({ ok: false, mensaje: 'Faltan TPLINK_EMAIL / TPLINK_PASSWORD en .env' });
+  }
+
+  try {
+    const token    = await getToken();
+    const deviceId = await getDeviceId(token);
+    const headers  = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+    const respuestas = [];
+
+    // Prueba todos los endpoints conocidos de stream en vivo
+    const intentos = [
+      { method: 'post', url: `${API_BASE}/vms/device/${deviceId}/stream/start`,  body: {} },
+      { method: 'post', url: `${API_BASE}/vms/stream/start`,                     body: { deviceId } },
+      { method: 'get',  url: `${API_BASE}/vms/device/${deviceId}/stream` },
+      { method: 'get',  url: `${API_BASE}/vms/device/${deviceId}/live` },
+      { method: 'get',  url: `${API_BASE}/vms/device/${deviceId}/preview` },
+      { method: 'post', url: `${API_BASE}/vms/device/${deviceId}/liveUrl`,        body: {} },
+      { method: 'post', url: `${API_BASE}/api/v1/device/stream/start`,            body: { deviceId } },
+      { method: 'get',  url: `${API_BASE}/api/v1/device/${deviceId}/stream` },
+    ];
+
+    for (const it of intentos) {
+      try {
+        const r = it.method === 'post'
+          ? await axios.post(it.url, it.body || {}, { headers, timeout: 6000 })
+          : await axios.get(it.url,                  { headers, timeout: 6000 });
+        const d = r.data;
+        console.log('[TPLINK] stream endpoint OK:', it.url, JSON.stringify(d).slice(0, 300));
+        respuestas.push({ url: it.url, status: r.status, data: d });
+
+        // Busca una URL de stream en la respuesta
+        const streamUrl =
+          d?.result?.url || d?.result?.streamUrl || d?.result?.hlsUrl ||
+          d?.url || d?.streamUrl || d?.hlsUrl || d?.data?.url ||
+          d?.result?.rtspUrl || d?.rtspUrl;
+
+        if (streamUrl) {
+          return res.json({ ok: true, streamUrl, deviceId, raw: d });
+        }
+      } catch (e) {
+        console.log('[TPLINK] stream falló en:', it.url, e.response?.status, JSON.stringify(e.response?.data || '').slice(0, 150));
+        respuestas.push({ url: it.url, status: e.response?.status, error: e.message, data: e.response?.data });
+      }
+    }
+
+    // Ninguno devolvió URL — retorna diagnóstico completo
+    return res.status(502).json({
+      ok: false,
+      mensaje: 'La API de TP-Link no devolvió URL de stream en ningún endpoint',
+      portal: `${VMS_PORTAL}/#/vms/video`,
+      deviceId,
+      respuestas
+    });
+
+  } catch (err) {
+    if (err.response?.status === 401 || err.response?.status === 403) {
+      _cache.token = null; _cache.expiry = 0;
+    }
+    console.error('[TPLINK] stream error:', err.message);
+    res.status(502).json({ ok: false, mensaje: err.message, portal: `${VMS_PORTAL}/#/vms/video` });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────
 // GET /api/camaras/tplink/snapshot
 // ─────────────────────────────────────────────────────────────────
 exports.getSnapshot = async (_req, res) => {
