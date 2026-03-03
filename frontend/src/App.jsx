@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import Hls from 'hls.js'
 import axios from 'axios'
 import { io } from 'socket.io-client'
 import ReCAPTCHA from 'react-google-recaptcha'
@@ -354,145 +355,147 @@ const IconRefresh = () => (
 // COMPONENTE: PÁGINA CÁMARA TP-LINK VIGI (superadmin)
 // ═══════════════════════════════════════════════════════════════════════
 
-const PaginaCamara = ({ apiUrl }) => {
-  const VMS_VIDEO = 'https://use1-vms.tplinkcloud.com/#/vms/video'
-  const SNAP_URL  = `${apiUrl}/api/camaras/tplink/snapshot`
-  const STAT_URL  = `${apiUrl}/api/camaras/tplink/status`
+const PaginaCamara = () => {
+  const VMS_VIDEO  = 'https://use1-vms.tplinkcloud.com/#/vms/video'
+  // URL del stream HLS — se configura en frontend/.env como VITE_CAMERA_HLS_URL
+  const HLS_URL    = import.meta.env.VITE_CAMERA_HLS_URL || ''
 
-  const [snapSrc,    setSnapSrc]    = useState(null)
-  const [snapError,  setSnapError]  = useState(false)
-  const [snapTs,     setSnapTs]     = useState(null)
-  const [snapActivo, setSnapActivo] = useState(false)
-  const [apiStatus,  setApiStatus]  = useState(null)   // null | 'cargando' | object
-  const intervalRef = useRef(null)
+  const videoRef   = useRef(null)
+  const hlsRef     = useRef(null)
+  const [estado,   setEstado]   = useState('idle')  // idle | cargando | vivo | error | noconfigurado
+  const [errorMsg, setErrorMsg] = useState('')
 
-  // Polling de snapshot solo cuando el usuario lo activa
-  useEffect(() => {
-    if (!snapActivo) { clearInterval(intervalRef.current); return }
-    const cargar = () => {
-      const url = `${SNAP_URL}?t=${Date.now()}`
-      const img = new Image()
-      img.onload  = () => { setSnapSrc(url); setSnapTs(new Date()); setSnapError(false) }
-      img.onerror = () => setSnapError(true)
-      img.src = url
+  const iniciarHLS = useCallback(() => {
+    if (!HLS_URL) { setEstado('noconfigurado'); return }
+    const video = videoRef.current
+    if (!video) return
+
+    setEstado('cargando')
+    setErrorMsg('')
+
+    if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
+
+    if (Hls.isSupported()) {
+      const hls = new Hls({ lowLatencyMode: true, backBufferLength: 0 })
+      hlsRef.current = hls
+      hls.loadSource(HLS_URL)
+      hls.attachMedia(video)
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(() => {})
+        setEstado('vivo')
+      })
+      hls.on(Hls.Events.ERROR, (_e, data) => {
+        if (data.fatal) {
+          setEstado('error')
+          setErrorMsg(data.details || 'Error de stream')
+        }
+      })
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Safari nativo
+      video.src = HLS_URL
+      video.addEventListener('loadedmetadata', () => { video.play(); setEstado('vivo') }, { once: true })
+      video.addEventListener('error', () => { setEstado('error'); setErrorMsg('Error cargando stream') }, { once: true })
+    } else {
+      setEstado('error')
+      setErrorMsg('Tu navegador no soporta HLS')
     }
-    cargar()
-    intervalRef.current = setInterval(cargar, 3000)
-    return () => clearInterval(intervalRef.current)
-  }, [snapActivo])
+  }, [HLS_URL])
 
-  const verificarAPI = async () => {
-    setApiStatus('cargando')
-    try {
-      const r = await fetch(STAT_URL)
-      setApiStatus(await r.json())
-    } catch (e) {
-      setApiStatus({ ok: false, pasos: [`Error de red: ${e.message}`] })
-    }
+  const detener = () => {
+    if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null }
+    if (videoRef.current) { videoRef.current.src = '' }
+    setEstado('idle')
   }
+
+  useEffect(() => () => { if (hlsRef.current) hlsRef.current.destroy() }, [])
 
   return (
     <div className="page-content">
-      {/* Header */}
       <div className="page-header" style={{display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'12px'}}>
         <div>
           <h2 style={{margin:0, display:'flex', alignItems:'center', gap:'8px'}}>
             <IconCamara size={22} /> Cámara — VIGI C540-W
           </h2>
-          <p style={{margin:'4px 0 0', fontSize:'13px', color:'#64748b'}}>TP-Link VIGI Cloud · Solo superadmin</p>
+          <p style={{margin:'4px 0 0', fontSize:'13px', color:'#64748b'}}>Stream en vivo · Solo superadmin</p>
+        </div>
+        <div style={{display:'flex', gap:'8px', flexWrap:'wrap'}}>
+          {estado === 'vivo' || estado === 'cargando'
+            ? <button className="btn-secondary btn-sm" onClick={detener}>Detener</button>
+            : <button className="btn-primary btn-sm" onClick={iniciarHLS}>Iniciar stream</button>
+          }
+          <button className="btn-secondary btn-sm" onClick={() => window.open(VMS_VIDEO, '_blank')}>
+            Abrir en TP-Link
+          </button>
         </div>
       </div>
 
-      {/* ── Acceso al portal ── */}
-      <div style={{marginTop:'20px', background:'linear-gradient(135deg,#0f172a,#1e293b)', borderRadius:'16px', padding:'32px', textAlign:'center', boxShadow:'0 8px 32px rgba(0,0,0,0.3)'}}>
-        <div style={{fontSize:'64px', marginBottom:'12px'}}>📷</div>
-        <h3 style={{color:'#f1f5f9', margin:'0 0 6px', fontSize:'18px'}}>VIGI C540-W</h3>
-        <p style={{color:'#94a3b8', margin:'0 0 24px', fontSize:'13px'}}>
-          El video en vivo requiere abrir el portal de TP-Link.<br/>
-          Los portales de terceros no pueden embeberse por restricciones de seguridad del navegador.
-        </p>
-        <button
-          className="btn-primary"
-          style={{fontSize:'15px', padding:'12px 28px', display:'inline-flex', alignItems:'center', gap:'10px'}}
-          onClick={() => window.open(VMS_VIDEO, '_blank')}
-        >
-          Ver cámara en vivo →
-        </button>
-        <p style={{color:'#475569', fontSize:'11px', marginTop:'14px'}}>
-          Se abre en una nueva pestaña · use1-vms.tplinkcloud.com
-        </p>
-      </div>
+      {/* Pantalla del video */}
+      <div style={{marginTop:'16px', position:'relative', background:'#0f172a', borderRadius:'14px', overflow:'hidden', boxShadow:'0 8px 32px rgba(0,0,0,0.4)', aspectRatio:'16/9'}}>
 
-      {/* ── Snapshot vía API backend ── */}
-      <div style={{marginTop:'20px', background:'#1e293b', borderRadius:'12px', padding:'20px'}}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px', flexWrap:'wrap', gap:'8px'}}>
-          <div>
-            <h4 style={{margin:0, color:'#f1f5f9', fontSize:'14px'}}>Snapshot cada 3 segundos</h4>
-            <p style={{margin:'2px 0 0', fontSize:'12px', color:'#64748b'}}>
-              Requiere que la API de TP-Link soporte consultas REST (experimental)
-            </p>
-          </div>
-          <div style={{display:'flex', gap:'8px'}}>
-            <button className="btn-secondary btn-sm" onClick={verificarAPI}>
-              {apiStatus === 'cargando' ? '...' : 'Verificar API'}
-            </button>
-            <button
-              className={snapActivo ? 'btn-danger btn-sm' : 'btn-primary btn-sm'}
-              onClick={() => { setSnapActivo(v => !v); setSnapSrc(null); setSnapError(false) }}
-            >
-              {snapActivo ? 'Detener' : 'Iniciar snapshots'}
-            </button>
-          </div>
-        </div>
+        <video
+          ref={videoRef}
+          style={{width:'100%', height:'100%', display: estado === 'vivo' ? 'block' : 'none', objectFit:'contain'}}
+          controls
+          muted
+          playsInline
+        />
 
-        {/* Resultado diagnóstico */}
-        {apiStatus && apiStatus !== 'cargando' && (
-          <div style={{background: apiStatus.ok ? '#052e16' : '#1c0505', border:`1px solid ${apiStatus.ok ? '#166534' : '#7f1d1d'}`, borderRadius:'8px', padding:'12px', marginBottom:'12px', fontSize:'12px', color:'#e2e8f0'}}>
-            <p style={{margin:'0 0 6px', fontWeight:'600', color: apiStatus.ok ? '#4ade80' : '#f87171'}}>
-              {apiStatus.ok ? '✅ API conectada' : '❌ API sin conexión'}
-            </p>
-            {apiStatus.pasos?.map((p, i) => <p key={i} style={{margin:'2px 0', color:'#94a3b8'}}>{p}</p>)}
+        {/* Overlay: idle */}
+        {estado === 'idle' && (
+          <div style={{position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'16px'}}>
+            <div style={{fontSize:'60px', opacity:.4}}>📷</div>
+            <p style={{color:'#475569', fontSize:'14px', margin:0}}>Presiona "Iniciar stream" para ver la cámara</p>
+            <button className="btn-primary" onClick={iniciarHLS}>Iniciar stream en vivo</button>
           </div>
         )}
 
-        {/* Zona de imagen */}
-        {!snapActivo && !snapSrc && (
-          <div style={{background:'#0f172a', borderRadius:'10px', height:'220px', display:'flex', alignItems:'center', justifyContent:'center', color:'#475569', fontSize:'13px'}}>
-            Presiona "Iniciar snapshots" para comenzar
+        {/* Overlay: cargando */}
+        {estado === 'cargando' && (
+          <div style={{position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'12px'}}>
+            <div style={{width:'40px', height:'40px', border:'3px solid #334155', borderTop:'3px solid #3b82f6', borderRadius:'50%', animation:'spin 1s linear infinite'}} />
+            <p style={{color:'#94a3b8', fontSize:'13px', margin:0}}>Conectando con la cámara...</p>
           </div>
         )}
 
-        {snapActivo && snapError && !snapSrc && (
-          <div style={{background:'#0f172a', borderRadius:'10px', padding:'24px', textAlign:'center'}}>
-            <p style={{color:'#f87171', margin:'0 0 6px', fontWeight:'600'}}>La API de TP-Link no expone snapshots REST</p>
-            <p style={{color:'#64748b', fontSize:'12px', margin:'0 0 14px'}}>
-              TP-Link VIGI requiere la app móvil o el portal web para ver video.<br/>
-              Usa el botón de arriba para acceder al portal oficial.
-            </p>
-            <button className="btn-secondary btn-sm" onClick={() => setSnapActivo(false)}>Detener</button>
-          </div>
-        )}
-
-        {snapSrc && (
-          <div style={{position:'relative', borderRadius:'10px', overflow:'hidden', background:'#0f172a'}}>
-            <img src={snapSrc} alt="Snapshot" style={{width:'100%', display:'block', maxHeight:'60vh', objectFit:'contain'}} />
-            {snapError && (
-              <div style={{position:'absolute', top:'8px', right:'8px', background:'rgba(239,68,68,0.9)', color:'#fff', fontSize:'11px', padding:'3px 8px', borderRadius:'6px'}}>
-                ⚠️ Error actualizando
-              </div>
-            )}
-            <div style={{position:'absolute', bottom:'8px', left:'8px', background:'rgba(0,0,0,0.7)', color:'#fff', fontSize:'11px', padding:'3px 10px', borderRadius:'6px'}}>
-              🔴 {snapTs?.toLocaleTimeString('es-CO')}
+        {/* Overlay: error */}
+        {estado === 'error' && (
+          <div style={{position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'12px', padding:'24px', textAlign:'center'}}>
+            <div style={{fontSize:'40px'}}>⚠️</div>
+            <p style={{color:'#f87171', fontWeight:'600', margin:0}}>Error de conexión</p>
+            <p style={{color:'#64748b', fontSize:'12px', margin:0}}>{errorMsg}</p>
+            <div style={{display:'flex', gap:'8px', flexWrap:'wrap', justifyContent:'center'}}>
+              <button className="btn-primary btn-sm" onClick={iniciarHLS}>Reintentar</button>
+              <button className="btn-secondary btn-sm" onClick={() => window.open(VMS_VIDEO, '_blank')}>Abrir en TP-Link</button>
             </div>
           </div>
         )}
 
-        {snapTs && (
-          <p style={{fontSize:'11px', color:'#475569', marginTop:'8px', textAlign:'right'}}>
-            Último snapshot: {snapTs.toLocaleTimeString('es-CO')}
-          </p>
+        {/* Overlay: no configurado */}
+        {estado === 'noconfigurado' && (
+          <div style={{position:'absolute', inset:0, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'12px', padding:'24px', textAlign:'center'}}>
+            <div style={{fontSize:'40px'}}>⚙️</div>
+            <p style={{color:'#fbbf24', fontWeight:'600', margin:0}}>Stream no configurado</p>
+            <p style={{color:'#64748b', fontSize:'13px', margin:'4px 0 0', maxWidth:'400px', lineHeight:'1.6'}}>
+              Sigue los pasos de configuración de mediamtx + Cloudflare Tunnel y luego<br/>
+              agrega <code style={{background:'#1e293b', padding:'2px 6px', borderRadius:'4px', color:'#93c5fd'}}>VITE_CAMERA_HLS_URL=https://tu-url.trycloudflare.com/cam/index.m3u8</code><br/>
+              en el archivo <code style={{background:'#1e293b', padding:'2px 6px', borderRadius:'4px', color:'#93c5fd'}}>frontend/.env</code>
+            </p>
+            <button className="btn-secondary btn-sm" onClick={() => window.open(VMS_VIDEO, '_blank')}>Abrir en TP-Link mientras tanto</button>
+          </div>
+        )}
+
+        {/* Badge EN VIVO */}
+        {estado === 'vivo' && (
+          <div style={{position:'absolute', top:'10px', left:'10px', background:'rgba(239,68,68,0.9)', color:'#fff', fontSize:'11px', fontWeight:'700', padding:'3px 10px', borderRadius:'20px', display:'flex', alignItems:'center', gap:'5px'}}>
+            <span style={{width:'7px', height:'7px', borderRadius:'50%', background:'#fff', display:'inline-block', animation:'pulsar 1.2s ease-in-out infinite'}} />
+            EN VIVO
+          </div>
         )}
       </div>
+
+      <p style={{fontSize:'11px', color:'#475569', marginTop:'8px', textAlign:'center'}}>
+        Stream HLS vía mediamtx + Cloudflare Tunnel · Cámara VIGI C540-W
+      </p>
     </div>
   )
 }
