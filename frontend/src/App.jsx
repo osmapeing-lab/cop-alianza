@@ -1366,6 +1366,7 @@ const [mostrarTablaFinca, setMostrarTablaFinca] = useState(false)
   const [pesajes, setPesajes] = useState([])
   const [mostrarModalPesaje, setMostrarModalPesaje] = useState(false)
   const [nuevoPesaje, setNuevoPesaje] = useState({ lote: '', notas: '' })
+  const [editFechaPesaje, setEditFechaPesaje] = useState(null) // { id, fecha } del pesaje a editar
   const [pesosIngresados, setPesosIngresados] = useState([])   // array de números (pesos individuales del pesaje)
   const [pesoInputTmp, setPesoInputTmp]   = useState('')        // campo texto del último peso escrito
   // Para lote creation
@@ -2516,6 +2517,20 @@ const eliminarGastoSemanal = async (loteId, gastoId) => {
       cargarPesajes()
     } catch (error) {
       alert('Error eliminando pesaje: ' + (error.response?.data?.mensaje || error.message))
+    }
+  }
+
+  const guardarFechaPesaje = async () => {
+    if (!editFechaPesaje?.fecha) return
+    try {
+      await axios.put(`${API_URL}/api/pesajes/${editFechaPesaje.id}/fecha`,
+        { fecha: editFechaPesaje.fecha },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      setEditFechaPesaje(null)
+      cargarPesajes()
+    } catch (error) {
+      alert('Error actualizando fecha: ' + (error.response?.data?.mensaje || error.message))
     }
   }
 
@@ -5315,7 +5330,10 @@ const cargarHistoricoPesos = async () => {
                           <td>{pesaje.cantidad_cerdos_pesados || 1}</td>
                           <td>{pesaje.peso_promedio ? `${pesaje.peso_promedio.toFixed(1)} kg` : '-'}</td>
                           <td>{pesaje.notas || '-'}</td>
-                          <td>
+                          <td style={{display:'flex',gap:'4px'}}>
+                            <button className="btn-icon" title="Cambiar fecha" style={{color:'#2563eb'}} onClick={() => setEditFechaPesaje({ id: pesaje._id, fecha: pesaje.createdAt?.slice(0,10) })}>
+                              <Edit size={14} />
+                            </button>
                             <button className="btn-icon btn-danger" onClick={() => eliminarPesaje(pesaje._id)}>
                               <IconEliminar />
                             </button>
@@ -5326,6 +5344,31 @@ const cargarHistoricoPesos = async () => {
                   </tbody>
                 </table>
               </div>
+
+              {/* Modal editar fecha pesaje */}
+              {editFechaPesaje && (
+                <div className="modal-overlay" onClick={() => setEditFechaPesaje(null)}>
+                  <div className="modal" style={{maxWidth:'360px'}} onClick={e => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <h3>Cambiar Fecha del Pesaje</h3>
+                      <button className="btn-cerrar" onClick={() => setEditFechaPesaje(null)}>&times;</button>
+                    </div>
+                    <div className="modal-body">
+                      <div className="form-group">
+                        <label>Nueva fecha</label>
+                        <input type="date" className="form-control"
+                          value={editFechaPesaje.fecha || ''}
+                          onChange={e => setEditFechaPesaje({ ...editFechaPesaje, fecha: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="modal-footer">
+                      <button className="btn btn-secondary" onClick={() => setEditFechaPesaje(null)}>Cancelar</button>
+                      <button className="btn btn-primary" onClick={guardarFechaPesaje}>Guardar</button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Modal Pesaje Manual */}
               {mostrarModalPesaje && (

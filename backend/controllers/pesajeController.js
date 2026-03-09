@@ -90,6 +90,23 @@ exports.insertarPesajesHistoricos = async (req, res) => {
   }
 };
 
+// Actualizar fecha de un pesaje
+exports.actualizarFechaPesaje = async (req, res) => {
+  try {
+    const { fecha } = req.body;
+    if (!fecha) return res.status(400).json({ mensaje: 'fecha requerida' });
+    const fechaDate = new Date(fecha);
+    // Usar updateOne con timestamps:false para poder sobreescribir createdAt
+    await Pesaje.collection.updateOne(
+      { _id: require('mongoose').Types.ObjectId.createFromHexString(req.params.id) },
+      { $set: { createdAt: fechaDate, updatedAt: fechaDate } }
+    );
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(400).json({ mensaje: error.message });
+  }
+};
+
 // Estadísticas de pesajes
 exports.getEstadisticasPesajes = async (req, res) => {
   try {
