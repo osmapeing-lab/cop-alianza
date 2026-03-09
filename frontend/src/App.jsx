@@ -3578,16 +3578,20 @@ const cargarHistoricoPesos = async () => {
           // Mapear pesajes de todos los lotes activos a su edad, agrupando por día
           const pesajesPorDia = {}
           lotes.filter(l => l.activo).forEach(lote => {
-            const fechaInicio = lote.fecha_inicio ? new Date(lote.fecha_inicio) : null
-            if (!fechaInicio) return
-            const edadManual = lote.edad_dias_manual || 0
+            const edadManual = lote.edad_dias_manual ?? null
+            // Usar la misma lógica que el virtual edad_dias del backend:
+            // si hay edad_dias_manual → ref = fecha_inicio con offset; si no → ref = fecha_nacimiento o fecha_inicio
+            const refDate = edadManual !== null
+              ? (lote.fecha_inicio ? new Date(lote.fecha_inicio) : null)
+              : (lote.fecha_nacimiento ? new Date(lote.fecha_nacimiento) : (lote.fecha_inicio ? new Date(lote.fecha_inicio) : null))
+            if (!refDate) return
             pesajes.filter(p => {
               const loteId = p.lote?._id || p.lote
               return String(loteId) === String(lote._id) && p.peso_promedio
             }).forEach(p => {
               const fechaPesaje = new Date(p.createdAt)
-              const diasDesdeInicio = Math.round((fechaPesaje - fechaInicio) / (1000 * 60 * 60 * 24))
-              const dia = edadManual + diasDesdeInicio
+              const diasDesdeRef = Math.round((fechaPesaje - refDate) / (1000 * 60 * 60 * 24))
+              const dia = edadManual !== null ? (edadManual + diasDesdeRef) : diasDesdeRef
               if (!pesajesPorDia[dia]) pesajesPorDia[dia] = []
               pesajesPorDia[dia].push(p.peso_promedio)
             })
@@ -4470,8 +4474,11 @@ const cargarHistoricoPesos = async () => {
           <div className="grafica-container">
             {(() => {
               const edadLote = loteDetalle.edad_dias || 0
-              const fechaInicio = loteDetalle.fecha_inicio ? new Date(loteDetalle.fecha_inicio) : null
-              const edadManual = loteDetalle.edad_dias_manual || 0
+              const edadManual = loteDetalle.edad_dias_manual ?? null
+              // Misma lógica que el virtual edad_dias: si hay edad_dias_manual → ref=fecha_inicio; si no → fecha_nacimiento o fecha_inicio
+              const refDateLote = edadManual !== null
+                ? (loteDetalle.fecha_inicio ? new Date(loteDetalle.fecha_inicio) : null)
+                : (loteDetalle.fecha_nacimiento ? new Date(loteDetalle.fecha_nacimiento) : (loteDetalle.fecha_inicio ? new Date(loteDetalle.fecha_inicio) : null))
 
               // Mapear pesajes a edad del cerdo, agrupando por día
               const pesajesLote = pesajes.filter(p => {
@@ -4479,11 +4486,11 @@ const cargarHistoricoPesos = async () => {
                 return String(loteId) === String(loteDetalle._id) && p.peso_promedio
               })
               const pesajesPorDia = {}
-              if (fechaInicio) {
+              if (refDateLote) {
                 pesajesLote.forEach(p => {
                   const fechaPesaje = new Date(p.createdAt)
-                  const diasDesdeInicio = Math.round((fechaPesaje - fechaInicio) / (1000 * 60 * 60 * 24))
-                  const dia = edadManual + diasDesdeInicio
+                  const diasDesdeRef = Math.round((fechaPesaje - refDateLote) / (1000 * 60 * 60 * 24))
+                  const dia = edadManual !== null ? (edadManual + diasDesdeRef) : diasDesdeRef
                   if (!pesajesPorDia[dia]) pesajesPorDia[dia] = { pesos: [], mins: [], maxs: [] }
                   pesajesPorDia[dia].pesos.push(p.peso_promedio)
                   if (p.peso_min != null) pesajesPorDia[dia].mins.push(p.peso_min)
