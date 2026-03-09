@@ -5327,6 +5327,7 @@ const cargarHistoricoPesos = async () => {
                     <tr>
                       <th>Fecha</th>
                       <th>Lote</th>
+                      <th>Sem. Lote</th>
                       <th>Peso Total</th>
                       <th>Cerdos Pesados</th>
                       <th>Prom./Cerdo</th>
@@ -5337,13 +5338,29 @@ const cargarHistoricoPesos = async () => {
                   <tbody>
                     {pesajes.length === 0 ? (
                       <tr>
-                        <td colSpan="7" className="sin-datos">No hay pesajes registrados</td>
+                        <td colSpan="8" className="sin-datos">No hay pesajes registrados</td>
                       </tr>
                     ) : (
-                      pesajes.map(pesaje => (
+                      pesajes.map(pesaje => {
+                        // Calcular semana del lote para este pesaje
+                        const loteDelPesaje = lotes.find(l => String(l._id) === String(pesaje.lote?._id || pesaje.lote))
+                        let semLote = '-'
+                        if (loteDelPesaje) {
+                          const edadManual = loteDelPesaje.edad_dias_manual ?? null
+                          const refDate = edadManual !== null
+                            ? (loteDelPesaje.fecha_inicio ? new Date(loteDelPesaje.fecha_inicio) : null)
+                            : (loteDelPesaje.fecha_nacimiento ? new Date(loteDelPesaje.fecha_nacimiento) : (loteDelPesaje.fecha_inicio ? new Date(loteDelPesaje.fecha_inicio) : null))
+                          if (refDate) {
+                            const diasDesdeRef = Math.round((new Date(pesaje.createdAt) - refDate) / (1000 * 60 * 60 * 24))
+                            const diaLote = edadManual !== null ? (edadManual + diasDesdeRef) : diasDesdeRef
+                            semLote = `Sem ${Math.floor(diaLote / 7)} (Día ${diaLote})`
+                          }
+                        }
+                        return (
                         <tr key={pesaje._id}>
                           <td>{formatearFecha(pesaje.createdAt)}</td>
                           <td>{pesaje.lote?.nombre || 'Sin lote'}</td>
+                          <td><span style={{fontSize:'11px', background:'#f0fdf4', color:'#16a34a', border:'1px solid #86efac', borderRadius:'12px', padding:'2px 8px', fontWeight:'600'}}>{semLote}</span></td>
                           <td><strong>{pesaje.peso} kg</strong></td>
                           <td>{pesaje.cantidad_cerdos_pesados || 1}</td>
                           <td>{pesaje.peso_promedio ? `${pesaje.peso_promedio.toFixed(1)} kg` : '-'}</td>
@@ -5357,7 +5374,8 @@ const cargarHistoricoPesos = async () => {
                             </button>
                           </td>
                         </tr>
-                      ))
+                        )
+                      })
                     )}
                   </tbody>
                 </table>
