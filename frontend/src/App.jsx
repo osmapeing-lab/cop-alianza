@@ -3606,13 +3606,11 @@ const cargarHistoricoPesos = async () => {
           TABLA_ENGORDE.forEach(s => curva.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
           const curvaRecortada = curva.filter(p => p.dia <= limDia)
 
-          // Asegurar que el día actual tiene punto en la curva
-          if (!curvaRecortada.some(p => p.dia === edadMax)) {
-            const anterior = [...curvaRecortada].reverse().find(p => p.dia < edadMax)
-            if (anterior) {
-              curvaRecortada.push({ ...anterior, dia: edadMax, semana: 'Hoy' })
-              curvaRecortada.sort((a, b) => a.dia - b.dia)
-            }
+          // Mover el punto de inicio de semana actual al día real del lote
+          const semActualInicio = Math.floor(edadMax / 7) * 7
+          const idxSemActual = curvaRecortada.findIndex(p => p.dia === semActualInicio)
+          if (idxSemActual >= 0 && semActualInicio !== edadMax) {
+            curvaRecortada[idxSemActual] = { ...curvaRecortada[idxSemActual], dia: edadMax }
           }
 
           // Construir datos con carry-forward (iniciar con peso inicial)
@@ -4518,13 +4516,11 @@ const cargarHistoricoPesos = async () => {
                 }
               }
 
-              // Asegurar que el día actual tiene punto en la curva para que el peso se muestre
-              if (!curvaRecortada.some(p => p.dia === edadLote)) {
-                const anterior = [...curvaRecortada].reverse().find(p => p.dia < edadLote)
-                if (anterior) {
-                  curvaRecortada.push({ ...anterior, dia: edadLote, semana: 'Hoy' })
-                  curvaRecortada.sort((a, b) => a.dia - b.dia)
-                }
+              // Mover el punto de inicio de semana actual al día real del lote
+              const semActualInicioLote = Math.floor(edadLote / 7) * 7
+              const idxSemActualLote = curvaRecortada.findIndex(p => p.dia === semActualInicioLote)
+              if (idxSemActualLote >= 0 && semActualInicioLote !== edadLote) {
+                curvaRecortada[idxSemActualLote] = { ...curvaRecortada[idxSemActualLote], dia: edadLote }
               }
 
               // Construir datos con carry-forward
