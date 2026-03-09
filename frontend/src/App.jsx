@@ -3610,7 +3610,7 @@ const cargarHistoricoPesos = async () => {
           if (!curvaRecortada.some(p => p.dia === edadMax)) {
             const anterior = [...curvaRecortada].reverse().find(p => p.dia < edadMax)
             if (anterior) {
-              curvaRecortada.push({ ...anterior, dia: edadMax })
+              curvaRecortada.push({ ...anterior, dia: edadMax, semana: 'Hoy' })
               curvaRecortada.sort((a, b) => a.dia - b.dia)
             }
           }
@@ -4522,7 +4522,7 @@ const cargarHistoricoPesos = async () => {
               if (!curvaRecortada.some(p => p.dia === edadLote)) {
                 const anterior = [...curvaRecortada].reverse().find(p => p.dia < edadLote)
                 if (anterior) {
-                  curvaRecortada.push({ ...anterior, dia: edadLote })
+                  curvaRecortada.push({ ...anterior, dia: edadLote, semana: 'Hoy' })
                   curvaRecortada.sort((a, b) => a.dia - b.dia)
                 }
               }
