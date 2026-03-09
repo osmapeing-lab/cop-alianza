@@ -3606,6 +3606,15 @@ const cargarHistoricoPesos = async () => {
           TABLA_ENGORDE.forEach(s => curva.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
           const curvaRecortada = curva.filter(p => p.dia <= limDia)
 
+          // Asegurar que el día actual tiene punto en la curva
+          if (!curvaRecortada.some(p => p.dia === edadMax)) {
+            const anterior = [...curvaRecortada].reverse().find(p => p.dia < edadMax)
+            if (anterior) {
+              curvaRecortada.push({ ...anterior, dia: edadMax })
+              curvaRecortada.sort((a, b) => a.dia - b.dia)
+            }
+          }
+
           // Construir datos con carry-forward (iniciar con peso inicial)
           const pesoInicial = Math.max(...lotes.filter(l => l.activo).map(l => l.peso_inicial_promedio || 0), 0)
           let lastReal = pesoInicial > 0 ? pesoInicial : null
@@ -4509,8 +4518,17 @@ const cargarHistoricoPesos = async () => {
                 }
               }
 
+              // Asegurar que el día actual tiene punto en la curva para que el peso se muestre
+              if (!curvaRecortada.some(p => p.dia === edadLote)) {
+                const anterior = [...curvaRecortada].reverse().find(p => p.dia < edadLote)
+                if (anterior) {
+                  curvaRecortada.push({ ...anterior, dia: edadLote })
+                  curvaRecortada.sort((a, b) => a.dia - b.dia)
+                }
+              }
+
               // Construir datos con carry-forward
-              // limReal = semana actual (mismo punto que la línea "Hoy"), sin avanzar más
+              // limReal = día actual
               const semanaHoyDia = Math.floor(edadLote / 7) * 7
               const limReal = Math.max(edadLote, semanaHoyDia)
               let lastReal = (loteDetalle.peso_inicial_promedio || 0) > 0 ? loteDetalle.peso_inicial_promedio : null
