@@ -3878,6 +3878,28 @@ const cargarHistoricoPesos = async () => {
         </div>
       )}
 
+      {/* Alertas de stock bajo de inventario */}
+      {inventarioAlimento.filter(i => (i.cantidad_bultos || 0) <= (i.stock_minimo_bultos || 5)).length > 0 && (
+        <div className="dashboard-section" style={{gridColumn:'1 / -1', background:'#fef3c7', border:'1px solid #f59e0b', borderRadius:'12px'}}>
+          <h3 style={{color:'#92400e', marginBottom:'12px'}}><AlertTriangle size={20} /> Inventario de Alimento — Stock Bajo</h3>
+          <div style={{display:'flex', gap:'12px', flexWrap:'wrap'}}>
+            {inventarioAlimento.filter(i => (i.cantidad_bultos || 0) <= (i.stock_minimo_bultos || 5)).map(i => (
+              <div key={i._id} style={{background:'#fff', border:'1px solid #fcd34d', borderRadius:'8px', padding:'12px 16px', minWidth:'200px'}}>
+                <div style={{fontWeight:'700', color:'#92400e'}}>{i.nombre}</div>
+                <div style={{fontSize:'13px', color:(i.cantidad_bultos || 0) === 0 ? '#dc2626' : '#d97706', fontWeight:'600'}}>
+                  {(i.cantidad_bultos || 0) === 0 ? '⚠ AGOTADO' : `${(i.cantidad_bultos || 0).toFixed(1)} bultos (${((i.cantidad_bultos || 0) * (i.peso_por_bulto_kg || 40)).toFixed(0)} kg)`}
+                </div>
+                <div style={{fontSize:'11px', color:'#78350f'}}>Mínimo: {i.stock_minimo_bultos || 5} bultos</div>
+              </div>
+            ))}
+          </div>
+          <button className="btn-sm" style={{marginTop:'12px', background:'#f59e0b', color:'#fff', border:'none', borderRadius:'6px', padding:'6px 16px', cursor:'pointer', fontWeight:'600'}}
+            onClick={() => { setPagina('inventario'); setTabInventario('alimento') }}>
+            Ir a Inventario de Alimento →
+          </button>
+        </div>
+      )}
+
       {/* Alertas */}
       <div className="dashboard-section">
         <h3><Bell size={20} /> Últimas Alertas</h3>
@@ -4587,7 +4609,10 @@ const cargarHistoricoPesos = async () => {
         <div className="dashboard-section" style={{marginBottom:'24px'}}>
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px'}}>
             <h3><DollarSign size={20} /> Gastos del Lote — Total: <span style={{color:'#ef4444'}}>{formatearDinero(totalGastosLote)}</span></h3>
-            <button className="btn-primary btn-sm" onClick={() => setMostrarFormGasto(!mostrarFormGasto)}>
+            <button className="btn-primary btn-sm" onClick={() => {
+              if (mostrarFormGasto) setNuevoGasto({ descripcion: '', monto: '', categoria: 'otro' })
+              setMostrarFormGasto(!mostrarFormGasto)
+            }}>
               <Plus size={16} /> {mostrarFormGasto ? 'Cancelar' : 'Agregar Gasto'}
             </button>
           </div>
@@ -5604,7 +5629,7 @@ const cargarHistoricoPesos = async () => {
                 <button className={`tab-btn ${tabFinanzas === 'costos' ? 'activo' : ''}`} onClick={() => setTabFinanzas('costos')}>Costos</button>
                 <button className={`tab-btn ${tabFinanzas === 'ventas' ? 'activo' : ''}`} onClick={() => setTabFinanzas('ventas')}>Ventas</button>
 {/* Tab Registros legado oculto */}
-                <button className={`tab-btn ${tabFinanzas === 'gastos-lote' ? 'activo' : ''}`} onClick={() => setTabFinanzas('gastos-lote')}>Por Lote</button>
+                <button className={`tab-btn ${tabFinanzas === 'gastos-lote' ? 'activo' : ''}`} onClick={() => { setTabFinanzas('gastos-lote'); cargarLotes() }}>Por Lote</button>
               </div>
 
               {/* ── TAB: RESUMEN ── */}
@@ -5914,9 +5939,29 @@ const cargarHistoricoPesos = async () => {
               {tabFinanzas === 'gastos-lote' && (
                 <div className="finanzas-gastos-lote">
                   <h3 style={{marginBottom:'4px'}}>Contabilidad por Lote</h3>
-                  <p style={{fontSize:'13px', color:'#64748b', marginBottom:'20px'}}>
-                    Resumen financiero individual de cada lote: gastos, alimento, ventas y balance.
+                  <p style={{fontSize:'13px', color:'#64748b', marginBottom:'16px'}}>
+                    Gastos, alimento, ventas y balance individual de cada lote.
                   </p>
+
+                  {/* Alertas de stock bajo */}
+                  {inventarioAlimento.filter(i => (i.cantidad_bultos || 0) <= (i.stock_minimo_bultos || 5)).length > 0 && (
+                    <div style={{background:'#fef3c7', border:'1px solid #f59e0b', borderRadius:'10px', padding:'12px 16px', marginBottom:'16px', display:'flex', alignItems:'flex-start', gap:'10px'}}>
+                      <AlertTriangle size={18} style={{color:'#d97706', flexShrink:0, marginTop:'2px'}} />
+                      <div>
+                        <div style={{fontWeight:'700', fontSize:'13px', color:'#92400e', marginBottom:'4px'}}>Stock bajo en inventario de alimento</div>
+                        {inventarioAlimento.filter(i => (i.cantidad_bultos || 0) <= (i.stock_minimo_bultos || 5)).map(i => (
+                          <div key={i._id} style={{fontSize:'12px', color:'#78350f'}}>
+                            • <strong>{i.nombre}</strong>: {(i.cantidad_bultos || 0).toFixed(1)} bultos disponibles (mínimo: {i.stock_minimo_bultos || 5})
+                            {(i.cantidad_bultos || 0) === 0 && <span style={{color:'#dc2626', fontWeight:'700'}}> — AGOTADO</span>}
+                          </div>
+                        ))}
+                        <button className="btn-sm" style={{marginTop:'8px', background:'#f59e0b', color:'#fff', border:'none', borderRadius:'6px', padding:'4px 12px', cursor:'pointer', fontSize:'12px'}}
+                          onClick={() => { setPagina('inventario'); setTabInventario('alimento') }}>
+                          Actualizar inventario →
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Totales globales */}
                   <div style={{display:'flex', gap:'12px', marginBottom:'24px', flexWrap:'wrap'}}>
@@ -5955,7 +6000,8 @@ const cargarHistoricoPesos = async () => {
                       {lotes.map(lote => {
                         const ventasLote = ventas.filter(v => String(v.lote?._id || v.lote) === String(lote._id))
                         const ingresosLote = ventasLote.reduce((s, v) => s + (v.total || 0), 0)
-                        const costosLote = costos.filter(c => String(c.lote?._id || c.lote) === String(lote._id))
+                        // Gastos directamente del lote (siempre frescos, no dependen del array global costos)
+                        const gastosLote = lote.gastos_semanales || []
                         const totalGasto = (lote.total_gastos || 0) + (lote.costo_alimento_total || 0)
                         const balance = ingresosLote - totalGasto
                         return (
@@ -5984,10 +6030,12 @@ const cargarHistoricoPesos = async () => {
                               <div style={{padding:'14px 18px', borderRight:'1px solid #f1f5f9'}}>
                                 <div style={{fontSize:'11px', color:'#94a3b8', marginBottom:'4px'}}>Alimento</div>
                                 <div style={{fontWeight:'700', fontSize:'16px', color:'#ea580c'}}>{formatearDinero(lote.costo_alimento_total || 0)}</div>
+                                <div style={{fontSize:'11px', color:'#94a3b8'}}>{(lote.alimento_total_kg || 0).toFixed(1)} kg consumidos</div>
                               </div>
                               <div style={{padding:'14px 18px', borderRight:'1px solid #f1f5f9'}}>
                                 <div style={{fontSize:'11px', color:'#94a3b8', marginBottom:'4px'}}>Otros gastos</div>
                                 <div style={{fontWeight:'700', fontSize:'16px', color:'#ef4444'}}>{formatearDinero(lote.total_gastos || 0)}</div>
+                                <div style={{fontSize:'11px', color:'#94a3b8'}}>{gastosLote.length} registro{gastosLote.length !== 1 ? 's' : ''}</div>
                               </div>
                               <div style={{padding:'14px 18px', borderRight:'1px solid #f1f5f9', background:'#fef2f2'}}>
                                 <div style={{fontSize:'11px', color:'#94a3b8', marginBottom:'4px'}}>Total gastos</div>
@@ -6003,10 +6051,10 @@ const cargarHistoricoPesos = async () => {
                               </div>
                             </div>
 
-                            {/* Gastos del lote */}
-                            {costosLote.length > 0 && (
+                            {/* Detalle gastos semanales — directo del lote, siempre actualizados */}
+                            {gastosLote.length > 0 && (
                               <div style={{padding:'12px 18px', borderTop:'1px solid #f1f5f9', background:'#fafafa'}}>
-                                <div style={{fontSize:'12px', fontWeight:'600', color:'#64748b', marginBottom:'8px'}}>Gastos registrados ({costosLote.length})</div>
+                                <div style={{fontSize:'12px', fontWeight:'600', color:'#64748b', marginBottom:'8px'}}>Gastos registrados ({gastosLote.length})</div>
                                 <div className="table-container" style={{margin:0}}>
                                   <table>
                                     <thead>
@@ -6014,21 +6062,21 @@ const cargarHistoricoPesos = async () => {
                                         <th>Fecha</th>
                                         <th>Categoría</th>
                                         <th>Descripción</th>
-                                        <th>Total</th>
+                                        <th>Monto</th>
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {costosLote.slice(0, 8).map(c => (
-                                        <tr key={c._id}>
-                                          <td>{new Date(c.fecha).toLocaleDateString('es-CO')}</td>
-                                          <td><span className="tipo-badge">{(c.categoria || '').replace(/_/g,' ')}</span></td>
-                                          <td>{c.descripcion || '-'}</td>
-                                          <td><strong style={{color:'#ef4444'}}>{formatearDinero(c.total)}</strong></td>
+                                      {gastosLote.slice().sort((a,b) => new Date(b.fecha) - new Date(a.fecha)).slice(0, 10).map(g => (
+                                        <tr key={g._id}>
+                                          <td>{new Date(g.fecha).toLocaleDateString('es-CO')}</td>
+                                          <td><span className="tipo-badge">{(g.categoria || 'otro').replace(/_/g,' ')}</span></td>
+                                          <td>{g.descripcion || '-'}</td>
+                                          <td><strong style={{color:'#ef4444'}}>{formatearDinero(g.monto)}</strong></td>
                                         </tr>
                                       ))}
-                                      {costosLote.length > 8 && (
+                                      {gastosLote.length > 10 && (
                                         <tr><td colSpan="4" style={{textAlign:'center', fontSize:'12px', color:'#94a3b8', padding:'8px'}}>
-                                          + {costosLote.length - 8} más — ver detalle del lote
+                                          + {gastosLote.length - 10} más — ir a detalle del lote
                                         </td></tr>
                                       )}
                                     </tbody>
