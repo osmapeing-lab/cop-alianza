@@ -828,18 +828,21 @@ const PanelContabilidad = ({ resumen, comparativo, onNuevoCosto }) => {
       { value: 'alimento_concentrado', label: 'Alimento Concentrado' },
       { value: 'medicamentos', label: 'Medicamentos' },
       { value: 'vacunas', label: 'Vacunas' },
-      { value: 'vitaminas', label: 'Vitaminas' }
+      { value: 'vitaminas', label: 'Vitaminas' },
+      { value: 'otro', label: 'Otros' }
     ],
     indirecto: [
       { value: 'agua', label: 'Agua' },
       { value: 'electricidad', label: 'Electricidad' },
       { value: 'transporte', label: 'Transporte' },
-      { value: 'mantenimiento_equipos', label: 'Mantenimiento' }
+      { value: 'mantenimiento_equipos', label: 'Mantenimiento' },
+      { value: 'otro', label: 'Otros' }
     ],
     fijo: [
       { value: 'arriendo', label: 'Arriendo' },
       { value: 'administracion', label: 'Administración' },
-      { value: 'seguros', label: 'Seguros' }
+      { value: 'seguros', label: 'Seguros' },
+      { value: 'otro', label: 'Otros' }
     ]
   }
   
@@ -847,6 +850,7 @@ const PanelContabilidad = ({ resumen, comparativo, onNuevoCosto }) => {
     e.preventDefault()
     await onNuevoCosto(nuevoCosto)
     setModalCosto(false)
+    setNuevoCosto({ tipo_costo: 'directo', categoria: 'alimento_concentrado', descripcion: '', cantidad: 1, unidad: 'kg', precio_unitario: 0 })
   }
   
   return (
@@ -7235,6 +7239,32 @@ const cargarHistoricoPesos = async () => {
                         onChange={e => setConfig({ ...config, umbral_temp_critico: numVal(e.target.value, true) })}
                       />
                       <small>Se activan bombas automáticamente</small>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Notificaciones */}
+                <div className="config-section">
+                  <h3>Notificaciones por Correo</h3>
+                  <div className="config-grid">
+                    <div className="form-group">
+                      <label>Correo para reporte diario</label>
+                      <input
+                        type="email"
+                        placeholder="ejemplo@correo.com"
+                        value={config.email_reporte || ''}
+                        onChange={e => setConfig({ ...config, email_reporte: e.target.value })}
+                      />
+                      <small>Si se configura, los reportes diarios se enviarán a este correo. Si no hay correo, no se envía.</small>
+                    </div>
+                    <div className="form-group">
+                      <label>Correo de alerta (errores críticos)</label>
+                      <input
+                        type="email"
+                        placeholder="ejemplo@correo.com"
+                        value={config.email_alerta || ''}
+                        onChange={e => setConfig({ ...config, email_alerta: e.target.value })}
+                      />
                     </div>
                   </div>
                 </div>

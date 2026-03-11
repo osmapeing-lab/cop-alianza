@@ -16,12 +16,19 @@
 const { enviarWhatsApp } = require('./whatsappService');
 const { enviarNotificacion: enviarFCM } = require('./fcmService');
 const { enviarPushATodos } = require('./pushService');
+const { enviarEmail } = require('./emailService');
 const Lote = require('../models/lote');
 const WaterConsumption = require('../models/WaterConsumption');
 const Motorbomb = require('../models/Motorbomb');
 const Config = require('../models/Config');
 const NotificationState = require('../models/NotificationState');
 const Pesaje = require('../models/pesaje');
+
+// WhatsApp solo si está configurado
+const wsp = async (msg) => {
+  if (!process.env.WA_TOKEN) return;
+  return enviarWhatsApp(msg).catch(e => console.warn('[WSP] Error (omitido):', e.message));
+};
 
 // ═══════════════════════════════════════════════════════════════════════
 // SOLO EN MEMORIA: timers de setTimeout (no se pueden persistir)
@@ -139,7 +146,7 @@ async function evaluarTemperatura(temperatura, humedad) {
   }
 
   await Promise.all([
-    enviarWhatsApp(msg),
+    wsp(msg),
     enviarFCM({
       titulo: `🌡️ Alerta Calor — ${temperatura}°C`,
       cuerpo: `Temperatura sobre umbral (${umbral}°C). Humedad: ${humedad}%. ${etapa !== 'desconocida' ? `Etapa: ${etapa}` : ''}`.trim(),
@@ -203,7 +210,7 @@ async function notificarBomba(bomba) {
 
     const msg = getMensajeBombaEncendida(nombre);
     await Promise.all([
-      enviarWhatsApp(msg),
+      wsp(msg),
       enviarFCM({
         titulo: `Bomba Encendida`,
         cuerpo: `${nombre} ha sido encendida`,
@@ -226,7 +233,7 @@ async function notificarBomba(bomba) {
           const tsEncendido = await getEstado(`bomba_encendida_${codigo}`);
           const desde = tsEncendido ? new Date(tsEncendido).getTime() : Date.now();
           const minutos = Math.round((Date.now() - desde) / 60000);
-          await enviarWhatsApp(
+          await wsp(
             `⚠️ *AVISO: ${nombre} lleva ${minutos} min encendida*\n` +
             `¿Sigue el lavado/riego en proceso?\n` +
             `Apágala si ya terminó para evitar desperdicio de agua.`
@@ -252,7 +259,7 @@ async function notificarBomba(bomba) {
 
     const msg = getMensajeBombaApagada(nombre, duracion);
     await Promise.all([
-      enviarWhatsApp(msg),
+      wsp(msg),
       enviarFCM({
         titulo: `Bomba Apagada`,
         cuerpo: `${nombre} apagada${duracion}`,
@@ -304,7 +311,7 @@ async function evaluarNivelAgua(porcentaje) {
     const esCritico = umbral === '10';
     const tituloAgua = esCritico ? 'Nivel Crítico de Agua' : umbral === '100' ? 'Tanque Lleno' : 'Nivel de Agua Bajo';
     await Promise.all([
-      enviarWhatsApp(mensaje),
+      wsp(mensaje),
       enviarFCM({
         titulo: tituloAgua,
         cuerpo: `Nivel del tanque: ${porcentaje}%`,
@@ -355,8 +362,17 @@ async function revisarTareasDiarias() {
           `Edad del lote: ${edadDias} días\n\n` +
           item.tarea;
         const tareaTexto = item.tarea.replace(/\*|_|`/g, '').slice(0, 100);
+        // Email si está configurado
+        const cfg = await Config.findOne().sort({ createdAt: -1 });
+        if (cfg?.email_reporte) {
+          enviarEmail({
+            to: cfg.email_reporte,
+            subject: `📋 Tarea del día — ${lote.nombre} (Día ${edadDias})`,
+            html: `<h2>Tarea del día — ${lote.nombre}</h2><p><b>Edad del lote:</b> ${edadDias} días</p><pre style="font-family:sans-serif">${item.tarea.replace(/\*/g,'')}</pre>`
+          }).catch(e => console.warn('[EMAIL] Error tarea diaria:', e.message));
+        }
         await Promise.all([
-          enviarWhatsApp(msg),
+          wsp(msg),
           enviarFCM({
             titulo: `Tarea del día — ${lote.nombre}`,
             cuerpo: tareaTexto,
@@ -408,8 +424,21 @@ async function enviarResumenDiarioAgua() {
       `Consumo ayer: ${litrosAyer.toFixed(1)} litros\n` +
       `Tendencia: ${tendencia} vs ayer`;
 
+    // Email si está configurado
+    const cfg = await Config.findOne().sort({ createdAt: -1 });
+    if (cfg?.email_reporte) {
+      enviarEmail({
+        to: cfg.email_reporte,
+        subject: `📊 Resumen Diario de Agua — ${new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })}`,
+        html: `<h2>Resumen Diario de Agua</h2>
+               <p><b>Consumo hoy:</b> ${litros.toFixed(1)} L</p>
+               <p><b>Consumo ayer:</b> ${litrosAyer.toFixed(1)} L</p>
+               <p><b>Tendencia:</b> ${tendencia.replace(/[📈📉➡️]/g, '')} vs ayer</p>`
+      }).catch(e => console.warn('[EMAIL] Error resumen agua:', e.message));
+    }
+
     await Promise.all([
-      enviarWhatsApp(msg),
+      wsp(msg),
       enviarFCM({
         titulo: 'Resumen Diario de Agua',
         cuerpo: `Consumo hoy: ${litros.toFixed(1)}L | Ayer: ${litrosAyer.toFixed(1)}L`,
@@ -457,7 +486,7 @@ async function verificarStockCriticoAlimento(inventario) {
       `⚠️ Reabastecer urgente para no dejar a los cerdos sin alimento.`;
 
     await Promise.all([
-      enviarWhatsApp(msg),
+      wsp(msg),
       enviarFCM({
         titulo: `🚨 Stock Crítico: ${inventario.nombre}`,
         cuerpo: `Solo quedan ${kg_restantes.toFixed(1)} kg. Reabastecer urgente.`,
@@ -520,7 +549,7 @@ async function verificarPesajeSemanal() {
           `Prepara la romana y registra los pesos para llevar el control.`;
 
         await Promise.all([
-          enviarWhatsApp(msg),
+          wsp(msg),
           enviarFCM({
             titulo: `⚖️ Mañana: Día de Pesaje — ${lote.nombre}`,
             cuerpo: `Hace ${diasDesde} días del último pesaje. Prepara la romana.`,

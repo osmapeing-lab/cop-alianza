@@ -31,6 +31,7 @@ const configSchema = new mongoose.Schema({
   },
   telefono_alerta: String,
   email_alerta: String,
+  email_reporte: String,
   precio_agua_litro: {
     type: Number,
     default: 5
