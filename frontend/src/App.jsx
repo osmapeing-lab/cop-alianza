@@ -3695,12 +3695,17 @@ const cargarHistoricoPesos = async () => {
         })
 
         const yMax = Math.max(...datos.map(d => Math.max(d.peso_esperado || 0, d.peso_real || 0))) + 5
+        const planActual = getPlanSemana(edadLoteActual)
+        const semanaActual = planActual?.semana ?? Math.floor(edadLoteActual / 7) + 1
+        const labelHoy = `Sem ${semanaActual}`
 
         return (
           <div key={lote._id} className="dashboard-section grafica-section grafica-full">
             <h3 style={{ color }}><TrendingUp size={20} /> {lote.nombre} — Peso Real vs Meta Plan</h3>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
-              Edad: {edadLoteActual} días · Peso actual: {lote.peso_promedio_actual ? `${lote.peso_promedio_actual} kg` : `${pesoBase} kg (inicial)`}
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <span>Edad: <strong>{edadLoteActual} días</strong></span>
+              <span>Semana actual: <strong style={{ color: '#d97706' }}>Sem. {semanaActual}</strong> ({planActual?.tipo || ''})</span>
+              <span>Peso actual: <strong>{lote.peso_promedio_actual ? `${lote.peso_promedio_actual} kg` : `${pesoBase} kg (inicial)`}</strong></span>
             </div>
             <div className="grafica-container">
               <ResponsiveContainer width="100%" height={260}>
@@ -3723,6 +3728,8 @@ const cargarHistoricoPesos = async () => {
                     }}
                   />
                   <Legend />
+                  <ReferenceLine x={labelHoy} stroke="#d97706" strokeWidth={2} strokeDasharray="4 3"
+                    label={{ value: 'Hoy', position: 'top', fill: '#d97706', fontSize: 11, fontWeight: 700 }} />
                   <Area type="monotone" dataKey="peso_esperado" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6 3" fill={`url(#gradMeta_${lote._id})`} dot={false} name="Meta Plan" />
                   <Area type="monotone" dataKey="peso_real" stroke={color} strokeWidth={2.5} fill="none"
                     dot={(props) => {
@@ -4674,7 +4681,7 @@ const cargarHistoricoPesos = async () => {
             <h3 style={{margin:0}}><LineChartIcon size={20} /> Peso Real vs Plan de Producción</h3>
             {(loteDetalle.edad_dias || 0) >= 43 && (
               <span style={{fontSize:'12px', fontWeight:'600', color:'#d97706', background:'#fef3c7', border:'1px solid #fcd34d', padding:'3px 10px', borderRadius:'20px'}}>
-                Estamos en la Semana {Math.floor((loteDetalle.edad_dias || 0) / 7)} — Día {loteDetalle.edad_dias}
+                Estamos en la Semana {getPlanSemana(loteDetalle.edad_dias || 0)?.semana ?? Math.floor((loteDetalle.edad_dias || 0) / 7) + 1} — Día {loteDetalle.edad_dias}
               </span>
             )}
           </div>
@@ -5421,7 +5428,8 @@ const cargarHistoricoPesos = async () => {
                           if (refDate) {
                             const diasDesdeRef = Math.round((new Date(pesaje.createdAt) - refDate) / (1000 * 60 * 60 * 24))
                             const diaLote = edadManual !== null ? (edadManual + diasDesdeRef) : diasDesdeRef
-                            semLote = `Sem ${Math.floor(diaLote / 7)} (Día ${diaLote})`
+                            const planSemPesaje = getPlanSemana(diaLote)
+                            semLote = planSemPesaje ? `Sem ${planSemPesaje.semana} (Día ${diaLote})` : `Sem ${Math.floor(diaLote / 7) + 1} (Día ${diaLote})`
                           }
                         }
                         return (
