@@ -3716,12 +3716,6 @@ const cargarHistoricoPesos = async () => {
                     <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
                     <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                   </linearGradient>
-                  {lotesActivos.map((lote, i) => (
-                    <linearGradient key={lote._id} id={`gradR_${lote._id}`} x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={COLORES_LOTE[i % COLORES_LOTE.length]} stopOpacity={0.2} />
-                      <stop offset="95%" stopColor={COLORES_LOTE[i % COLORES_LOTE.length]} stopOpacity={0} />
-                    </linearGradient>
-                  ))}
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                 <XAxis dataKey="semana" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" />
@@ -3743,7 +3737,7 @@ const cargarHistoricoPesos = async () => {
                   const color = COLORES_LOTE[i % COLORES_LOTE.length]
                   return (
                     <Area key={lote._id} type="monotone" dataKey={`r_${lote._id}`}
-                      stroke={color} strokeWidth={3} fill={`url(#gradR_${lote._id})`}
+                      stroke={color} strokeWidth={2.5} fill="none"
                       dot={(props) => {
                         const { cx, cy, payload } = props
                         if (!payload[`r_${lote._id}`] || !payload[`t_${lote._id}`]) return null
@@ -4150,80 +4144,6 @@ const cargarHistoricoPesos = async () => {
             </div>
           )}
         </div>
-
-        {/* ═══ PLAN DE ALIMENTACIÓN DEL LOTE ═══ */}
-        {(() => {
-          const refDate = loteDetalle.fecha_nacimiento
-            ? new Date(loteDetalle.fecha_nacimiento)
-            : (loteDetalle.fecha_inicio ? new Date(loteDetalle.fecha_inicio) : null)
-          if (!refDate) return null
-          const edadDias = loteDetalle.edad_dias || 0
-          const semActualIdx = PLAN_ALIMENTACION.findIndex(s => edadDias >= s.dia_inicio && edadDias <= s.dia_fin)
-          const fmt = (d) => d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })
-          return (
-            <div className="dashboard-section" style={{marginBottom:'24px'}}>
-              <h3 style={{margin:'0 0 16px 0', display:'flex', alignItems:'center', gap:'8px'}}>
-                <Package size={20} /> Plan de Alimentación
-                <span style={{fontSize:'12px', fontWeight:'600', background:'#dbeafe', color:'#1d4ed8', padding:'3px 10px', borderRadius:'20px', marginLeft:'4px'}}>
-                  {loteDetalle.cantidad_cerdos} cerdos
-                </span>
-              </h3>
-              <div style={{overflowX:'auto'}}>
-                <table style={{width:'100%', borderCollapse:'collapse', fontSize:'13px'}}>
-                  <thead>
-                    <tr style={{background:'#f8fafc', borderBottom:'2px solid #e2e8f0'}}>
-                      <th style={{padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#475569'}}>Sem.</th>
-                      <th style={{padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#475569'}}>Fecha inicio</th>
-                      <th style={{padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#475569'}}>Fecha fin</th>
-                      <th style={{padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#475569'}}>Tipo de alimento</th>
-                      <th style={{padding:'8px 10px', textAlign:'center', fontWeight:'700', color:'#475569'}}>Cant./día/cerdo</th>
-                      <th style={{padding:'8px 10px', textAlign:'center', fontWeight:'700', color:'#475569'}}>Cant./día lote</th>
-                      <th style={{padding:'8px 10px', textAlign:'center', fontWeight:'700', color:'#475569'}}>Ganancia sem.</th>
-                      <th style={{padding:'8px 10px', textAlign:'center', fontWeight:'700', color:'#475569'}}>Peso esp.</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {PLAN_ALIMENTACION.map((fila, i) => {
-                      const fInicio = new Date(refDate.getTime() + fila.dia_inicio * 86400000)
-                      const fFin    = new Date(refDate.getTime() + fila.dia_fin   * 86400000)
-                      const esActual = i === semActualIdx
-                      const pasada   = edadDias > fila.dia_fin
-                      // Calcular cantidad total del lote si la cantidad es un número
-                      const cantNum = parseFloat(fila.cantidad_dia.replace(',','.').replace(/[^0-9.–-]/g,''))
-                      const cantLote = !isNaN(cantNum) && loteDetalle.cantidad_cerdos > 0
-                        ? `~${(cantNum * loteDetalle.cantidad_cerdos).toFixed(1)} kg`
-                        : (fila.cantidad_dia === 'Libre' ? 'Libre' : '-')
-                      return (
-                        <tr key={i} style={{
-                          background: esActual ? '#dbeafe' : pasada ? '#f8fafc' : fila.color,
-                          borderLeft: esActual ? '4px solid #2563eb' : '4px solid transparent',
-                          borderBottom: '1px solid #e2e8f0',
-                          fontWeight: esActual ? '700' : '400',
-                          opacity: pasada && !esActual ? 0.65 : 1
-                        }}>
-                          <td style={{padding:'7px 10px'}}>
-                            {esActual && <span style={{fontSize:'10px', background:'#2563eb', color:'#fff', borderRadius:'10px', padding:'1px 6px', marginRight:'4px'}}>HOY</span>}
-                            Sem {fila.semana}
-                          </td>
-                          <td style={{padding:'7px 10px', color:'#64748b'}}>{fmt(fInicio)}</td>
-                          <td style={{padding:'7px 10px', color:'#64748b'}}>{fmt(fFin)}</td>
-                          <td style={{padding:'7px 10px', fontWeight: esActual ? '700' : '500'}}>{fila.tipo}</td>
-                          <td style={{padding:'7px 10px', textAlign:'center'}}>{fila.cantidad_dia}</td>
-                          <td style={{padding:'7px 10px', textAlign:'center', color:'#1d4ed8', fontWeight:'600'}}>{cantLote}</td>
-                          <td style={{padding:'7px 10px', textAlign:'center'}}>{(fila.ganancia_sem_g / 1000).toFixed(1)} kg</td>
-                          <td style={{padding:'7px 10px', textAlign:'center', fontWeight:'600'}}>{fila.peso_esperado_kg} kg</td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <p style={{fontSize:'11px', color:'#94a3b8', margin:'8px 0 0 0'}}>
-                * Cantidades diarias por cerdo. Estimados según plan de alimentación oficial de la granja.
-              </p>
-            </div>
-          )
-        })()}
 
         {/* ═══ ALIMENTACIÓN DEL LOTE (desde inventario) ═══ */}
         <div className="dashboard-section" style={{marginBottom:'24px'}}>
@@ -4897,112 +4817,7 @@ const cargarHistoricoPesos = async () => {
 
           {mostrarTablaFinca && (
             <div className="table-container tabla-finca-scroll">
-              {/* Resumen de fases */}
-              <div className="fases-resumen">
-                {FASES_PRODUCCION.map((fase, i) => {
-                  const edadLote = loteDetalle.edad_dias || 0
-                  const esActual = edadLote >= fase.edad_min && edadLote <= fase.edad_max
-                  return (
-                    <div key={i} className={`fase-card ${fase.nombre.toLowerCase()} ${esActual ? 'fase-activa' : ''}`}>
-                      <h4>{i + 1}. {fase.nombre}</h4>
-                      <p>Edad: {fase.edad_min}-{fase.edad_max} días</p>
-                      <p>Peso: {fase.peso_min} → {fase.peso_max} kg</p>
-                      <p>Ganancia: {fase.ganancia_dia}/día</p>
-                      <p>Conversión: {fase.conversion}</p>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Tabla Fase Inicio */}
-              <h4 className="tabla-fase-titulo inicio">Fase Inicio (Días 43-70) — 12 → 25 kg</h4>
-              <table className="tabla-finca">
-                <thead>
-                  <tr>
-                    <th>Sem</th>
-                    <th>Días</th>
-                    <th>Peso Final (kg)</th>
-                    <th>Consumo/día (kg)</th>
-                    <th>Consumo/sem por cerdo (kg)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {TABLA_INICIO.map(f => {
-                    const edadLote = loteDetalle.edad_dias || 0
-                    const esActual = edadLote >= f.edad_inicio && edadLote <= f.edad_fin
-                    return (
-                      <tr key={f.semana} className={`inicio ${esActual ? 'semana-actual' : ''}`}>
-                        <td>{f.semana}</td>
-                        <td>{f.edad_inicio}-{f.edad_fin}</td>
-                        <td><strong>{f.peso_final}</strong></td>
-                        <td>{f.consumo_dia_min}-{f.consumo_dia_max}</td>
-                        <td>{f.consumo_sem_min}-{f.consumo_sem_max}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-
-              {/* Tabla Fase Crecimiento */}
-              <h4 className="tabla-fase-titulo crecimiento">Fase Crecimiento (Días 71-120) — 25 → 60 kg</h4>
-              <table className="tabla-finca">
-                <thead>
-                  <tr>
-                    <th>Sem</th>
-                    <th>Días</th>
-                    <th>Peso Final (kg)</th>
-                    <th>Consumo/día (kg)</th>
-                    <th>Consumo/sem (kg)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {TABLA_CRECIMIENTO.map(f => {
-                    const edadLote = loteDetalle.edad_dias || 0
-                    const esActual = edadLote >= f.edad_inicio && edadLote <= f.edad_fin
-                    return (
-                      <tr key={f.semana} className={`crecimiento ${esActual ? 'semana-actual' : ''}`}>
-                        <td>{f.semana}</td>
-                        <td>{f.edad_inicio}-{f.edad_fin}</td>
-                        <td><strong>{f.peso_final}</strong></td>
-                        <td>{f.consumo_dia}</td>
-                        <td>{f.consumo_sem}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-
-              {/* Tabla Fase Engorde */}
-              <h4 className="tabla-fase-titulo engorde">Fase Engorde (Días 121-180) — 60 → 110 kg</h4>
-              <table className="tabla-finca">
-                <thead>
-                  <tr>
-                    <th>Sem</th>
-                    <th>Días</th>
-                    <th>Peso Final (kg)</th>
-                    <th>Consumo/día (kg)</th>
-                    <th>Consumo/sem (kg)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {TABLA_ENGORDE.map(f => {
-                    const edadLote = loteDetalle.edad_dias || 0
-                    const esActual = edadLote >= f.edad_inicio && edadLote <= f.edad_fin
-                    return (
-                      <tr key={f.semana} className={`engorde ${esActual ? 'semana-actual' : ''}`}>
-                        <td>{f.semana}</td>
-                        <td>{f.edad_inicio}-{f.edad_fin}</td>
-                        <td><strong>{f.peso_final}</strong></td>
-                        <td>{f.consumo_dia}</td>
-                        <td>{f.consumo_sem}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-
-              {/* Tabla Finca original */}
-              <h4 className="tabla-fase-titulo levante">Tabla Finca Referencia — Levante/Ceba (Sem 11-24)</h4>
+              <h4 className="tabla-fase-titulo levante">Tabla Levante/Ceba — Plan Oficial de la Granja (Sem 11-24)</h4>
               <table className="tabla-finca">
                 <thead>
                   <tr>
@@ -5037,7 +4852,6 @@ const cargarHistoricoPesos = async () => {
                   })}
                 </tbody>
               </table>
-
               <div className="finca-notas">
                 <p><strong>Ciclo total:</strong> 43-180 días | Peso: 12 → 110 kg</p>
                 <p><strong>Fases:</strong> Inicio (28d) → Crecimiento (50d) → Engorde (60d)</p>
@@ -5711,7 +5525,7 @@ const cargarHistoricoPesos = async () => {
                 <button className={`tab-btn ${tabFinanzas === 'costos' ? 'activo' : ''}`} onClick={() => setTabFinanzas('costos')}>Costos</button>
                 <button className={`tab-btn ${tabFinanzas === 'ventas' ? 'activo' : ''}`} onClick={() => setTabFinanzas('ventas')}>Ventas</button>
 {/* Tab Registros legado oculto */}
-                <button className={`tab-btn ${tabFinanzas === 'gastos-lote' ? 'activo' : ''}`} onClick={() => setTabFinanzas('gastos-lote')}>Gastos por Lote</button>
+                <button className={`tab-btn ${tabFinanzas === 'gastos-lote' ? 'activo' : ''}`} onClick={() => setTabFinanzas('gastos-lote')}>Por Lote</button>
               </div>
 
               {/* ── TAB: RESUMEN ── */}
@@ -6017,114 +5831,166 @@ const cargarHistoricoPesos = async () => {
                   )}
                 </div>
               )}
-              {/* ── TAB: GASTOS POR LOTE (Registros contables separados) ── */}
+              {/* ── TAB: CONTABILIDAD POR LOTE ── */}
               {tabFinanzas === 'gastos-lote' && (
                 <div className="finanzas-gastos-lote">
-                  <h3 style={{marginBottom:'8px'}}>Gastos por Lote</h3>
+                  <h3 style={{marginBottom:'4px'}}>Contabilidad por Lote</h3>
                   <p style={{fontSize:'13px', color:'#64748b', marginBottom:'20px'}}>
-                    El costo de alimento se muestra como referencia — ya está contabilizado en la pestaña <strong>Costos</strong> al momento de la compra.
+                    Resumen financiero individual de cada lote: gastos, alimento, ventas y balance.
                   </p>
 
-                  {/* Resumen general — balance solo incluye gastos semanales, NO alimento */}
-                  <div style={{display:'flex', gap:'16px', marginBottom:'24px', flexWrap:'wrap'}}>
-                    <div style={{flex:'1', minWidth:'180px', padding:'16px', background:'#fef2f2', borderRadius:'12px', border:'1px solid #fca5a5'}}>
-                      <div style={{fontSize:'13px', color:'#64748b'}}>Otros Gastos (sin alimento)</div>
-                      <div style={{fontSize:'24px', fontWeight:'800', color:'#dc2626'}}>
-                        {formatearDinero(lotes.reduce((s, l) => s + (l.total_gastos || 0), 0))}
+                  {/* Totales globales */}
+                  <div style={{display:'flex', gap:'12px', marginBottom:'24px', flexWrap:'wrap'}}>
+                    <div style={{flex:'1', minWidth:'160px', padding:'14px', background:'#fef2f2', borderRadius:'10px', border:'1px solid #fca5a5'}}>
+                      <div style={{fontSize:'12px', color:'#64748b'}}>Total Gastos (todos los lotes)</div>
+                      <div style={{fontSize:'22px', fontWeight:'800', color:'#dc2626'}}>
+                        {formatearDinero(lotes.reduce((s, l) => s + (l.total_gastos || 0) + (l.costo_alimento_total || 0), 0))}
                       </div>
                     </div>
-                    <div style={{flex:'1', minWidth:'180px', padding:'16px', background:'#fff7ed', borderRadius:'12px', border:'1px solid #fdba74'}}>
-                      <div style={{fontSize:'13px', color:'#64748b'}}>Alimento Consumido (referencia)</div>
-                      <div style={{fontSize:'24px', fontWeight:'800', color:'#ea580c'}}>
-                        {formatearDinero(lotes.reduce((s, l) => s + (l.costo_alimento_total || 0), 0))}
-                      </div>
-                      <div style={{fontSize:'11px', color:'#9ca3af', marginTop:'4px'}}>Ya registrado en Costos</div>
-                    </div>
-                    <div style={{flex:'1', minWidth:'180px', padding:'16px', background:'#f0fdf4', borderRadius:'12px', border:'1px solid #86efac'}}>
-                      <div style={{fontSize:'13px', color:'#64748b'}}>Ingresos (Ventas)</div>
-                      <div style={{fontSize:'24px', fontWeight:'800', color:'#16a34a'}}>
-                        {formatearDinero(resumenCostos?.ingresos?.total || resumenContable.total_ingresos || 0)}
+                    <div style={{flex:'1', minWidth:'160px', padding:'14px', background:'#f0fdf4', borderRadius:'10px', border:'1px solid #86efac'}}>
+                      <div style={{fontSize:'12px', color:'#64748b'}}>Total Ingresos (ventas)</div>
+                      <div style={{fontSize:'22px', fontWeight:'800', color:'#16a34a'}}>
+                        {formatearDinero(ventas.reduce((s, v) => s + (v.total || 0), 0))}
                       </div>
                     </div>
+                    {(() => {
+                      const totalGastos = lotes.reduce((s, l) => s + (l.total_gastos || 0) + (l.costo_alimento_total || 0), 0)
+                      const totalIngresos = ventas.reduce((s, v) => s + (v.total || 0), 0)
+                      const balance = totalIngresos - totalGastos
+                      return (
+                        <div style={{flex:'1', minWidth:'160px', padding:'14px', background: balance >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius:'10px', border:`1px solid ${balance >= 0 ? '#86efac' : '#fca5a5'}`}}>
+                          <div style={{fontSize:'12px', color:'#64748b'}}>Balance General</div>
+                          <div style={{fontSize:'22px', fontWeight:'800', color: balance >= 0 ? '#16a34a' : '#dc2626'}}>
+                            {formatearDinero(balance)}
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </div>
 
-                  {/* Tabla por lote */}
-                  <div className="table-container">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>Lote</th>
-                          <th>Estado</th>
-                          <th>Cerdos</th>
-                          <th>Alimento (info)</th>
-                          <th>Otros Gastos</th>
-                          <th>Costo/Cerdo</th>
-                          <th>Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {lotes.length === 0 ? (
-                          <tr><td colSpan="7" className="sin-datos">No hay lotes registrados</td></tr>
-                        ) : (
-                          lotes.map(lote => (
-                            <tr key={lote._id}>
-                              <td><strong>{lote.nombre}</strong></td>
-                              <td><span className={`estado-lote ${lote.activo ? 'activo' : 'inactivo'}`}>{lote.activo ? 'Activo' : 'Finalizado'}</span></td>
-                              <td>{lote.cantidad_cerdos}</td>
-                              <td style={{color:'#ea580c', fontStyle:'italic'}}>{formatearDinero(lote.costo_alimento_total || 0)}</td>
-                              <td><strong style={{color:'#ef4444'}}>{formatearDinero(lote.total_gastos || 0)}</strong></td>
-                              <td>{lote.cantidad_cerdos > 0 ? formatearDinero((lote.total_gastos || 0) / lote.cantidad_cerdos) : '-'}</td>
-                              <td>
-                                <button className="btn-sm btn-primary" onClick={() => {
-                                  setPagina('lotes')
-                                  verDetalleLote(lote._id)
-                                }}>
+                  {/* Card por lote */}
+                  {lotes.length === 0 ? (
+                    <p className="sin-datos">No hay lotes registrados</p>
+                  ) : (
+                    <div style={{display:'flex', flexDirection:'column', gap:'16px'}}>
+                      {lotes.map(lote => {
+                        const ventasLote = ventas.filter(v => String(v.lote?._id || v.lote) === String(lote._id))
+                        const ingresosLote = ventasLote.reduce((s, v) => s + (v.total || 0), 0)
+                        const costosLote = costos.filter(c => String(c.lote?._id || c.lote) === String(lote._id))
+                        const totalGasto = (lote.total_gastos || 0) + (lote.costo_alimento_total || 0)
+                        const balance = ingresosLote - totalGasto
+                        return (
+                          <div key={lote._id} style={{border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden'}}>
+                            {/* Header */}
+                            <div style={{background: lote.activo ? '#eff6ff' : '#f8fafc', padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:'8px', borderBottom:'1px solid #e2e8f0'}}>
+                              <div style={{display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap'}}>
+                                <strong style={{fontSize:'16px'}}>{lote.nombre}</strong>
+                                <span style={{fontSize:'12px', background: lote.activo ? '#dbeafe' : '#e2e8f0', color: lote.activo ? '#1d4ed8' : '#64748b', padding:'2px 8px', borderRadius:'10px'}}>
+                                  {lote.activo ? 'Activo' : 'Finalizado'}
+                                </span>
+                                <span style={{fontSize:'12px', color:'#94a3b8'}}>{lote.cantidad_cerdos} cerdos</span>
+                              </div>
+                              <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
+                                <span style={{fontSize:'13px', fontWeight:'700', color: balance >= 0 ? '#16a34a' : '#dc2626', background: balance >= 0 ? '#dcfce7' : '#fee2e2', padding:'4px 14px', borderRadius:'8px'}}>
+                                  Balance: {formatearDinero(balance)}
+                                </span>
+                                <button className="btn-sm btn-primary" onClick={() => { setPagina('lotes'); verDetalleLote(lote._id) }}>
                                   Ver Detalle
                                 </button>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                        {lotes.length > 0 && (
-                          <tr style={{background:'#fef2f2', fontWeight:'bold'}}>
-                            <td colSpan="4" style={{textAlign:'right'}}>TOTAL otros gastos:</td>
-                            <td style={{color:'#dc2626'}}>{formatearDinero(lotes.reduce((s, l) => s + (l.total_gastos || 0), 0))}</td>
-                            <td></td>
-                            <td></td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                              </div>
+                            </div>
 
-                  {/* Detalle gastos semanales por lote (expandible) */}
-                  <h3 style={{marginTop:'32px', marginBottom:'16px'}}>Detalle Gastos Semanales por Lote</h3>
-                  {costos.filter(c => c.descripcion?.includes('semanal') || c.tipo_costo === 'directo').slice(0, 30).length === 0 ? (
-                    <p className="sin-datos">No hay gastos semanales registrados en finanzas</p>
-                  ) : (
-                    <div className="table-container">
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Fecha</th>
-                            <th>Lote</th>
-                            <th>Categoría</th>
-                            <th>Descripción</th>
-                            <th>Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {costos.filter(c => c.lote).slice(0, 30).map(c => (
-                            <tr key={c._id}>
-                              <td>{new Date(c.fecha).toLocaleDateString('es-CO')}</td>
-                              <td>{typeof c.lote === 'object' ? c.lote?.nombre : (lotes.find(l => l._id === c.lote)?.nombre || '-')}</td>
-                              <td><span className="tipo-badge">{(c.categoria || '').replace(/_/g,' ')}</span></td>
-                              <td>{c.descripcion || '-'}</td>
-                              <td><strong style={{color:'#ef4444'}}>{formatearDinero(c.total)}</strong></td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                            {/* Métricas financieras */}
+                            <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:'0', background:'#fff'}}>
+                              <div style={{padding:'14px 18px', borderRight:'1px solid #f1f5f9'}}>
+                                <div style={{fontSize:'11px', color:'#94a3b8', marginBottom:'4px'}}>Alimento</div>
+                                <div style={{fontWeight:'700', fontSize:'16px', color:'#ea580c'}}>{formatearDinero(lote.costo_alimento_total || 0)}</div>
+                              </div>
+                              <div style={{padding:'14px 18px', borderRight:'1px solid #f1f5f9'}}>
+                                <div style={{fontSize:'11px', color:'#94a3b8', marginBottom:'4px'}}>Otros gastos</div>
+                                <div style={{fontWeight:'700', fontSize:'16px', color:'#ef4444'}}>{formatearDinero(lote.total_gastos || 0)}</div>
+                              </div>
+                              <div style={{padding:'14px 18px', borderRight:'1px solid #f1f5f9', background:'#fef2f2'}}>
+                                <div style={{fontSize:'11px', color:'#94a3b8', marginBottom:'4px'}}>Total gastos</div>
+                                <div style={{fontWeight:'700', fontSize:'16px', color:'#dc2626'}}>{formatearDinero(totalGasto)}</div>
+                              </div>
+                              <div style={{padding:'14px 18px', borderRight:'1px solid #f1f5f9', background:'#f0fdf4'}}>
+                                <div style={{fontSize:'11px', color:'#94a3b8', marginBottom:'4px'}}>Ingresos ventas</div>
+                                <div style={{fontWeight:'700', fontSize:'16px', color:'#16a34a'}}>{formatearDinero(ingresosLote)}</div>
+                              </div>
+                              <div style={{padding:'14px 18px'}}>
+                                <div style={{fontSize:'11px', color:'#94a3b8', marginBottom:'4px'}}>Costo/cerdo</div>
+                                <div style={{fontWeight:'700', fontSize:'16px', color:'#475569'}}>{lote.cantidad_cerdos > 0 ? formatearDinero(totalGasto / lote.cantidad_cerdos) : '-'}</div>
+                              </div>
+                            </div>
+
+                            {/* Gastos del lote */}
+                            {costosLote.length > 0 && (
+                              <div style={{padding:'12px 18px', borderTop:'1px solid #f1f5f9', background:'#fafafa'}}>
+                                <div style={{fontSize:'12px', fontWeight:'600', color:'#64748b', marginBottom:'8px'}}>Gastos registrados ({costosLote.length})</div>
+                                <div className="table-container" style={{margin:0}}>
+                                  <table>
+                                    <thead>
+                                      <tr>
+                                        <th>Fecha</th>
+                                        <th>Categoría</th>
+                                        <th>Descripción</th>
+                                        <th>Total</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {costosLote.slice(0, 8).map(c => (
+                                        <tr key={c._id}>
+                                          <td>{new Date(c.fecha).toLocaleDateString('es-CO')}</td>
+                                          <td><span className="tipo-badge">{(c.categoria || '').replace(/_/g,' ')}</span></td>
+                                          <td>{c.descripcion || '-'}</td>
+                                          <td><strong style={{color:'#ef4444'}}>{formatearDinero(c.total)}</strong></td>
+                                        </tr>
+                                      ))}
+                                      {costosLote.length > 8 && (
+                                        <tr><td colSpan="4" style={{textAlign:'center', fontSize:'12px', color:'#94a3b8', padding:'8px'}}>
+                                          + {costosLote.length - 8} más — ver detalle del lote
+                                        </td></tr>
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Ventas del lote */}
+                            {ventasLote.length > 0 && (
+                              <div style={{padding:'12px 18px', borderTop:'1px solid #f1f5f9', background:'#f0fdf4'}}>
+                                <div style={{fontSize:'12px', fontWeight:'600', color:'#16a34a', marginBottom:'8px'}}>Ventas de este lote ({ventasLote.length})</div>
+                                <div className="table-container" style={{margin:0}}>
+                                  <table>
+                                    <thead>
+                                      <tr>
+                                        <th>Fecha</th>
+                                        <th>Comprador</th>
+                                        <th>Peso (kg)</th>
+                                        <th>Total</th>
+                                        <th>Estado</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {ventasLote.map(v => (
+                                        <tr key={v._id}>
+                                          <td>{new Date(v.fecha || v.createdAt).toLocaleDateString('es-CO')}</td>
+                                          <td>{v.comprador?.nombre || '-'}</td>
+                                          <td>{v.peso_total_kg?.toFixed(1) || '-'} kg</td>
+                                          <td><strong style={{color:'#16a34a'}}>{formatearDinero(v.total || 0)}</strong></td>
+                                          <td><span className="tipo-badge">{v.estado_pago || 'pendiente'}</span></td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
                     </div>
                   )}
                 </div>
