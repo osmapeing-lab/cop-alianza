@@ -48,8 +48,6 @@ const verificarToken = async (req, res, next) => {
     next();
 
   } catch (error) {
-    console.error('ERROR EN verificarToken:', error);
-
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ mensaje: 'Token inválido' });
     }
@@ -57,6 +55,8 @@ const verificarToken = async (req, res, next) => {
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ mensaje: 'Token expirado' });
     }
+
+    console.error('ERROR EN verificarToken:', error);
 
     return res.status(500).json({
       mensaje: 'Error interno de autenticación',

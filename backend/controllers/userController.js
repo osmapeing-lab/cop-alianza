@@ -133,7 +133,7 @@ exports.login = async (req, res) => {
       { activa: false, fecha_salida: new Date() }
     );
 
-    // Generar token JWT (30 días si "recordar sesión", 8h normal)
+    // Generar token JWT (30 días si "recordar sesión", 7d normal)
     const token = jwt.sign(
       {
         id: user._id,
@@ -141,7 +141,7 @@ exports.login = async (req, res) => {
         usuario: user.usuario
       },
       process.env.JWT_SECRET,
-      { expiresIn: recordar ? '30d' : '8h' }
+      { expiresIn: recordar ? '30d' : '7d' }
     );
 
     // Detectar dispositivo actual

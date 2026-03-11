@@ -1538,6 +1538,23 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  // Interceptor Axios: auto-logout en 401 (token expirado)
+  useEffect(() => {
+    const interceptorId = axios.interceptors.response.use(
+      res => res,
+      err => {
+        if (err.response?.status === 401) {
+          localStorage.removeItem('token')
+          setToken(null)
+          setUser(null)
+          setPagina('dashboard')
+        }
+        return Promise.reject(err)
+      }
+    )
+    return () => axios.interceptors.response.eject(interceptorId)
+  }, [])
+
   // Verificar token al cargar
   useEffect(() => {
     if (token) {
