@@ -3640,125 +3640,104 @@ const cargarHistoricoPesos = async () => {
 </div>
     </div>
 
-    {/* Gráfica Peso Real vs Plan de Producción - Dashboard */}
-    <div className="dashboard-section grafica-section grafica-full">
-      <h3><TrendingUp size={20} /> Peso Real vs Plan de Producción</h3>
-      <div className="grafica-container">
-        {(() => {
-          const COLORES_LOTE = ['#22c55e', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899']
-          const lotesActivos = lotes.filter(l => l.activo)
-          const edadMax = Math.max(...lotesActivos.map(l => l.edad_dias || 0), 50)
+    {/* Gráficas individuales por lote — Peso Real vs Meta Plan */}
+    {(() => {
+      const COLORES_LOTE = ['#22c55e', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899']
+      const lotesActivos = lotes.filter(l => l.activo)
 
-          // Pesajes por lote con la referencia correcta de fecha
-          const infoPorLote = {}
-          lotesActivos.forEach(lote => {
-            const edadManual = lote.edad_dias_manual ?? null
-            const refDate = edadManual !== null
-              ? (lote.fecha_inicio ? new Date(lote.fecha_inicio) : null)
-              : (lote.fecha_nacimiento ? new Date(lote.fecha_nacimiento) : (lote.fecha_inicio ? new Date(lote.fecha_inicio) : null))
-            if (!refDate) return
-            const porDia = {}
-            pesajes.filter(p => String(p.lote?._id || p.lote) === String(lote._id) && p.peso_promedio)
-              .forEach(p => {
-                const diasDesdeRef = Math.round((new Date(p.createdAt) - refDate) / (1000 * 60 * 60 * 24))
-                const dia = edadManual !== null ? (edadManual + diasDesdeRef) : diasDesdeRef
-                if (!porDia[dia]) porDia[dia] = []
-                porDia[dia].push(p.peso_promedio)
-              })
-            infoPorLote[lote._id] = {
-              pesoInicial: lote.peso_inicial_promedio || 0,
-              puntos: Object.entries(porDia).map(([dia, ps]) => ({
-                dia: parseInt(dia),
-                peso: Math.round((ps.reduce((a, b) => a + b, 0) / ps.length) * 100) / 100
-              })).sort((a, b) => a.dia - b.dia)
-            }
-          })
+      return lotesActivos.map((lote, i) => {
+        const color = COLORES_LOTE[i % COLORES_LOTE.length]
+        const edadManual = lote.edad_dias_manual ?? null
+        const refDate = edadManual !== null
+          ? (lote.fecha_inicio ? new Date(lote.fecha_inicio) : null)
+          : (lote.fecha_nacimiento ? new Date(lote.fecha_nacimiento) : (lote.fecha_inicio ? new Date(lote.fecha_inicio) : null))
 
-          // Curva Meta Plan desde PLAN_ALIMENTACION (plan oficial de la granja)
-          const limDia = Math.min(edadMax + 28, 180)
-          const curvaRecortada = [
-            { semana: 0, dia: 0, peso_esperado: 1.4, fase: 'Nacimiento' },
-            ...PLAN_ALIMENTACION
-              .filter(s => s.dia_fin <= limDia)
-              .map(s => ({ semana: s.semana, dia: s.dia_fin, peso_esperado: s.peso_esperado_kg, fase: s.tipo }))
-          ]
-
-          // Carry-forward por lote — arranca en el punto de entrada del lote (no desde el día 0)
-          const lastReals = {}
-          lotesActivos.forEach(l => { lastReals[l._id] = null })
-
-          // Calcular edad de entrada de cada lote (cuándo fue registrado físicamente)
-          const edadEntrada = {}
-          lotesActivos.forEach(l => {
-            edadEntrada[l._id] = l.edad_dias_manual !== null && l.edad_dias_manual !== undefined
-              ? l.edad_dias_manual
-              : 0
-          })
-
-          const datosGrafica = curvaRecortada.map(punto => {
-            const row = { dia: punto.dia, semana: `Sem ${punto.semana}`, peso_esperado: punto.peso_esperado, fase: punto.fase }
-            lotesActivos.forEach(lote => {
-              const info = infoPorLote[lote._id]
-              if (!info) return
-              // Activar pesoInicial cuando la curva llega a la edad de entrada del lote
-              const pesoBase = info.pesoInicial > 0 ? info.pesoInicial : 1.4
-              if (lastReals[lote._id] === null && punto.dia >= edadEntrada[lote._id]) {
-                lastReals[lote._id] = pesoBase
-              }
-              info.puntos.forEach(p => { if (p.dia <= punto.dia) lastReals[lote._id] = p.peso })
-              const edadLoteActual = lote.edad_dias || 0
-              row[`r_${lote._id}`] = (punto.dia <= edadLoteActual + 7 && lastReals[lote._id] !== null) ? lastReals[lote._id] : null
-              row[`t_${lote._id}`] = info.puntos.some(p => Math.abs(p.dia - punto.dia) <= 3)
+        const porDia = {}
+        if (refDate) {
+          pesajes.filter(p => String(p.lote?._id || p.lote) === String(lote._id) && p.peso_promedio)
+            .forEach(p => {
+              const diasDesdeRef = Math.round((new Date(p.createdAt) - refDate) / (1000 * 60 * 60 * 24))
+              const dia = edadManual !== null ? (edadManual + diasDesdeRef) : diasDesdeRef
+              if (!porDia[dia]) porDia[dia] = []
+              porDia[dia].push(p.peso_promedio)
             })
-            return row
-          })
+        }
+        const puntos = Object.entries(porDia).map(([dia, ps]) => ({
+          dia: parseInt(dia),
+          peso: Math.round((ps.reduce((a, b) => a + b, 0) / ps.length) * 100) / 100
+        })).sort((a, b) => a.dia - b.dia)
 
-          const yMax = Math.max(...datosGrafica.map(d => d.peso_esperado || 0)) + 10
+        const edadLoteActual = lote.edad_dias || 0
+        const edadEntrada = edadManual !== null && edadManual !== undefined ? edadManual : 0
+        const pesoBase = (lote.peso_inicial_promedio || 0) > 0 ? lote.peso_inicial_promedio : 1.4
+        const limDia = Math.min(edadLoteActual + 28, 180)
 
-          return (
-            <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={datosGrafica}>
-                <defs>
-                  <linearGradient id="gradMetaDash" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="semana" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" />
-                <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" unit=" kg" domain={[0, yMax]} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: 'rgba(255,255,255,0.97)', border: 'none', borderRadius: '10px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}
-                  formatter={(value, name) => {
-                    if (name === 'Meta Plan') return [`${value} kg`, name]
-                    return [`${value} kg`, name]
-                  }}
-                  labelFormatter={(label) => {
-                    const p = datosGrafica.find(d => d.semana === label)
-                    return p ? `${label} — Día ${p.dia} (${p.fase})` : label
-                  }}
-                />
-                <Legend />
-                <Area type="monotone" dataKey="peso_esperado" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6 3" fill="url(#gradMetaDash)" dot={false} name="Meta Plan" />
-                {lotesActivos.map((lote, i) => {
-                  const color = COLORES_LOTE[i % COLORES_LOTE.length]
-                  return (
-                    <Area key={lote._id} type="monotone" dataKey={`r_${lote._id}`}
-                      stroke={color} strokeWidth={2.5} fill="none"
-                      dot={(props) => {
-                        const { cx, cy, payload } = props
-                        if (!payload[`r_${lote._id}`] || !payload[`t_${lote._id}`]) return null
-                        return <circle cx={cx} cy={cy} r={5} fill={color} stroke="#fff" strokeWidth={2} />
-                      }}
-                      name={lote.nombre} connectNulls />
-                  )
-                })}
-              </AreaChart>
-            </ResponsiveContainer>
-          )
-        })()}
-      </div>
-    </div>
+        const curva = [
+          { semana: 0, dia: 0, peso_esperado: 1.4, fase: 'Nacimiento' },
+          ...PLAN_ALIMENTACION
+            .filter(s => s.dia_fin <= limDia)
+            .map(s => ({ semana: s.semana, dia: s.dia_fin, peso_esperado: s.peso_esperado_kg, fase: s.tipo }))
+        ]
+
+        let lastReal = null
+        const datos = curva.map(punto => {
+          if (lastReal === null && punto.dia >= edadEntrada) lastReal = pesoBase
+          puntos.forEach(p => { if (p.dia <= punto.dia) lastReal = p.peso })
+          const tieneP = puntos.some(p => Math.abs(p.dia - punto.dia) <= 3)
+          return {
+            semana: `Sem ${punto.semana}`,
+            dia: punto.dia,
+            fase: punto.fase,
+            peso_esperado: punto.peso_esperado,
+            peso_real: (punto.dia <= edadLoteActual + 7 && lastReal !== null) ? lastReal : null,
+            tiene_pesaje: tieneP
+          }
+        })
+
+        const yMax = Math.max(...datos.map(d => Math.max(d.peso_esperado || 0, d.peso_real || 0))) + 5
+
+        return (
+          <div key={lote._id} className="dashboard-section grafica-section grafica-full">
+            <h3 style={{ color }}><TrendingUp size={20} /> {lote.nombre} — Peso Real vs Meta Plan</h3>
+            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
+              Edad: {edadLoteActual} días · Peso actual: {lote.peso_promedio_actual ? `${lote.peso_promedio_actual} kg` : `${pesoBase} kg (inicial)`}
+            </div>
+            <div className="grafica-container">
+              <ResponsiveContainer width="100%" height={260}>
+                <AreaChart data={datos}>
+                  <defs>
+                    <linearGradient id={`gradMeta_${lote._id}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis dataKey="semana" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" />
+                  <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" unit=" kg" domain={[0, yMax]} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'rgba(255,255,255,0.97)', border: 'none', borderRadius: '10px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}
+                    formatter={(value, name) => [`${value} kg`, name]}
+                    labelFormatter={(label) => {
+                      const p = datos.find(d => d.semana === label)
+                      return p ? `${label} — Día ${p.dia} (${p.fase})` : label
+                    }}
+                  />
+                  <Legend />
+                  <Area type="monotone" dataKey="peso_esperado" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6 3" fill={`url(#gradMeta_${lote._id})`} dot={false} name="Meta Plan" />
+                  <Area type="monotone" dataKey="peso_real" stroke={color} strokeWidth={2.5} fill="none"
+                    dot={(props) => {
+                      const { cx, cy, payload } = props
+                      if (!payload.peso_real || !payload.tiene_pesaje) return null
+                      return <circle cx={cx} cy={cy} r={5} fill={color} stroke="#fff" strokeWidth={2} />
+                    }}
+                    name={lote.nombre} connectNulls />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )
+      })
+    })()}
 
     {/* Resumen Financiero - una sola gráfica limpia */}
     {historicoContable.length > 0 && (
