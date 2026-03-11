@@ -3692,7 +3692,7 @@ const cargarHistoricoPesos = async () => {
           lotesActivos.forEach(l => {
             edadEntrada[l._id] = l.edad_dias_manual !== null && l.edad_dias_manual !== undefined
               ? l.edad_dias_manual
-              : (l.fecha_nacimiento ? 0 : 43)
+              : 0
           })
 
           const datosGrafica = curvaRecortada.map(punto => {
@@ -3701,12 +3701,13 @@ const cargarHistoricoPesos = async () => {
               const info = infoPorLote[lote._id]
               if (!info) return
               // Activar pesoInicial cuando la curva llega a la edad de entrada del lote
-              if (lastReals[lote._id] === null && punto.dia >= edadEntrada[lote._id] && info.pesoInicial > 0) {
-                lastReals[lote._id] = info.pesoInicial
+              const pesoBase = info.pesoInicial > 0 ? info.pesoInicial : 1.4
+              if (lastReals[lote._id] === null && punto.dia >= edadEntrada[lote._id]) {
+                lastReals[lote._id] = pesoBase
               }
               info.puntos.forEach(p => { if (p.dia <= punto.dia) lastReals[lote._id] = p.peso })
               const edadLoteActual = lote.edad_dias || 0
-              row[`r_${lote._id}`] = (punto.dia <= edadLoteActual && lastReals[lote._id] !== null) ? lastReals[lote._id] : null
+              row[`r_${lote._id}`] = (punto.dia <= edadLoteActual + 7 && lastReals[lote._id] !== null) ? lastReals[lote._id] : null
               row[`t_${lote._id}`] = info.puntos.some(p => Math.abs(p.dia - punto.dia) <= 3)
             })
             return row

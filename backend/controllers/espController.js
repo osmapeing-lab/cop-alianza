@@ -883,7 +883,13 @@ exports.tararBascula = (req, res) => {
 exports.recibirPeso = async (req, res) => {
   try {
     const { sensor_id, peso, unidad, lote_id, cantidad_cerdos, notas } = req.body;
-    
+
+    // Si no hay token JWT, viene del ESP32 (auto-estable) → solo actualizar live, NO guardar
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return exports.recibirPesoLive(req, res);
+    }
+
     console.log('[ESP32] Peso para GUARDAR:', peso, unidad || 'kg');
     
     let loteAsociado = null;
