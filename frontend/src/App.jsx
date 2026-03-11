@@ -3644,8 +3644,10 @@ const cargarHistoricoPesos = async () => {
     {(() => {
       const COLORES_LOTE = ['#22c55e', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899']
       const lotesActivos = lotes.filter(l => l.activo)
-
-      return lotesActivos.map((lote, i) => {
+      if (lotesActivos.length === 0) return null
+      return (
+      <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 16 }}>
+      {lotesActivos.map((lote, i) => {
         const color = COLORES_LOTE[i % COLORES_LOTE.length]
         const edadManual = lote.edad_dias_manual ?? null
         const refDate = edadManual !== null
@@ -3700,7 +3702,7 @@ const cargarHistoricoPesos = async () => {
         const labelHoy = `Sem ${semanaActual}`
 
         return (
-          <div key={lote._id} className="dashboard-section grafica-section grafica-full">
+          <div key={lote._id} className="dashboard-section grafica-section">
             <h3 style={{ color }}><TrendingUp size={20} /> {lote.nombre} — Peso Real vs Meta Plan</h3>
             <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               <span>Edad: <strong>{edadLoteActual} días</strong></span>
@@ -3708,7 +3710,7 @@ const cargarHistoricoPesos = async () => {
               <span>Peso actual: <strong>{lote.peso_promedio_actual ? `${lote.peso_promedio_actual} kg` : `${pesoBase} kg (inicial)`}</strong></span>
             </div>
             <div className="grafica-container">
-              <ResponsiveContainer width="100%" height={260}>
+              <ResponsiveContainer width="100%" height={180}>
                 <AreaChart data={datos}>
                   <defs>
                     <linearGradient id={`gradMeta_${lote._id}`} x1="0" y1="0" x2="0" y2="1">
@@ -3743,7 +3745,9 @@ const cargarHistoricoPesos = async () => {
             </div>
           </div>
         )
-      })
+      })}
+      </div>
+      )
     })()}
 
     {/* Resumen Financiero - una sola gráfica limpia */}
