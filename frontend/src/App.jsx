@@ -185,6 +185,34 @@ const TABLA_FINCA = [
 ]
 
 // ═══════════════════════════════════════════════════════════════════════
+// PLAN DE ALIMENTACIÓN COMPLETO (del documento oficial de la granja)
+// Desde nacimiento (semana 1) hasta engorde (semana 16+)
+// Las fechas se calculan dinámicamente desde fecha_nacimiento del lote
+// ═══════════════════════════════════════════════════════════════════════
+const PLAN_ALIMENTACION = [
+  { semana: 1,  dia_inicio: 0,   dia_fin: 6,   tipo: 'Solo leche materna',      cantidad_dia: 'Libre',        ganancia_sem_g: 900,  peso_esperado_kg: 2.3,  color: '#f0fdf4' },
+  { semana: 2,  dia_inicio: 7,   dia_fin: 13,  tipo: 'Leche materna',            cantidad_dia: 'Libre',        ganancia_sem_g: 1200, peso_esperado_kg: 3.5,  color: '#f0fdf4' },
+  { semana: 3,  dia_inicio: 14,  dia_fin: 20,  tipo: 'Leche + creep feed',       cantidad_dia: '20–40 g',      ganancia_sem_g: 1400, peso_esperado_kg: 4.9,  color: '#f0fdf4' },
+  { semana: 4,  dia_inicio: 21,  dia_fin: 27,  tipo: 'Leche + creep feed',       cantidad_dia: '40–80 g',      ganancia_sem_g: 1600, peso_esperado_kg: 6.5,  color: '#f0fdf4' },
+  { semana: 5,  dia_inicio: 28,  dia_fin: 34,  tipo: 'Pre-iniciador (destete)',  cantidad_dia: '100–150 g',    ganancia_sem_g: 1800, peso_esperado_kg: 8.3,  color: '#fef3c7' },
+  { semana: 6,  dia_inicio: 35,  dia_fin: 41,  tipo: 'Pre-iniciador',            cantidad_dia: '150–250 g',    ganancia_sem_g: 2100, peso_esperado_kg: 10.4, color: '#fef3c7' },
+  { semana: 7,  dia_inicio: 42,  dia_fin: 48,  tipo: 'Iniciador',                cantidad_dia: '300–400 g',    ganancia_sem_g: 2500, peso_esperado_kg: 12.9, color: '#eff6ff' },
+  { semana: 8,  dia_inicio: 49,  dia_fin: 55,  tipo: 'Iniciador',                cantidad_dia: '400–600 g',    ganancia_sem_g: 3000, peso_esperado_kg: 15.9, color: '#eff6ff' },
+  { semana: 9,  dia_inicio: 56,  dia_fin: 62,  tipo: 'Iniciador',                cantidad_dia: '600–800 g',    ganancia_sem_g: 3500, peso_esperado_kg: 19.4, color: '#eff6ff' },
+  { semana: 10, dia_inicio: 63,  dia_fin: 69,  tipo: 'Crecimiento',              cantidad_dia: '0.9 kg',       ganancia_sem_g: 4000, peso_esperado_kg: 23.4, color: '#f5f3ff' },
+  { semana: 11, dia_inicio: 70,  dia_fin: 76,  tipo: 'Crecimiento',              cantidad_dia: '1.0 kg',       ganancia_sem_g: 4500, peso_esperado_kg: 27.9, color: '#f5f3ff' },
+  { semana: 12, dia_inicio: 77,  dia_fin: 83,  tipo: 'Crecimiento',              cantidad_dia: '1.2 kg',       ganancia_sem_g: 5000, peso_esperado_kg: 32.9, color: '#f5f3ff' },
+  { semana: 13, dia_inicio: 84,  dia_fin: 90,  tipo: 'Crecimiento',              cantidad_dia: '1.4 kg',       ganancia_sem_g: 5500, peso_esperado_kg: 38.4, color: '#f5f3ff' },
+  { semana: 14, dia_inicio: 91,  dia_fin: 97,  tipo: 'Crecimiento',              cantidad_dia: '1.6 kg',       ganancia_sem_g: 6000, peso_esperado_kg: 44.4, color: '#f5f3ff' },
+  { semana: 15, dia_inicio: 98,  dia_fin: 104, tipo: 'Crecimiento',              cantidad_dia: '1.8 kg',       ganancia_sem_g: 6500, peso_esperado_kg: 50.9, color: '#f5f3ff' },
+  { semana: 16, dia_inicio: 105, dia_fin: 111, tipo: 'Engorde',                  cantidad_dia: '2.0 kg',       ganancia_sem_g: 7000, peso_esperado_kg: 57.9, color: '#fff7ed' },
+]
+
+// Retorna la fila del plan de alimentación según la edad en días del lote
+const getPlanSemana = (edadDias) =>
+  PLAN_ALIMENTACION.find(s => edadDias >= s.dia_inicio && edadDias <= s.dia_fin) || null
+
+// ═══════════════════════════════════════════════════════════════════════
 // ICONOS SVG
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -3803,6 +3831,53 @@ const cargarHistoricoPesos = async () => {
         </div>
       </div>
 
+      {/* Plan de Alimentación Hoy */}
+      {lotes.filter(l => l.activo).length > 0 && (
+        <div className="dashboard-section" style={{gridColumn:'1 / -1'}}>
+          <h3 style={{marginBottom:'16px'}}><Package size={20} /> Plan de Alimentación — Semana Actual</h3>
+          <div style={{display:'flex', gap:'12px', flexWrap:'wrap'}}>
+            {lotes.filter(l => l.activo).map(lote => {
+              const planSem = getPlanSemana(lote.edad_dias || 0)
+              if (!planSem) return null
+              const refDate = lote.fecha_nacimiento
+                ? new Date(lote.fecha_nacimiento)
+                : (lote.fecha_inicio ? new Date(lote.fecha_inicio) : null)
+              const fInicio = refDate ? new Date(refDate.getTime() + planSem.dia_inicio * 86400000) : null
+              const fFin    = refDate ? new Date(refDate.getTime() + planSem.dia_fin   * 86400000) : null
+              const fmt = d => d.toLocaleDateString('es-CO', { day:'2-digit', month:'short' })
+              const cantNum = parseFloat(planSem.cantidad_dia.replace(',','.').replace(/[^0-9.]/g,''))
+              const cantLoteKg = !isNaN(cantNum) && lote.cantidad_cerdos > 0
+                ? `${(cantNum * lote.cantidad_cerdos).toFixed(1)} kg/día`
+                : planSem.cantidad_dia === 'Libre' ? 'Libre' : planSem.cantidad_dia
+              return (
+                <div key={lote._id} style={{
+                  flex:'1', minWidth:'220px', background:'#eff6ff', borderRadius:'12px',
+                  padding:'16px', border:'2px solid #bfdbfe'
+                }}>
+                  <div style={{fontWeight:'700', fontSize:'14px', color:'#1e40af', marginBottom:'8px'}}>{lote.nombre}</div>
+                  <div style={{fontSize:'12px', color:'#64748b', marginBottom:'6px'}}>
+                    Sem. {planSem.semana} · Día {lote.edad_dias}
+                    {fInicio && fFin && <span> · {fmt(fInicio)} – {fmt(fFin)}</span>}
+                  </div>
+                  <div style={{fontWeight:'700', fontSize:'15px', color:'#1e293b', marginBottom:'4px'}}>{planSem.tipo}</div>
+                  <div style={{display:'flex', gap:'8px', marginTop:'8px', flexWrap:'wrap'}}>
+                    <span style={{background:'#dbeafe', color:'#1d4ed8', borderRadius:'8px', padding:'3px 10px', fontSize:'12px', fontWeight:'600'}}>
+                      {planSem.cantidad_dia}/cerdo
+                    </span>
+                    <span style={{background:'#dcfce7', color:'#16a34a', borderRadius:'8px', padding:'3px 10px', fontSize:'12px', fontWeight:'600'}}>
+                      {cantLoteKg} total
+                    </span>
+                    <span style={{background:'#f3f4f6', color:'#374151', borderRadius:'8px', padding:'3px 10px', fontSize:'12px'}}>
+                      Meta: {planSem.peso_esperado_kg} kg
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Alertas */}
       <div className="dashboard-section">
         <h3><Bell size={20} /> Últimas Alertas</h3>
@@ -4075,6 +4150,80 @@ const cargarHistoricoPesos = async () => {
             </div>
           )}
         </div>
+
+        {/* ═══ PLAN DE ALIMENTACIÓN DEL LOTE ═══ */}
+        {(() => {
+          const refDate = loteDetalle.fecha_nacimiento
+            ? new Date(loteDetalle.fecha_nacimiento)
+            : (loteDetalle.fecha_inicio ? new Date(loteDetalle.fecha_inicio) : null)
+          if (!refDate) return null
+          const edadDias = loteDetalle.edad_dias || 0
+          const semActualIdx = PLAN_ALIMENTACION.findIndex(s => edadDias >= s.dia_inicio && edadDias <= s.dia_fin)
+          const fmt = (d) => d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })
+          return (
+            <div className="dashboard-section" style={{marginBottom:'24px'}}>
+              <h3 style={{margin:'0 0 16px 0', display:'flex', alignItems:'center', gap:'8px'}}>
+                <Package size={20} /> Plan de Alimentación
+                <span style={{fontSize:'12px', fontWeight:'600', background:'#dbeafe', color:'#1d4ed8', padding:'3px 10px', borderRadius:'20px', marginLeft:'4px'}}>
+                  {loteDetalle.cantidad_cerdos} cerdos
+                </span>
+              </h3>
+              <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%', borderCollapse:'collapse', fontSize:'13px'}}>
+                  <thead>
+                    <tr style={{background:'#f8fafc', borderBottom:'2px solid #e2e8f0'}}>
+                      <th style={{padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#475569'}}>Sem.</th>
+                      <th style={{padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#475569'}}>Fecha inicio</th>
+                      <th style={{padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#475569'}}>Fecha fin</th>
+                      <th style={{padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#475569'}}>Tipo de alimento</th>
+                      <th style={{padding:'8px 10px', textAlign:'center', fontWeight:'700', color:'#475569'}}>Cant./día/cerdo</th>
+                      <th style={{padding:'8px 10px', textAlign:'center', fontWeight:'700', color:'#475569'}}>Cant./día lote</th>
+                      <th style={{padding:'8px 10px', textAlign:'center', fontWeight:'700', color:'#475569'}}>Ganancia sem.</th>
+                      <th style={{padding:'8px 10px', textAlign:'center', fontWeight:'700', color:'#475569'}}>Peso esp.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {PLAN_ALIMENTACION.map((fila, i) => {
+                      const fInicio = new Date(refDate.getTime() + fila.dia_inicio * 86400000)
+                      const fFin    = new Date(refDate.getTime() + fila.dia_fin   * 86400000)
+                      const esActual = i === semActualIdx
+                      const pasada   = edadDias > fila.dia_fin
+                      // Calcular cantidad total del lote si la cantidad es un número
+                      const cantNum = parseFloat(fila.cantidad_dia.replace(',','.').replace(/[^0-9.–-]/g,''))
+                      const cantLote = !isNaN(cantNum) && loteDetalle.cantidad_cerdos > 0
+                        ? `~${(cantNum * loteDetalle.cantidad_cerdos).toFixed(1)} kg`
+                        : (fila.cantidad_dia === 'Libre' ? 'Libre' : '-')
+                      return (
+                        <tr key={i} style={{
+                          background: esActual ? '#dbeafe' : pasada ? '#f8fafc' : fila.color,
+                          borderLeft: esActual ? '4px solid #2563eb' : '4px solid transparent',
+                          borderBottom: '1px solid #e2e8f0',
+                          fontWeight: esActual ? '700' : '400',
+                          opacity: pasada && !esActual ? 0.65 : 1
+                        }}>
+                          <td style={{padding:'7px 10px'}}>
+                            {esActual && <span style={{fontSize:'10px', background:'#2563eb', color:'#fff', borderRadius:'10px', padding:'1px 6px', marginRight:'4px'}}>HOY</span>}
+                            Sem {fila.semana}
+                          </td>
+                          <td style={{padding:'7px 10px', color:'#64748b'}}>{fmt(fInicio)}</td>
+                          <td style={{padding:'7px 10px', color:'#64748b'}}>{fmt(fFin)}</td>
+                          <td style={{padding:'7px 10px', fontWeight: esActual ? '700' : '500'}}>{fila.tipo}</td>
+                          <td style={{padding:'7px 10px', textAlign:'center'}}>{fila.cantidad_dia}</td>
+                          <td style={{padding:'7px 10px', textAlign:'center', color:'#1d4ed8', fontWeight:'600'}}>{cantLote}</td>
+                          <td style={{padding:'7px 10px', textAlign:'center'}}>{(fila.ganancia_sem_g / 1000).toFixed(1)} kg</td>
+                          <td style={{padding:'7px 10px', textAlign:'center', fontWeight:'600'}}>{fila.peso_esperado_kg} kg</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p style={{fontSize:'11px', color:'#94a3b8', margin:'8px 0 0 0'}}>
+                * Cantidades diarias por cerdo. Estimados según plan de alimentación oficial de la granja.
+              </p>
+            </div>
+          )
+        })()}
 
         {/* ═══ ALIMENTACIÓN DEL LOTE (desde inventario) ═══ */}
         <div className="dashboard-section" style={{marginBottom:'24px'}}>
