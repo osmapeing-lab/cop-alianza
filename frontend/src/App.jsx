@@ -4145,6 +4145,79 @@ const cargarHistoricoPesos = async () => {
           )}
         </div>
 
+        {/* ═══ PLAN DE ALIMENTACIÓN DEL LOTE ═══ */}
+        {(() => {
+          const refDate = loteDetalle.fecha_nacimiento
+            ? new Date(loteDetalle.fecha_nacimiento)
+            : (loteDetalle.fecha_inicio ? new Date(loteDetalle.fecha_inicio) : null)
+          if (!refDate) return null
+          const edadDias = loteDetalle.edad_dias || 0
+          const semActualIdx = PLAN_ALIMENTACION.findIndex(s => edadDias >= s.dia_inicio && edadDias <= s.dia_fin)
+          const fmt = (d) => d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short' })
+          return (
+            <div className="dashboard-section" style={{marginBottom:'24px'}}>
+              <h3 style={{margin:'0 0 16px 0', display:'flex', alignItems:'center', gap:'8px'}}>
+                <Package size={20} /> Plan de Alimentación
+                <span style={{fontSize:'12px', fontWeight:'600', background:'#dbeafe', color:'#1d4ed8', padding:'3px 10px', borderRadius:'20px', marginLeft:'4px'}}>
+                  {loteDetalle.cantidad_cerdos} cerdos
+                </span>
+              </h3>
+              <div style={{overflowX:'auto'}}>
+                <table style={{width:'100%', borderCollapse:'collapse', fontSize:'13px'}}>
+                  <thead>
+                    <tr style={{background:'#f8fafc', borderBottom:'2px solid #e2e8f0'}}>
+                      <th style={{padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#475569'}}>Sem.</th>
+                      <th style={{padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#475569'}}>Fecha inicio</th>
+                      <th style={{padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#475569'}}>Fecha fin</th>
+                      <th style={{padding:'8px 10px', textAlign:'left', fontWeight:'700', color:'#475569'}}>Tipo de alimento</th>
+                      <th style={{padding:'8px 10px', textAlign:'center', fontWeight:'700', color:'#475569'}}>Cant./día/cerdo</th>
+                      <th style={{padding:'8px 10px', textAlign:'center', fontWeight:'700', color:'#475569'}}>Cant./día lote</th>
+                      <th style={{padding:'8px 10px', textAlign:'center', fontWeight:'700', color:'#475569'}}>Ganancia sem.</th>
+                      <th style={{padding:'8px 10px', textAlign:'center', fontWeight:'700', color:'#475569'}}>Peso esp.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {PLAN_ALIMENTACION.map((fila, i) => {
+                      const fInicio = new Date(refDate.getTime() + fila.dia_inicio * 86400000)
+                      const fFin    = new Date(refDate.getTime() + fila.dia_fin   * 86400000)
+                      const esActual = i === semActualIdx
+                      const pasada   = edadDias > fila.dia_fin
+                      const cantNum = parseFloat(fila.cantidad_dia.replace(',','.').replace(/[^0-9.–-]/g,''))
+                      const cantLote = !isNaN(cantNum) && loteDetalle.cantidad_cerdos > 0
+                        ? `~${(cantNum * loteDetalle.cantidad_cerdos).toFixed(1)} kg`
+                        : (fila.cantidad_dia === 'Libre' ? 'Libre' : '-')
+                      return (
+                        <tr key={i} style={{
+                          background: esActual ? '#dbeafe' : pasada ? '#f8fafc' : fila.color,
+                          borderLeft: esActual ? '4px solid #2563eb' : '4px solid transparent',
+                          borderBottom: '1px solid #e2e8f0',
+                          fontWeight: esActual ? '700' : '400',
+                          opacity: pasada && !esActual ? 0.65 : 1
+                        }}>
+                          <td style={{padding:'7px 10px'}}>
+                            {esActual && <span style={{fontSize:'10px', background:'#2563eb', color:'#fff', borderRadius:'10px', padding:'1px 6px', marginRight:'4px'}}>HOY</span>}
+                            Sem {fila.semana}
+                          </td>
+                          <td style={{padding:'7px 10px', color:'#64748b'}}>{fmt(fInicio)}</td>
+                          <td style={{padding:'7px 10px', color:'#64748b'}}>{fmt(fFin)}</td>
+                          <td style={{padding:'7px 10px', fontWeight: esActual ? '700' : '500'}}>{fila.tipo}</td>
+                          <td style={{padding:'7px 10px', textAlign:'center'}}>{fila.cantidad_dia}</td>
+                          <td style={{padding:'7px 10px', textAlign:'center', color:'#1d4ed8', fontWeight:'600'}}>{cantLote}</td>
+                          <td style={{padding:'7px 10px', textAlign:'center'}}>{(fila.ganancia_sem_g / 1000).toFixed(1)} kg</td>
+                          <td style={{padding:'7px 10px', textAlign:'center', fontWeight:'600'}}>{fila.peso_esperado_kg} kg</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p style={{fontSize:'11px', color:'#94a3b8', margin:'8px 0 0 0'}}>
+                * Cantidades diarias por cerdo. Estimados según plan de alimentación oficial de la granja.
+              </p>
+            </div>
+          )
+        })()}
+
         {/* ═══ ALIMENTACIÓN DEL LOTE (desde inventario) ═══ */}
         <div className="dashboard-section" style={{marginBottom:'24px'}}>
           <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px', flexWrap:'wrap', gap:'10px'}}>
@@ -4757,7 +4830,7 @@ const cargarHistoricoPesos = async () => {
               className="btn-toggle-finca"
               onClick={() => setMostrarTablaFinca(!mostrarTablaFinca)}
             >
-              {mostrarTablaFinca ? 'Ocultar' : 'Ver Plan Completo'}
+              {mostrarTablaFinca ? 'Ocultar' : 'Fundamentos Técnicos'}
               <ChevronRight size={16} className={mostrarTablaFinca ? 'rotado' : ''} />
             </button>
           </div>
