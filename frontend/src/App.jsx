@@ -3674,30 +3674,36 @@ const cargarHistoricoPesos = async () => {
             }
           })
 
-          // Curva esperada
+          // Curva Meta Plan desde PLAN_ALIMENTACION (plan oficial de la granja)
           const limDia = Math.min(edadMax + 28, 180)
-          const curva = [{ semana: 6, dia: 43, peso_esperado: 12, fase: 'Inicio' }]
-          TABLA_INICIO.forEach(s => curva.push({ semana: 6 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Inicio' }))
-          TABLA_CRECIMIENTO.forEach(s => curva.push({ semana: 10 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Crecimiento' }))
-          TABLA_ENGORDE.forEach(s => curva.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
-          const curvaRecortada = curva.filter(p => p.dia <= limDia)
+          const curvaRecortada = [
+            { semana: 0, dia: 0, peso_esperado: 1.4, fase: 'Nacimiento' },
+            ...PLAN_ALIMENTACION
+              .filter(s => s.dia_fin <= limDia)
+              .map(s => ({ semana: s.semana, dia: s.dia_fin, peso_esperado: s.peso_esperado_kg, fase: s.tipo }))
+          ]
 
-          // Mover punto de semana actual al día real
-          const semActualInicio = Math.floor(edadMax / 7) * 7
-          const idxSemActual = curvaRecortada.findIndex(p => p.dia === semActualInicio)
-          if (idxSemActual >= 0 && semActualInicio !== edadMax) {
-            curvaRecortada[idxSemActual] = { ...curvaRecortada[idxSemActual], dia: edadMax }
-          }
-
-          // Carry-forward por lote
+          // Carry-forward por lote — arranca en el punto de entrada del lote (no desde el día 0)
           const lastReals = {}
-          lotesActivos.forEach(l => { lastReals[l._id] = infoPorLote[l._id]?.pesoInicial > 0 ? infoPorLote[l._id].pesoInicial : null })
+          lotesActivos.forEach(l => { lastReals[l._id] = null })
+
+          // Calcular edad de entrada de cada lote (cuándo fue registrado físicamente)
+          const edadEntrada = {}
+          lotesActivos.forEach(l => {
+            edadEntrada[l._id] = l.edad_dias_manual !== null && l.edad_dias_manual !== undefined
+              ? l.edad_dias_manual
+              : (l.fecha_nacimiento ? 0 : 43)
+          })
 
           const datosGrafica = curvaRecortada.map(punto => {
             const row = { dia: punto.dia, semana: `Sem ${punto.semana}`, peso_esperado: punto.peso_esperado, fase: punto.fase }
             lotesActivos.forEach(lote => {
               const info = infoPorLote[lote._id]
               if (!info) return
+              // Activar pesoInicial cuando la curva llega a la edad de entrada del lote
+              if (lastReals[lote._id] === null && punto.dia >= edadEntrada[lote._id] && info.pesoInicial > 0) {
+                lastReals[lote._id] = info.pesoInicial
+              }
               info.puntos.forEach(p => { if (p.dia <= punto.dia) lastReals[lote._id] = p.peso })
               const edadLoteActual = lote.edad_dias || 0
               row[`r_${lote._id}`] = (punto.dia <= edadLoteActual && lastReals[lote._id] !== null) ? lastReals[lote._id] : null
