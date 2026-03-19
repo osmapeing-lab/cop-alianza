@@ -1,6 +1,6 @@
 /*
  * ═══════════════════════════════════════════════════════════════════════
- * COO ALIANZAS - SERVICE WORKER (Web Push VAPID)
+ * SAMTR - SERVICE WORKER (Web Push VAPID)
  * ═══════════════════════════════════════════════════════════════════════
  * Recibe notificaciones push en background y las muestra como
  * notificaciones nativas del sistema operativo / WebView.
@@ -12,7 +12,7 @@ self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
 /* ── Recibir notificación push ── */
 self.addEventListener('push', (event) => {
-  let data = { title: 'COO Alianzas', body: '', icon: '/favicon.png', badge: '/favicon.png', data: {} };
+  let data = { title: 'Sistema de Análisis y Monitoreo', body: '', icon: '/favicon.png', badge: '/favicon.png', data: {} };
 
   if (event.data) {
     try {

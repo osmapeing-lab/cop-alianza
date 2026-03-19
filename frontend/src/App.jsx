@@ -1326,7 +1326,7 @@ const PantallaMantenimiento = () => (
         Disculpa las molestias, regresaremos en unos minutos.
       </p>
       <div className="loader-mantenimiento"></div>
-      <p style={{ fontSize: '12px', color: '#bdc3c7', marginTop: '20px' }}>EQUIPO COO ALIANZAS</p>
+      <p style={{ fontSize: '12px', color: '#bdc3c7', marginTop: '20px' }}>Sistema de Análisis y Monitoreo en Tiempo Real</p>
     </div>
     <style>{`
       .loader-mantenimiento {
@@ -2958,7 +2958,7 @@ const cargarHistoricoPesos = async () => {
       const url = window.URL.createObjectURL(new Blob([res.data]))
       const link = document.createElement('a')
       link.href = url
-      link.setAttribute('download', `Reporte_COO_Alianzas_${new Date().toISOString().split('T')[0]}.xlsx`)
+      link.setAttribute('download', `Reporte_SAMTR_${new Date().toISOString().split('T')[0]}.xlsx`)
       document.body.appendChild(link)
       link.click()
       link.remove()
@@ -3037,7 +3037,7 @@ const cargarHistoricoPesos = async () => {
       <div className="login-container">
         <div className="login-box">
           <div className="login-logo">
-            <img src="/coo-alianzas logo.png" alt="COO Alianzas" style={{width: '120px', height: 'auto'}} />
+            <img src="/coo-alianzas logo.png" alt="SAMTR" style={{width: '120px', height: 'auto'}} />
             <h1>Sistema de Automatizacion IOT</h1>
           </div>
           
@@ -3144,8 +3144,8 @@ const cargarHistoricoPesos = async () => {
       <span></span>
     </button>
     <div className="logo">
-      <img src="/coo-alianzas logo.png" alt="COO Alianzas" style={{height: '40px', width: 'auto'}} />
-      <span>COO Alianzas</span>
+      <img src="/coo-alianzas logo.png" alt="SAMTR" style={{height: '40px', width: 'auto'}} />
+      <span>Sistema de Análisis y Monitoreo en Tiempo Real</span>
     </div>
   </div>
   
@@ -3707,7 +3707,7 @@ const cargarHistoricoPesos = async () => {
             <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
               <span>Edad: <strong>{edadLoteActual} días</strong></span>
               <span>Semana actual: <strong style={{ color: '#d97706' }}>Sem. {semanaActual}</strong> ({planActual?.tipo || ''})</span>
-              <span>Peso actual: <strong>{lote.peso_promedio_actual ? `${lote.peso_promedio_actual} kg` : `${pesoBase} kg (inicial)`}</strong></span>
+              <span>Peso actual: <strong>{lote.peso_promedio_actual ? `${Number(lote.peso_promedio_actual).toFixed(2)} kg` : `${Number(pesoBase).toFixed(2)} kg (inicial)`}</strong></span>
             </div>
             <div className="grafica-container">
               <ResponsiveContainer width="100%" height={180}>
@@ -6749,7 +6749,7 @@ const cargarHistoricoPesos = async () => {
                           <li>Ve a <strong>myaccount.google.com → Seguridad</strong></li>
                           <li>Activa <strong>Verificación en 2 pasos</strong> (si no está activa)</li>
                           <li>Busca <strong>"Contraseñas de aplicaciones"</strong></li>
-                          <li>Selecciona "Correo" → "Otro" → nombra "COO Alianzas"</li>
+                          <li>Selecciona "Correo" → "Otro" → nombra "SAMTR"</li>
                           <li>Copia los <strong>16 dígitos</strong> generados</li>
                           <li>Pega esos 16 dígitos en la variable <code>EMAIL_PASS</code> del servidor</li>
                           <li>En <code>EMAIL_USER</code> pon tu correo Gmail completo</li>
