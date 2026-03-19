@@ -14,7 +14,7 @@ exports.enviarAlertaEmail = async (asunto, contenidoHTML) => {
       // ── Brevo API HTTP (no SMTP, funciona en Render) ────────────────
       const senderEmail = process.env.BREVO_USER || process.env.EMAIL_USER;
       const { status } = await axios.post('https://api.brevo.com/v3/smtp/email', {
-        sender:      { name: 'COO Alianzas', email: senderEmail },
+        sender:      { name: 'SAMTR', email: senderEmail },
         to:          [{ email: toAddr }],
         subject:     asunto,
         htmlContent: contenidoHTML

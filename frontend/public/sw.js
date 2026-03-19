@@ -24,12 +24,14 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     self.registration.showNotification(data.title, {
-      body:  data.body,
-      icon:  data.icon  || '/favicon.png',
-      badge: data.badge || '/favicon.png',
-      data:  data.data  || {},
-      vibrate: [200, 100, 200],
-      requireInteraction: false
+      body:             data.body,
+      icon:             data.icon  || '/cerdito_analisis.png',
+      badge:            data.badge || '/cerdito_analisis.png',
+      data:             data.data  || {},
+      vibrate:          [200, 100, 200],
+      requireInteraction: true,
+      tag:              data.tag   || 'samtr-alerta',
+      renotify:         true
     })
   );
 });

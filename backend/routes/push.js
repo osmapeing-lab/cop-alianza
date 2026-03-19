@@ -59,9 +59,9 @@ router.get('/test', async (req, res) => {
   try {
     const { enviarPushATodos } = require('../utils/pushService');
     const enviados = await enviarPushATodos({
-      title: 'COO Alianzas — Prueba',
+      title: 'SAMTR — Prueba',
       body:  'Sistema de notificaciones funcionando correctamente.',
-      icon:  '/favicon.png',
+      icon:  '/cerdito_analisis.png',
       data:  { url: '/' }
     });
     const subs = await PushSub.countDocuments({ activo: true });

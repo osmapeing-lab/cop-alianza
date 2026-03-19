@@ -41,8 +41,8 @@ exports.enviarPushATodos = async (payload) => {
   const notifPayload = JSON.stringify({
     title: payload.title || 'COO Alianzas',
     body:  payload.body  || '',
-    icon:  payload.icon  || '/favicon.png',
-    badge: payload.badge || '/favicon.png',
+    icon:  payload.icon  || '/cerdito_analisis.png',
+    badge: payload.badge || '/cerdito_analisis.png',
     data:  payload.data  || {},
     timestamp: Date.now()
   });

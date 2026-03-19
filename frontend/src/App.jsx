@@ -3144,8 +3144,9 @@ const cargarHistoricoPesos = async () => {
       <span></span>
     </button>
     <div className="logo">
-      <img src="/cerdito_analisis.png" alt="SAMTR" style={{height: '40px', width: 'auto'}} />
-      <span>Sistema de Análisis y Monitoreo en Tiempo Real</span>
+      <img src="/cerdito_analisis.png" alt="SAMTR" style={{height: '36px', width: '36px', objectFit: 'contain', borderRadius: '6px'}} />
+      <span style={{fontWeight: 700, fontSize: '15px', letterSpacing: '0.5px'}}>SAMTR</span>
+      <span style={{fontSize: '11px', color: '#64748b', display: 'none'}} className="logo-subtitulo">Sistema de Análisis y Monitoreo</span>
     </div>
   </div>
   
@@ -3161,7 +3162,7 @@ const cargarHistoricoPesos = async () => {
         setMostrarConfigUsuario(false)
       }}>
         <Bell size={20} />
-        {alertas.length > alertasLeidas && <span className="notif-dot">{alertas.length - alertasLeidas > 9 ? '9+' : alertas.length - alertasLeidas}</span>}
+        {(() => { const noLeidas = (alertas.length - alertasLeidas) + inventarioAlimento.filter(i => (i.cantidad_bultos||0) <= (i.stock_minimo_bultos||5)).length; return noLeidas > 0 ? <span className="notif-dot">{noLeidas > 9 ? '9+' : noLeidas}</span> : null })()}
       </button>
       {mostrarNotificaciones && (
         <div className="notif-panel">
@@ -3182,10 +3183,17 @@ const cargarHistoricoPesos = async () => {
               ))}
             </div>
           )}
-          {/* Alertas */}
+          {/* Stock bajo — alertas en tiempo real */}
+          {inventarioAlimento.filter(i => (i.cantidad_bultos || 0) <= (i.stock_minimo_bultos || 5)).map((item, i) => (
+            <div key={`stock-${i}`} className="notif-alerta nivel_bajo" style={{borderLeft: '4px solid #f59e0b'}}>
+              <span>⚠️ Stock bajo: <strong>{item.nombre}</strong> ({item.cantidad_bultos} bultos)</span>
+              <small>Inventario</small>
+            </div>
+          ))}
+          {/* Alertas del sistema */}
           <div className="notif-alertas">
             {alertas.length === 0 ? (
-              <p className="notif-vacio">Sin alertas</p>
+              <p className="notif-vacio">✓ Sin alertas pendientes</p>
             ) : (
               alertas.slice(0, 8).map((a, i) => (
                 <div key={i} className={`notif-alerta ${a.tipo}`}>
