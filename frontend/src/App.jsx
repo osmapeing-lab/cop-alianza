@@ -1449,6 +1449,8 @@ const [comparativoCostos, setComparativoCostos] = useState([])
 
 // Estado del panel unificado de finanzas
 const [tabFinanzas, setTabFinanzas] = useState('resumen')
+const [gastoInlineLote, setGastoInlineLote] = useState(null) // lote._id del form abierto
+const [gastoInlineForm, setGastoInlineForm] = useState({ descripcion: '', monto: '', categoria: 'otro' })
 
 // Estados de bombas (CRUD)
 const [bombas, setBombas] = useState([])
@@ -5084,8 +5086,16 @@ const cargarHistoricoPesos = async () => {
                   <strong>{lote.corral || '-'}</strong>
                 </div>
                 <div className="lote-dato">
-                  <span>Total Gastos</span>
+                  <span>Alimento</span>
+                  <strong style={{color:'#ea580c'}}>{formatearDinero(lote.costo_alimento_total || 0)}</strong>
+                </div>
+                <div className="lote-dato">
+                  <span>Otros Gastos</span>
                   <strong style={{color:'#ef4444'}}>{formatearDinero(lote.total_gastos || 0)}</strong>
+                </div>
+                <div className="lote-dato" style={{gridColumn:'1 / -1', background:'#fef2f2', borderRadius:'8px', padding:'6px 10px'}}>
+                  <span>Total Gastos</span>
+                  <strong style={{color:'#dc2626', fontSize:'15px'}}>{formatearDinero((lote.total_gastos || 0) + (lote.costo_alimento_total || 0))}</strong>
                 </div>
               </div>
               <div className="lote-actions">
@@ -6163,6 +6173,46 @@ const cargarHistoricoPesos = async () => {
                                       )}
                                     </tbody>
                                   </table>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Botones acción rápida */}
+                            <div style={{padding:'10px 18px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'8px', flexWrap:'wrap'}}>
+                              <button className="btn-sm btn-primary" onClick={() => { setGastoInlineLote(gastoInlineLote === lote._id ? null : lote._id); setGastoInlineForm({ descripcion:'', monto:'', categoria:'otro' }) }}>
+                                {gastoInlineLote === lote._id ? '✕ Cancelar' : '+ Registrar Gasto'}
+                              </button>
+                              <button className="btn-sm btn-outline" onClick={() => { setPagina('lotes'); verDetalleLote(lote._id) }}>
+                                Ver Detalle completo →
+                              </button>
+                            </div>
+
+                            {/* Formulario inline gasto */}
+                            {gastoInlineLote === lote._id && (
+                              <div style={{padding:'14px 18px', borderTop:'1px solid #f1f5f9', background:'#f8fafc'}}>
+                                <div style={{fontSize:'13px', fontWeight:'600', marginBottom:'10px', color:'#374151'}}>Registrar gasto — {lote.nombre}</div>
+                                <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'8px'}}>
+                                  <select value={gastoInlineForm.categoria} onChange={e => setGastoInlineForm(p => ({...p, categoria: e.target.value}))} style={{padding:'8px', borderRadius:'8px', border:'1px solid #e2e8f0', fontSize:'13px'}}>
+                                    <option value="otro">Otro</option>
+                                    <option value="medicamento">Medicamento</option>
+                                    <option value="mantenimiento">Mantenimiento</option>
+                                    <option value="servicio">Servicio</option>
+                                    <option value="alimento">Alimento (manual)</option>
+                                  </select>
+                                  <input type="number" placeholder="Monto ($)" value={gastoInlineForm.monto} onChange={e => setGastoInlineForm(p => ({...p, monto: e.target.value}))} style={{padding:'8px', borderRadius:'8px', border:'1px solid #e2e8f0', fontSize:'13px'}} />
+                                </div>
+                                <div style={{display:'grid', gridTemplateColumns:'1fr auto', gap:'8px'}}>
+                                  <input type="text" placeholder="Descripción (opcional)" value={gastoInlineForm.descripcion} onChange={e => setGastoInlineForm(p => ({...p, descripcion: e.target.value}))} style={{padding:'8px', borderRadius:'8px', border:'1px solid #e2e8f0', fontSize:'13px'}} />
+                                  <button className="btn-sm btn-primary" onClick={async () => {
+                                    if (!gastoInlineForm.monto || parseFloat(gastoInlineForm.monto) <= 0) { alert('Ingresa un monto válido'); return }
+                                    try {
+                                      await axios.post(`${API_URL}/api/lotes/${lote._id}/gasto-semanal`, { descripcion: gastoInlineForm.descripcion || 'Gasto', monto: parseFloat(gastoInlineForm.monto), categoria: gastoInlineForm.categoria }, { headers: { Authorization: `Bearer ${token}` } })
+                                      setGastoInlineLote(null)
+                                      setGastoInlineForm({ descripcion:'', monto:'', categoria:'otro' })
+                                      await cargarLotes()
+                                      mostrarToast(`✓ Gasto registrado en ${lote.nombre}`, 'info', 4000)
+                                    } catch(e) { alert('Error: ' + (e.response?.data?.mensaje || e.message)) }
+                                  }}>Guardar</button>
                                 </div>
                               </div>
                             )}
