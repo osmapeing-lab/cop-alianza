@@ -3290,13 +3290,32 @@ const cargarHistoricoPesos = async () => {
             <button className="btn-sm btn-warning" onClick={cambiarPasswordUsuario}>Cambiar Contraseña</button>
           </div>
           <div className="user-panel-section">
-            <h5>Notificaciones</h5>
+            <h5>Notificaciones push</h5>
+            {(() => {
+              const permiso = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
+              const color = permiso === 'granted' ? '#22c55e' : permiso === 'denied' ? '#ef4444' : '#f59e0b'
+              const label = permiso === 'granted' ? '✓ Permiso concedido' : permiso === 'denied' ? '✗ Bloqueado en el navegador' : '⚠ Permiso pendiente'
+              return <div style={{fontSize:12, color, marginBottom:8, fontWeight:600}}>{label}</div>
+            })()}
+            <button className="btn-sm btn-outline" style={{marginBottom:6}} onClick={async () => {
+              try {
+                // Forzar re-suscripción
+                const reg = await navigator.serviceWorker.ready
+                const sub = await reg.pushManager.getSubscription()
+                if (sub) await sub.unsubscribe()
+                const { data } = await axios.get(`${API_URL}/api/push/vapid-public-key`)
+                const vapidKey = Uint8Array.from(atob(data.publicKey.replace(/-/g,'+').replace(/_/g,'/')), c => c.charCodeAt(0))
+                const newSub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey })
+                await axios.post(`${API_URL}/api/push/subscribe`, { subscription: newSub.toJSON(), usuario: user.usuario||'', dispositivo: 'web' }, { headers: { Authorization: `Bearer ${token}` } })
+                mostrarToast('✓ Dispositivo suscrito correctamente', 'info', 4000)
+              } catch(e) { mostrarToast(`Error al suscribir: ${e.message}`, 'error', 5000) }
+            }}>🔁 Re-suscribir este dispositivo</button>
             <button className="btn-sm btn-outline" onClick={async () => {
               try {
                 const res = await axios.get(`${API_URL}/api/push/test`, { headers: { Authorization: `Bearer ${token}` } })
-                mostrarToast(res.data.enviados > 0 ? `✓ Notificación de prueba enviada (${res.data.dispositivos} dispositivo/s)` : 'Sin dispositivos suscritos — recarga la app y acepta notificaciones', res.data.enviados > 0 ? 'info' : 'warning', 5000)
+                mostrarToast(res.data.enviados > 0 ? `✓ Enviada a ${res.data.dispositivos} dispositivo/s — revisa notificaciones del SO` : '⚠ Sin dispositivos suscritos', res.data.enviados > 0 ? 'info' : 'warning', 6000)
               } catch { mostrarToast('Error enviando prueba', 'error', 4000) }
-            }}>🔔 Probar notificación push</button>
+            }}>🔔 Enviar notificación de prueba</button>
           </div>
           <div className="user-panel-section">
             <a href="mailto:soporte@samtr.app?subject=Solicitud de Soporte" className="btn-sm btn-outline">Solicitar Soporte</a>

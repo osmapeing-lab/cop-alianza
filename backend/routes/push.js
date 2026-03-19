@@ -61,7 +61,7 @@ router.get('/test', async (req, res) => {
     const enviados = await enviarPushATodos({
       title: 'SAMTR — Prueba',
       body:  'Sistema de notificaciones funcionando correctamente.',
-      icon:  '/cerdito_analisis.png',
+      icon:  `${process.env.FRONTEND_URL || 'https://cop-alianza.vercel.app'}/cerdito_analisis.png`,
       data:  { url: '/' }
     });
     const subs = await PushSub.countDocuments({ activo: true });
