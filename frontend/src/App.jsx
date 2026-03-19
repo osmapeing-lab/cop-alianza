@@ -3290,7 +3290,16 @@ const cargarHistoricoPesos = async () => {
             <button className="btn-sm btn-warning" onClick={cambiarPasswordUsuario}>Cambiar Contraseña</button>
           </div>
           <div className="user-panel-section">
-            <a href="mailto:soporte@cooalianzas.com?subject=Solicitud de Soporte" className="btn-sm btn-outline">Solicitar Soporte</a>
+            <h5>Notificaciones</h5>
+            <button className="btn-sm btn-outline" onClick={async () => {
+              try {
+                const res = await axios.get(`${API_URL}/api/push/test`, { headers: { Authorization: `Bearer ${token}` } })
+                mostrarToast(res.data.enviados > 0 ? `✓ Notificación de prueba enviada (${res.data.dispositivos} dispositivo/s)` : 'Sin dispositivos suscritos — recarga la app y acepta notificaciones', res.data.enviados > 0 ? 'info' : 'warning', 5000)
+              } catch { mostrarToast('Error enviando prueba', 'error', 4000) }
+            }}>🔔 Probar notificación push</button>
+          </div>
+          <div className="user-panel-section">
+            <a href="mailto:soporte@samtr.app?subject=Solicitud de Soporte" className="btn-sm btn-outline">Solicitar Soporte</a>
           </div>
           <button className="btn-logout-full" onClick={handleLogout}>
             <LogOut size={16} /> Cerrar Sesión

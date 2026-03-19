@@ -38,11 +38,12 @@ exports.enviarPushATodos = async (payload) => {
   const subs = await PushSub.find({ activo: true });
   if (subs.length === 0) return 0;
 
+  const FRONTEND = process.env.FRONTEND_URL || 'https://cop-alianza.vercel.app';
   const notifPayload = JSON.stringify({
-    title: payload.title || 'COO Alianzas',
+    title: payload.title || 'SAMTR',
     body:  payload.body  || '',
-    icon:  payload.icon  || '/cerdito_analisis.png',
-    badge: payload.badge || '/cerdito_analisis.png',
+    icon:  payload.icon  || `${FRONTEND}/cerdito_analisis.png`,
+    badge: payload.badge || `${FRONTEND}/cerdito_analisis.png`,
     data:  payload.data  || {},
     timestamp: Date.now()
   });
