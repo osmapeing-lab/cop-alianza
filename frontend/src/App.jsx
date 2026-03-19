@@ -1616,36 +1616,50 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
 
     const suscribirPush = async () => {
       try {
-        // Registrar el Service Worker
         const reg = await navigator.serviceWorker.register('/sw.js')
+        await navigator.serviceWorker.ready
 
-        // Pedir permiso de notificaciones
         const permiso = await Notification.requestPermission()
         if (permiso !== 'granted') return
 
-        // Obtener clave VAPID pública del backend
         const { data } = await axios.get(`${API_URL}/api/push/vapid-public-key`)
         if (!data.publicKey) return
 
-        // Convertir la clave pública a Uint8Array
         const vapidKey = Uint8Array.from(
           atob(data.publicKey.replace(/-/g, '+').replace(/_/g, '/')),
           c => c.charCodeAt(0)
         )
 
-        // Suscribirse al push manager
+        // Si hay suscripción vieja sin applicationServerKey, desuscribir primero
+        const subExistente = await reg.pushManager.getSubscription()
+        if (subExistente) {
+          const subJson = subExistente.toJSON()
+          // Si la clave del servidor no coincide, forzar re-suscripción
+          if (!subJson.keys?.p256dh) {
+            await subExistente.unsubscribe()
+          } else {
+            // Suscripción válida, solo re-registrar en backend
+            await axios.post(
+              `${API_URL}/api/push/subscribe`,
+              { subscription: subJson, usuario: user.usuario || '', dispositivo: 'web' },
+              { headers: { Authorization: `Bearer ${token}` } }
+            )
+            console.log('[PUSH] Suscripción existente re-registrada')
+            return
+          }
+        }
+
         const sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: vapidKey
         })
 
-        // Enviar suscripción al backend
         await axios.post(
           `${API_URL}/api/push/subscribe`,
-          { subscription: sub.toJSON(), usuario: user.username || user.email || '', dispositivo: 'web' },
+          { subscription: sub.toJSON(), usuario: user.usuario || '', dispositivo: 'web' },
           { headers: { Authorization: `Bearer ${token}` } }
         )
-        console.log('[PUSH] Suscripción registrada correctamente')
+        console.log('[PUSH] Nueva suscripción registrada correctamente')
       } catch (err) {
         console.log('[PUSH] No se pudo suscribir:', err.message)
       }
