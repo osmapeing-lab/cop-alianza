@@ -1,6 +1,7 @@
 const Alert  = require('../models/Alert');
 const axios  = require('axios');
 const { Resend } = require('resend');
+const { enviarPushATodos } = require('../utils/pushService');
 
 exports.enviarAlertaEmail = async (asunto, contenidoHTML) => {
   try {
@@ -86,9 +87,17 @@ exports.alertaTemperatura = async (datos) => {
     enviado_email: false
   });
 
-  const enviado = await exports.enviarAlertaEmail(`ALERTA: Temperatura ${temperatura}°C - COP Alianza`, html);
+  const enviado = await exports.enviarAlertaEmail(`ALERTA: Temperatura ${temperatura}°C - SAMTR`, html);
   alerta.enviado_email = enviado;
   await alerta.save();
+
+  enviarPushATodos({
+    title: '🌡️ Temperatura Alta — SAMTR',
+    body: `Temperatura ${temperatura}°C supera umbral de ${umbral}°C`,
+    tag: 'temperatura_alta',
+    data: { url: '/' }
+  }).catch(() => {});
+
   return alerta;
 };
 
@@ -116,9 +125,17 @@ exports.alertaTanqueBajo = async (datos) => {
     enviado_email: false
   });
 
-  const enviado = await exports.enviarAlertaEmail(`ALERTA: ${tanque} nivel bajo - COP Alianza`, html);
+  const enviado = await exports.enviarAlertaEmail(`ALERTA: ${tanque} nivel bajo - SAMTR`, html);
   alerta.enviado_email = enviado;
   await alerta.save();
+
+  enviarPushATodos({
+    title: '💧 Nivel de Tanque Bajo — SAMTR',
+    body: `${tanque} al ${nivel}% (mínimo: ${umbral_minimo}%)`,
+    tag: 'nivel_bajo',
+    data: { url: '/' }
+  }).catch(() => {});
+
   return alerta;
 };
 
@@ -129,6 +146,14 @@ exports.alertaSensorDesconectado = async (sensor) => {
     enviado_email: false
   });
   await alerta.save();
+
+  enviarPushATodos({
+    title: '⚠️ Sensor Desconectado — SAMTR',
+    body: `Sensor ${sensor} sin conexión`,
+    tag: 'sensor_desconectado',
+    data: { url: '/' }
+  }).catch(() => {});
+
   return alerta;
 };
 
