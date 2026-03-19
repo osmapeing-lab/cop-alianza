@@ -12,7 +12,7 @@ self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 
 /* ── Recibir notificación push ── */
 self.addEventListener('push', (event) => {
-  let data = { title: 'Sistema de Análisis y Monitoreo', body: '', icon: '/favicon.png', badge: '/favicon.png', data: {} };
+  let data = { title: 'Sistema de Análisis y Monitoreo', body: '', icon: '/cerdito_analisis.png', badge: '/cerdito_analisis.png', data: {} };
 
   if (event.data) {
     try {

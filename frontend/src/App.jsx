@@ -3037,7 +3037,7 @@ const cargarHistoricoPesos = async () => {
       <div className="login-container">
         <div className="login-box">
           <div className="login-logo">
-            <img src="/coo-alianzas logo.png" alt="SAMTR" style={{width: '120px', height: 'auto'}} />
+            <img src="/cerdito_analisis.png" alt="SAMTR" style={{width: '120px', height: 'auto'}} />
             <h1>Sistema de Automatizacion IOT</h1>
           </div>
           
@@ -3144,7 +3144,7 @@ const cargarHistoricoPesos = async () => {
       <span></span>
     </button>
     <div className="logo">
-      <img src="/coo-alianzas logo.png" alt="SAMTR" style={{height: '40px', width: 'auto'}} />
+      <img src="/cerdito_analisis.png" alt="SAMTR" style={{height: '40px', width: 'auto'}} />
       <span>Sistema de Análisis y Monitoreo en Tiempo Real</span>
     </div>
   </div>
