@@ -52,6 +52,7 @@ const WaterConsumption = require('../models/WaterConsumption');
 const Config = require('../models/Config');
 const { evaluarTemperatura, notificarBomba } = require('../utils/notificationManager');
 const { enviarWhatsApp } = require('../utils/whatsappService');
+const { enviarPushATodos } = require('../utils/pushService');
 
 // Cooldown en memoria para evitar spam de Alert records en BD por temperatura
 // El ESP puede enviar datos cada 30s; sin throttle genera cientos de registros/hora
@@ -200,6 +201,7 @@ async function activarCicloBomba() {
     mensaje: `Bomba de riego activada automáticamente por temperatura crítica (45s) a las ${hora}`
   });
   await alerta.save();
+  enviarPushATodos({ title: '🚿 Bomba de riego activada', body: `Temperatura crítica — riego automático a las ${hora}`, tag: 'bomba_auto' }).catch(() => {});
 
   enviarWhatsApp(
     `🚿 *BOMBA RIEGO AUTOMÁTICA*\nActivada por temperatura crítica en chiquero (45s)\nHora: ${hora}`
@@ -278,6 +280,7 @@ exports.recibirRiego = async (req, res) => {
             valor: temperatura
           });
           await alerta.save();
+          enviarPushATodos({ title: '🔴 CRÍTICO — Temperatura', body: `${temperatura}°C - Riesgo de estrés térmico`, tag: 'temp_critico' }).catch(() => {});
         }
         if (config.bomba_automatica) {
           await activarCicloBomba();
@@ -292,6 +295,7 @@ exports.recibirRiego = async (req, res) => {
             valor: temperatura
           });
           await alerta.save();
+          enviarPushATodos({ title: '🌡️ Temperatura Alta — SAMTR', body: `${temperatura}°C supera el umbral permitido`, tag: 'temp_alta' }).catch(() => {});
         }
       }
 
@@ -584,6 +588,7 @@ exports.recibirFlujo = async (req, res) => {
             mensaje: `Bomba 1 apagada automáticamente: límite diario de ${limiteAgua}L alcanzado (${volumenRealEnBD.toFixed(1)}L)`
           });
           await alertaBomba.save();
+          enviarPushATodos({ title: '💧 Límite de agua alcanzado', body: `Bomba 1 apagada — ${volumenRealEnBD.toFixed(1)}L / ${limiteAgua}L`, tag: 'agua_limite' }).catch(() => {});
 
           if (req.io) {
             req.io.emit('bomba_actualizada', {
@@ -615,6 +620,7 @@ exports.recibirFlujo = async (req, res) => {
             mensaje: `⚠️ Consumo de agua alto: ${volumenRealEnBD.toFixed(1)}L hoy (límite configurado: ${limiteAgua}L)`
           });
           await alertaAlta.save();
+          enviarPushATodos({ title: '⚠️ Consumo de agua alto', body: `${volumenRealEnBD.toFixed(1)}L hoy (límite: ${limiteAgua}L)`, tag: 'agua_alto' }).catch(() => {});
           if (req.io) req.io.emit('nueva_alerta', alertaAlta);
           console.log(`[AGUA] Alerta consumo alto: ${volumenRealEnBD.toFixed(1)}L`);
         }
