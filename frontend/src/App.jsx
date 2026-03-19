@@ -3166,6 +3166,149 @@ const cargarHistoricoPesos = async () => {
     )
   }
   // ═══════════════════════════════════════════════════════════════════════
+  // RENDER: VISTA SIMPLIFICADA — ROL CARMEN
+  // ═══════════════════════════════════════════════════════════════════════
+  if (user?.rol === 'carmen') {
+    const lotesActivos = lotes.filter(l => l.activo)
+    return (
+      <div style={{minHeight:'100vh', background:'#f0f9ff', fontFamily:'system-ui,sans-serif'}}>
+        {/* Toasts */}
+        {toasts.length > 0 && (
+          <div style={{position:'fixed',bottom:16,right:16,zIndex:9999,display:'flex',flexDirection:'column',gap:8,maxWidth:320}}>
+            {toasts.map(t => (
+              <div key={t.id} style={{background:'#1e293b',color:'#f1f5f9',borderRadius:12,padding:'10px 14px',boxShadow:'0 4px 20px rgba(0,0,0,0.3)',display:'flex',gap:10,alignItems:'flex-start',borderLeft:'4px solid #22c55e'}}>
+                <img src="/cerdito_analisis.png" style={{width:32,height:32,borderRadius:'50%',flexShrink:0}} alt="" />
+                <div style={{flex:1,fontSize:13}}>{t.mensaje}</div>
+                <button onClick={() => setToasts(p => p.filter(x => x.id !== t.id))} style={{background:'none',border:'none',color:'#94a3b8',cursor:'pointer',fontSize:16}}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {/* Header simple */}
+        <div style={{background:'#0f4c81',padding:'14px 20px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div style={{display:'flex',alignItems:'center',gap:10}}>
+            <img src="/cerdito_analisis.png" style={{width:36,height:36,borderRadius:8}} alt="" />
+            <div>
+              <div style={{color:'#fff',fontWeight:700,fontSize:16}}>Hola, Carmen 👋</div>
+              <div style={{color:'#93c5fd',fontSize:12}}>{new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'})}</div>
+            </div>
+          </div>
+          <button onClick={handleLogout} style={{background:'rgba(255,255,255,0.15)',border:'none',color:'#fff',padding:'6px 14px',borderRadius:8,cursor:'pointer',fontSize:13}}>Salir</button>
+        </div>
+
+        <div style={{padding:'16px',maxWidth:700,margin:'0 auto',display:'flex',flexDirection:'column',gap:16}}>
+
+          {/* Alertas de cambio de etapa */}
+          {lotesActivos.map(lote => {
+            const edad = lote.edad_dias || 0
+            const plan = getPlanSemana(edad)
+            const proxSemana = getPlanSemana(edad + 7)
+            if (!plan || !proxSemana || plan.tipo === proxSemana.tipo) return null
+            return (
+              <div key={`alerta-${lote._id}`} style={{background:'#fef3c7',border:'2px solid #f59e0b',borderRadius:12,padding:'14px 16px',display:'flex',gap:12,alignItems:'center'}}>
+                <div style={{fontSize:28}}>⚠️</div>
+                <div>
+                  <div style={{fontWeight:700,color:'#92400e',fontSize:15}}>{lote.nombre} — Cambio de alimento en menos de 1 semana</div>
+                  <div style={{color:'#78350f',fontSize:13,marginTop:4}}>Pasa de <strong>{plan.tipo}</strong> a <strong>{proxSemana.tipo}</strong> (aprox. día {proxSemana.dia_inicio})</div>
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Card por lote */}
+          {lotesActivos.length === 0 && (
+            <div style={{textAlign:'center',padding:'40px',color:'#64748b',background:'#fff',borderRadius:16}}>No hay lotes activos en este momento</div>
+          )}
+          {lotesActivos.map(lote => {
+            const edad = lote.edad_dias || 0
+            const plan = getPlanSemana(edad)
+            const cantNum = plan ? parseFloat(plan.cantidad_dia.replace(',','.').replace(/[^0-9.]/g,'')) : NaN
+            const esGramos = plan ? (/\d\s*g\b/.test(plan.cantidad_dia) && !/kg/.test(plan.cantidad_dia)) : false
+            const kgPorCerdoHoy = !isNaN(cantNum) ? (esGramos ? cantNum/1000 : cantNum) : null
+            const kgLoteHoy = kgPorCerdoHoy !== null ? kgPorCerdoHoy * (lote.cantidad_cerdos || 1) : null
+            const diasParaCambio = plan ? (plan.dia_fin - edad) : null
+            return (
+              <div key={lote._id} style={{background:'#fff',borderRadius:16,overflow:'hidden',boxShadow:'0 2px 12px rgba(0,0,0,0.08)'}}>
+                {/* Header lote */}
+                <div style={{background:'#0f4c81',padding:'14px 18px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <div>
+                    <div style={{color:'#fff',fontWeight:700,fontSize:17}}>{lote.nombre}</div>
+                    <div style={{color:'#93c5fd',fontSize:13}}>{lote.cantidad_cerdos} cerdos · {edad} días · {plan?.tipo || '-'}</div>
+                  </div>
+                  <div style={{textAlign:'right'}}>
+                    <div style={{color:'#fff',fontWeight:700,fontSize:15}}>{(lote.peso_promedio_actual || lote.peso_inicial_promedio || 0).toFixed(1)} kg</div>
+                    <div style={{color:'#93c5fd',fontSize:12}}>peso promedio</div>
+                  </div>
+                </div>
+
+                {/* Instrucción alimento HOY */}
+                <div style={{padding:'16px 18px',background:'#ecfdf5',borderBottom:'1px solid #d1fae5'}}>
+                  <div style={{fontSize:13,color:'#065f46',fontWeight:600,marginBottom:6}}>🌽 Alimento de hoy</div>
+                  {plan?.cantidad_dia === 'Libre' ? (
+                    <div style={{fontSize:20,fontWeight:800,color:'#047857'}}>Libre (leche materna)</div>
+                  ) : kgLoteHoy !== null ? (
+                    <div>
+                      <div style={{fontSize:24,fontWeight:800,color:'#047857'}}>{kgLoteHoy.toFixed(2)} kg para todo el lote</div>
+                      <div style={{fontSize:14,color:'#065f46',marginTop:4}}>= {(kgPorCerdoHoy || 0).toFixed(3)} kg por cerdo — Tipo: <strong>{plan?.tipo}</strong></div>
+                      {diasParaCambio !== null && diasParaCambio <= 5 && (
+                        <div style={{marginTop:8,fontSize:13,color:'#b45309',fontWeight:600}}>⚠ En {diasParaCambio} días cambia a: {getPlanSemana((plan?.dia_fin ?? 0) + 1)?.tipo || 'siguiente etapa'}</div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{fontSize:16,color:'#6b7280'}}>{plan?.cantidad_dia || '-'}</div>
+                  )}
+                </div>
+
+                {/* Ingresar peso */}
+                <div style={{padding:'14px 18px'}}>
+                  <div style={{fontSize:13,color:'#374151',fontWeight:600,marginBottom:8}}>⚖️ Registrar peso de hoy</div>
+                  <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
+                    <input type="number" step="0.1" placeholder="Peso promedio (kg)" id={`peso-carmen-${lote._id}`}
+                      style={{flex:1,minWidth:140,padding:'10px 14px',borderRadius:10,border:'2px solid #e2e8f0',fontSize:15}}
+                    />
+                    <input type="number" placeholder="Cantidad cerdos pesados" id={`cant-carmen-${lote._id}`} defaultValue={lote.cantidad_cerdos}
+                      style={{width:80,padding:'10px',borderRadius:10,border:'2px solid #e2e8f0',fontSize:13,textAlign:'center'}}
+                    />
+                    <button style={{background:'#0f4c81',color:'#fff',border:'none',borderRadius:10,padding:'10px 18px',fontWeight:700,fontSize:15,cursor:'pointer'}}
+                      onClick={async () => {
+                        const pesoEl = document.getElementById(`peso-carmen-${lote._id}`)
+                        const cantEl = document.getElementById(`cant-carmen-${lote._id}`)
+                        const peso = parseFloat(pesoEl.value)
+                        const cant = parseInt(cantEl.value) || lote.cantidad_cerdos
+                        if (!peso || peso <= 0) { alert('Ingresa el peso'); return }
+                        try {
+                          await axios.post(`${API_URL}/api/pesajes`, { lote: lote._id, peso_total: peso * cant, cantidad_cerdos: cant, peso_promedio: peso, notas: 'Ingresado por Carmen' }, { headers: { Authorization: `Bearer ${token}` } })
+                          pesoEl.value = ''
+                          await cargarLotes()
+                          mostrarToast(`✓ Peso registrado: ${peso} kg para ${lote.nombre}`, 'info', 5000)
+                        } catch(e) { alert('Error: ' + (e.response?.data?.mensaje || e.message)) }
+                      }}>Guardar peso</button>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+
+          {/* Alertas recientes */}
+          {alertas.length > 0 && (
+            <div style={{background:'#fff',borderRadius:16,padding:'14px 18px',boxShadow:'0 2px 8px rgba(0,0,0,0.06)'}}>
+              <div style={{fontWeight:700,fontSize:15,marginBottom:10,color:'#374151'}}>🔔 Avisos recientes</div>
+              {alertas.slice(0,5).map((a,i) => (
+                <div key={i} style={{padding:'8px 0',borderBottom:'1px solid #f1f5f9',fontSize:13,color:'#374151'}}>
+                  <span style={{marginRight:8}}>{a.tipo === 'critico' ? '🔴' : a.tipo === 'alerta' ? '🟡' : 'ℹ️'}</span>
+                  {a.mensaje}
+                  <span style={{marginLeft:8,fontSize:11,color:'#94a3b8'}}>{new Date(a.createdAt).toLocaleDateString('es-CO')}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+        </div>
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
   // RENDER: DASHBOARD PRINCIPAL
   // ═══════════════════════════════════════════════════════════════════════
 
@@ -3929,8 +4072,9 @@ const cargarHistoricoPesos = async () => {
               const fFin    = refDate ? new Date(refDate.getTime() + planSem.dia_fin   * 86400000) : null
               const fmt = d => d.toLocaleDateString('es-CO', { day:'2-digit', month:'short' })
               const cantNum = parseFloat(planSem.cantidad_dia.replace(',','.').replace(/[^0-9.]/g,''))
+              const esGramos = /\d\s*g\b/.test(planSem.cantidad_dia) && !/kg/.test(planSem.cantidad_dia)
               const cantLoteKg = !isNaN(cantNum) && lote.cantidad_cerdos > 0
-                ? `${(cantNum * lote.cantidad_cerdos).toFixed(1)} kg/día`
+                ? `${((esGramos ? cantNum/1000 : cantNum) * lote.cantidad_cerdos).toFixed(2)} kg/día`
                 : planSem.cantidad_dia === 'Libre' ? 'Libre' : planSem.cantidad_dia
               return (
                 <div key={lote._id} style={{
@@ -4293,9 +4437,10 @@ const cargarHistoricoPesos = async () => {
                       const fFin    = new Date(refDate.getTime() + fila.dia_fin   * 86400000)
                       const esActual = i === semActualIdx
                       const pasada   = edadDias > fila.dia_fin
-                      const cantNum = parseFloat(fila.cantidad_dia.replace(',','.').replace(/[^0-9.–-]/g,''))
+                      const cantNum = parseFloat(fila.cantidad_dia.replace(',','.').replace(/[^0-9.]/g,''))
+                      const esGramos = /\d\s*g\b/.test(fila.cantidad_dia) && !/kg/.test(fila.cantidad_dia)
                       const cantLote = !isNaN(cantNum) && loteDetalle.cantidad_cerdos > 0
-                        ? `~${(cantNum * loteDetalle.cantidad_cerdos).toFixed(1)} kg`
+                        ? `~${((esGramos ? cantNum/1000 : cantNum) * loteDetalle.cantidad_cerdos).toFixed(2)} kg`
                         : (fila.cantidad_dia === 'Libre' ? 'Libre' : '-')
                       return (
                         <tr key={i} style={{
