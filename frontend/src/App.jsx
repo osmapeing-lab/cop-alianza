@@ -1531,6 +1531,12 @@ const notifPanelRef = useRef(null)
 // Estados para notificaciones y config usuario
 const [mostrarNotificaciones, setMostrarNotificaciones] = useState(false)
 const [alertasLeidas, setAlertasLeidas] = useState(0)
+const [toasts, setToasts] = useState([])
+const mostrarToast = useCallback((mensaje, tipo = 'info', duracion = 6000) => {
+  const id = Date.now() + Math.random()
+  setToasts(prev => [...prev.slice(-3), { id, mensaje, tipo }])
+  if (duracion > 0) setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duracion)
+}, [])
 // Recordatorios locales (guardados en localStorage)
 const [recordatorios, setRecordatorios] = useState(() => {
   try { return JSON.parse(localStorage.getItem('coo_recordatorios') || '[]') } catch { return [] }
@@ -1687,9 +1693,17 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
       });
     });
 
+    socket.on('nueva_alerta', (data) => {
+      if (data?.mensaje) {
+        mostrarToast(data.mensaje, data.tipo || 'info')
+        cargarAlertas()
+      }
+    });
+
     socket.on('nuevo_peso', (data) => {
       setUltimoPeso(data);
       cargarPesajes();
+      mostrarToast(`Nuevo peso registrado: ${data.peso_promedio} kg`, 'info', 5000)
     });
 
     socket.on('peso_live', (data) => {
@@ -1711,6 +1725,7 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
       socket.off('bomba_actualizada');
       socket.off('peso_live');
       socket.off('flujo_actualizado');
+      socket.off('nueva_alerta');
     };
   }, []); // El array vacío asegura que esto solo se ejecute una vez
   // ═══════════════════════════════════════════════════════════════════════
@@ -2184,14 +2199,19 @@ const verStreamCamara = (camara) => {
     try {
       const res = await axios.get(`${API_URL}/api/alerts`)
       const data = res.data.slice(0, 10)
-      setAlertas(data)
-      // Calcular no-leídas desde el último timestamp guardado en localStorage
+      // Detectar alertas nuevas vs las que ya teníamos → mostrar toast
+      setAlertas(prev => {
+        const idsViejos = new Set(prev.map(a => a._id))
+        const nuevas = data.filter(a => !idsViejos.has(a._id))
+        nuevas.forEach(a => mostrarToast(a.mensaje, a.tipo || 'info'))
+        return data
+      })
       const ts = _getAlertasLeidasTs()
       if (ts) {
         const leidas = data.filter(a => new Date(a.createdAt || a.fecha) <= new Date(ts)).length
         setAlertasLeidas(leidas)
       } else {
-        setAlertasLeidas(0) // primera vez: todas son "nuevas"
+        setAlertasLeidas(0)
       }
     } catch (error) {
       console.error('Error cargando alertas:', error)
@@ -3135,6 +3155,26 @@ const cargarHistoricoPesos = async () => {
 
   return (
     <div className="app">
+    {/* ── Toasts flotantes estilo WhatsApp ── */}
+    {toasts.length > 0 && (
+      <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, display:'flex', flexDirection:'column', gap:10, maxWidth:340 }}>
+        {toasts.map(t => {
+          const colorMap = { temperatura_alta:'#ef4444', nivel_bajo:'#f59e0b', sensor_desconectado:'#6b7280', info:'#22c55e', warning:'#f59e0b', error:'#ef4444' }
+          const color = colorMap[t.tipo] || '#3b82f6'
+          return (
+            <div key={t.id} style={{ background:'#1e293b', color:'#f1f5f9', borderRadius:14, padding:'12px 16px', boxShadow:'0 8px 32px rgba(0,0,0,0.35)', display:'flex', gap:12, alignItems:'flex-start', borderLeft:`4px solid ${color}`, animation:'slideInRight 0.3s ease' }}>
+              <img src="/cerdito_analisis.png" style={{ width:36, height:36, borderRadius:'50%', objectFit:'cover', flexShrink:0 }} alt="" />
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontWeight:700, fontSize:13, color, marginBottom:2 }}>SAMTR — Alerta</div>
+                <div style={{ fontSize:13, lineHeight:1.4, wordBreak:'break-word' }}>{t.mensaje}</div>
+                <div style={{ fontSize:11, color:'#94a3b8', marginTop:4 }}>{new Date().toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit' })}</div>
+              </div>
+              <button onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))} style={{ background:'none', border:'none', color:'#64748b', cursor:'pointer', fontSize:18, lineHeight:1, padding:'0 0 0 4px', flexShrink:0 }}>×</button>
+            </div>
+          )
+        })}
+      </div>
+    )}
      {/* Header */}
 <header className="header">
   <div className="header-left">
