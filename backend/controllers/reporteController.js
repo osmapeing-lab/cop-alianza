@@ -101,7 +101,8 @@ async function construirWorkbook() {
   // ── Datos comunes ───────────────────────────────────────────────────
   const ahoraCol = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
   const hoyUTC   = new Date(Date.UTC(ahoraCol.getFullYear(), ahoraCol.getMonth(), ahoraCol.getDate()));
-  const hace30d  = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const hace30d  = new Date(Date.now() - 30  * 24 * 60 * 60 * 1000);
+  const hace120d = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000);
 
   const fechaStr = new Date().toLocaleDateString('es-CO', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
@@ -416,8 +417,8 @@ async function construirWorkbook() {
   estilizarHeader(tempSheet, AZUL_OSCURO);
 
   const [lectTemp, lectHum] = await Promise.all([
-    Reading.find({ tipo: 'temp_porqueriza' }).sort({ createdAt: 1 }),
-    Reading.find({ tipo: 'humedad_porqueriza' }).sort({ createdAt: 1 })
+    Reading.find({ tipo: 'temp_porqueriza',    createdAt: { $gte: hace120d } }).sort({ createdAt: 1 }),
+    Reading.find({ tipo: 'humedad_porqueriza', createdAt: { $gte: hace120d } }).sort({ createdAt: 1 })
   ]);
 
   // Agrupar por día (histórico completo)
@@ -520,7 +521,7 @@ async function construirWorkbook() {
 
   // Los registros de flujo se guardan en Reading tipo:'flujo_agua' cada 5 min
   // El valor es el total acumulado del día → calculamos delta entre lecturas consecutivas
-  const lecturasFlujo = await Reading.find({ tipo: 'flujo_agua' }).sort({ createdAt: 1 });
+  const lecturasFlujo = await Reading.find({ tipo: 'flujo_agua', createdAt: { $gte: hace120d } }).sort({ createdAt: 1 });
 
   const aguaPorHora = {};
   for (let i = 1; i < lecturasFlujo.length; i++) {
