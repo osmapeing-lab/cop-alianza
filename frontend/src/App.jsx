@@ -3915,12 +3915,8 @@ const cargarHistoricoPesos = async () => {
         })).sort((a, b) => a.dia - b.dia)
 
         const edadLoteActual = lote.edad_dias || 0
-        // edadEntrada: usa edadManual si está definido; si no, el primer pesaje real o día 43
-        const primerPesajeDia = puntos.length > 0 ? puntos[0].dia : null
-        const edadEntrada = edadManual !== null && edadManual !== undefined
-          ? edadManual
-          : (primerPesajeDia ?? 43)
-        const limDia = Math.min(edadLoteActual + 28, 180)
+        // edadEntrada: usa edadManual si definido; lotes nacidos empiezan desde día 0 (Sem 1)
+        const edadEntrada = edadManual !== null && edadManual !== undefined ? edadManual : 0
 
         // Añadir peso inicial como punto real solo si edadManual está explícitamente definido
         const puntosConEntrada = [...puntos]
@@ -3932,30 +3928,16 @@ const cargarHistoricoPesos = async () => {
           }
         }
 
+        // Plan completo (Sem 1–26), puntos en el centro de cada semana
         const curva = PLAN_ALIMENTACION
-          .filter(s => s.dia_fin <= limDia && s.dia_fin >= edadEntrada)
-          .map(s => ({ semana: s.semana, dia: s.dia_fin, peso_esperado: s.peso_esperado_kg, fase: s.tipo }))
-
-        // Ajustar el primer punto del plan al día real de entrada (evita duplicar semana)
-        if (edadEntrada > 0 && !curva.some(p => p.dia === edadEntrada)) {
-          const planEntrada = PLAN_ALIMENTACION.find(s => edadEntrada >= s.dia_inicio && edadEntrada <= s.dia_fin)
-          if (planEntrada) {
-            const idxMismaSemana = curva.findIndex(p => p.semana === planEntrada.semana)
-            if (idxMismaSemana >= 0) {
-              // La semana de entrada ya existe → mover su día al día real de entrada
-              curva[idxMismaSemana] = { ...curva[idxMismaSemana], dia: edadEntrada }
-            } else {
-              curva.unshift({ semana: planEntrada.semana, dia: edadEntrada, peso_esperado: planEntrada.peso_esperado_kg, fase: planEntrada.tipo })
-              curva.sort((a, b) => a.dia - b.dia)
-            }
-          }
-        }
+          .filter(s => s.dia_fin >= edadEntrada)
+          .map(s => ({ semana: s.semana, dia: Math.round((s.dia_inicio + s.dia_fin) / 2), peso_esperado: s.peso_esperado_kg, fase: s.tipo }))
 
         // Carry-forward: lleva el último peso conocido hasta hoy
         let lastRealMini = null
         const datos = curva.map(punto => {
           puntosConEntrada.forEach(p => { if (p.dia <= punto.dia) lastRealMini = p.peso })
-          const tieneP = puntosConEntrada.some(p => Math.abs(p.dia - punto.dia) <= 3)
+          const tieneP = puntosConEntrada.some(p => Math.abs(p.dia - punto.dia) <= 4)
           return {
             semana: `Sem ${punto.semana}`,
             dia: punto.dia,
@@ -5002,13 +4984,12 @@ const cargarHistoricoPesos = async () => {
                 peso_max: data.maxs.length > 0 ? Math.max(...data.maxs) : (data.pesos.length > 1 ? Math.max(...data.pesos) : null)
               })).sort((a, b) => a.dia - b.dia)
 
-              // Curva esperada recortada hasta edad actual + 4 semanas
-              const limDia = Math.min(edadLote + 28, 180)
+              // Curva esperada completa (plan de producción día 43 → 180), puntos en el centro de cada semana
               const curvaEsperada = [{ semana: 6, dia: 43, peso_esperado: 12, fase: 'Inicio' }]
-              TABLA_INICIO.forEach(s => curvaEsperada.push({ semana: 6 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Inicio' }))
-              TABLA_CRECIMIENTO.forEach(s => curvaEsperada.push({ semana: 10 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Crecimiento' }))
-              TABLA_ENGORDE.forEach(s => curvaEsperada.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
-              const curvaRecortada = curvaEsperada.filter(p => p.dia <= limDia)
+              TABLA_INICIO.forEach(s => curvaEsperada.push({ semana: 6 + s.semana, dia: Math.round((s.edad_inicio + s.edad_fin) / 2), peso_esperado: s.peso_final, fase: 'Inicio' }))
+              TABLA_CRECIMIENTO.forEach(s => curvaEsperada.push({ semana: 10 + s.semana, dia: Math.round((s.edad_inicio + s.edad_fin) / 2), peso_esperado: s.peso_final, fase: 'Crecimiento' }))
+              TABLA_ENGORDE.forEach(s => curvaEsperada.push({ semana: 17 + s.semana, dia: Math.round((s.edad_inicio + s.edad_fin) / 2), peso_esperado: s.peso_final, fase: 'Engorde' }))
+              const curvaRecortada = curvaEsperada
 
               // Si hay peso inicial registrado, añadirlo como primer punto real en el día de entrada
               const diaEntradaLote = edadManual !== null && edadManual !== undefined ? edadManual : 43
@@ -5049,7 +5030,7 @@ const cargarHistoricoPesos = async () => {
                   peso_real: enRango ? lastReal : null,
                   peso_rango_min: (enRango && lastRealMin !== null) ? lastRealMin : null,
                   peso_rango_max: (enRango && lastRealMax !== null) ? lastRealMax : null,
-                  tienePesaje: !!puntosPesaje.find(p => Math.abs(p.dia - punto.dia) <= 3),
+                  tienePesaje: !!puntosPesaje.find(p => Math.abs(p.dia - punto.dia) <= 4),
                   fase: punto.fase
                 }
               })
@@ -5103,7 +5084,13 @@ const cargarHistoricoPesos = async () => {
                     }[name] || name)} />
                     {/* Línea vertical: posición actual */}
                     {(() => {
-                      const semHoy = `Sem ${Math.floor(edadLote / 7)}`
+                      const tablasSem = [
+                        ...TABLA_INICIO.map(s => ({ ini: s.edad_inicio, fin: s.edad_fin, g: 6 + s.semana })),
+                        ...TABLA_CRECIMIENTO.map(s => ({ ini: s.edad_inicio, fin: s.edad_fin, g: 10 + s.semana })),
+                        ...TABLA_ENGORDE.map(s => ({ ini: s.edad_inicio, fin: s.edad_fin, g: 17 + s.semana }))
+                      ]
+                      const semActual = tablasSem.find(s => edadLote >= s.ini && edadLote <= s.fin)
+                      const semHoy = semActual ? `Sem ${semActual.g}` : `Sem ${Math.round(edadLote / 7)}`
                       const existe = datosGrafica.some(d => d.semana === semHoy)
                       if (!existe) return null
                       return <ReferenceLine x={semHoy} stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 3" label={{ value: 'Hoy', position: 'top', fontSize: 10, fill: '#d97706', fontWeight: '700' }} />
