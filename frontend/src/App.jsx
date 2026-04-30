@@ -186,7 +186,7 @@ const TABLA_FINCA = [
 
 // ═══════════════════════════════════════════════════════════════════════
 // PLAN DE ALIMENTACIÓN COMPLETO (del documento oficial de la granja)
-// Desde nacimiento (semana 1) hasta engorde (semana 16+)
+// Desde nacimiento (semana 1) hasta engorde (semana 26 / día 180)
 // Las fechas se calculan dinámicamente desde fecha_nacimiento del lote
 // ═══════════════════════════════════════════════════════════════════════
 const PLAN_ALIMENTACION = [
@@ -206,6 +206,16 @@ const PLAN_ALIMENTACION = [
   { semana: 14, dia_inicio: 91,  dia_fin: 97,  tipo: 'Crecimiento',              cantidad_dia: '1.6 kg',       ganancia_sem_g: 6000, peso_esperado_kg: 44.4, color: '#f5f3ff' },
   { semana: 15, dia_inicio: 98,  dia_fin: 104, tipo: 'Crecimiento',              cantidad_dia: '1.8 kg',       ganancia_sem_g: 6500, peso_esperado_kg: 50.9, color: '#f5f3ff' },
   { semana: 16, dia_inicio: 105, dia_fin: 111, tipo: 'Engorde',                  cantidad_dia: '2.0 kg',       ganancia_sem_g: 7000, peso_esperado_kg: 57.9, color: '#fff7ed' },
+  { semana: 17, dia_inicio: 112, dia_fin: 118, tipo: 'Engorde',                  cantidad_dia: '2.2 kg',       ganancia_sem_g: 6902, peso_esperado_kg: 65.8, color: '#fff7ed' },
+  { semana: 18, dia_inicio: 119, dia_fin: 125, tipo: 'Engorde',                  cantidad_dia: '2.4 kg',       ganancia_sem_g: 7175, peso_esperado_kg: 72.7, color: '#fff7ed' },
+  { semana: 19, dia_inicio: 126, dia_fin: 132, tipo: 'Engorde',                  cantidad_dia: '2.5 kg',       ganancia_sem_g: 7175, peso_esperado_kg: 79.9, color: '#fff7ed' },
+  { semana: 20, dia_inicio: 133, dia_fin: 139, tipo: 'Engorde',                  cantidad_dia: '2.6 kg',       ganancia_sem_g: 7266, peso_esperado_kg: 87.1, color: '#fff7ed' },
+  { semana: 21, dia_inicio: 140, dia_fin: 146, tipo: 'Engorde',                  cantidad_dia: '2.8 kg',       ganancia_sem_g: 7455, peso_esperado_kg: 94.6, color: '#fff7ed' },
+  { semana: 22, dia_inicio: 147, dia_fin: 153, tipo: 'Engorde',                  cantidad_dia: '2.9 kg',       ganancia_sem_g: 7546, peso_esperado_kg: 102.1, color: '#fff7ed' },
+  { semana: 23, dia_inicio: 154, dia_fin: 160, tipo: 'Engorde',                  cantidad_dia: '3.0 kg',       ganancia_sem_g: 7637, peso_esperado_kg: 109.8, color: '#fff7ed' },
+  { semana: 24, dia_inicio: 161, dia_fin: 167, tipo: 'Engorde',                  cantidad_dia: '3.1 kg',       ganancia_sem_g: 7637, peso_esperado_kg: 117.4, color: '#fff7ed' },
+  { semana: 25, dia_inicio: 168, dia_fin: 174, tipo: 'Engorde',                  cantidad_dia: '3.1 kg',       ganancia_sem_g: 7637, peso_esperado_kg: 125.1, color: '#fff7ed' },
+  { semana: 26, dia_inicio: 175, dia_fin: 180, tipo: 'Engorde / Pre-venta',      cantidad_dia: '3.1 kg',       ganancia_sem_g: 6546, peso_esperado_kg: 131.7, color: '#fef9c3' },
 ]
 
 // Retorna la fila del plan de alimentación según la edad en días del lote
@@ -3906,27 +3916,42 @@ const cargarHistoricoPesos = async () => {
 
         const edadLoteActual = lote.edad_dias || 0
         const edadEntrada = edadManual !== null && edadManual !== undefined ? edadManual : 0
-        const pesoBase = (lote.peso_inicial_promedio || 0) > 0 ? lote.peso_inicial_promedio : 1.4
         const limDia = Math.min(edadLoteActual + 28, 180)
 
-        const curva = [
-          { semana: 0, dia: 0, peso_esperado: 1.4, fase: 'Nacimiento' },
-          ...PLAN_ALIMENTACION
-            .filter(s => s.dia_fin <= limDia)
-            .map(s => ({ semana: s.semana, dia: s.dia_fin, peso_esperado: s.peso_esperado_kg, fase: s.tipo }))
-        ]
+        // Si hay peso inicial y no hay pesaje en el día de entrada, añadirlo como punto real
+        const puntosConEntrada = [...puntos]
+        if ((lote.peso_inicial_promedio || 0) > 0) {
+          const hayEntrada = puntosConEntrada.some(p => Math.abs(p.dia - edadEntrada) <= 3)
+          if (!hayEntrada) {
+            puntosConEntrada.push({ dia: edadEntrada, peso: lote.peso_inicial_promedio })
+            puntosConEntrada.sort((a, b) => a.dia - b.dia)
+          }
+        }
 
+        const curva = PLAN_ALIMENTACION
+          .filter(s => s.dia_fin <= limDia && s.dia_fin >= edadEntrada)
+          .map(s => ({ semana: s.semana, dia: s.dia_fin, peso_esperado: s.peso_esperado_kg, fase: s.tipo }))
+
+        // Añadir punto del día de entrada si no coincide exactamente con fin de semana
+        if (edadEntrada > 0 && !curva.some(p => p.dia === edadEntrada)) {
+          const planEntrada = PLAN_ALIMENTACION.find(s => edadEntrada >= s.dia_inicio && edadEntrada <= s.dia_fin)
+          if (planEntrada) {
+            curva.unshift({ semana: planEntrada.semana, dia: edadEntrada, peso_esperado: planEntrada.peso_esperado_kg, fase: planEntrada.tipo })
+            curva.sort((a, b) => a.dia - b.dia)
+          }
+        }
+
+        // lastReal solo se actualiza desde pesajes reales (no desde pesoBase inicial)
         let lastReal = null
         const datos = curva.map(punto => {
-          if (lastReal === null && punto.dia >= edadEntrada) lastReal = pesoBase
-          puntos.forEach(p => { if (p.dia <= punto.dia) lastReal = p.peso })
-          const tieneP = puntos.some(p => Math.abs(p.dia - punto.dia) <= 3)
+          puntosConEntrada.forEach(p => { if (p.dia <= punto.dia) lastReal = p.peso })
+          const tieneP = puntosConEntrada.some(p => Math.abs(p.dia - punto.dia) <= 3)
           return {
             semana: `Sem ${punto.semana}`,
             dia: punto.dia,
             fase: punto.fase,
             peso_esperado: punto.peso_esperado,
-            peso_real: (punto.dia <= edadLoteActual + 7 && lastReal !== null) ? lastReal : null,
+            peso_real: (punto.dia >= edadEntrada && punto.dia <= edadLoteActual + 7 && lastReal !== null) ? lastReal : null,
             tiene_pesaje: tieneP
           }
         })
@@ -3935,6 +3960,9 @@ const cargarHistoricoPesos = async () => {
         const planActual = getPlanSemana(edadLoteActual)
         const semanaActual = planActual?.semana ?? Math.floor(edadLoteActual / 7) + 1
         const labelHoy = `Sem ${semanaActual}`
+        const planEntradaLabel = edadEntrada > 0
+          ? `Sem ${PLAN_ALIMENTACION.find(s => edadEntrada >= s.dia_inicio && edadEntrada <= s.dia_fin)?.semana ?? Math.floor(edadEntrada / 7) + 1}`
+          : null
 
         return (
           <div key={lote._id} className="dashboard-section grafica-section">
@@ -3965,6 +3993,10 @@ const cargarHistoricoPesos = async () => {
                     }}
                   />
                   <Legend />
+                  {planEntradaLabel && (
+                    <ReferenceLine x={planEntradaLabel} stroke="#16a34a" strokeWidth={2} strokeDasharray="4 3"
+                      label={{ value: 'Entrada', position: 'top', fill: '#16a34a', fontSize: 10, fontWeight: 700 }} />
+                  )}
                   <ReferenceLine x={labelHoy} stroke="#d97706" strokeWidth={2} strokeDasharray="4 3"
                     label={{ value: 'Hoy', position: 'top', fill: '#d97706', fontSize: 11, fontWeight: 700 }} />
                   <Area type="monotone" dataKey="peso_esperado" stroke="#3b82f6" strokeWidth={2} strokeDasharray="6 3" fill={`url(#gradMeta_${lote._id})`} dot={false} name="Meta Plan" />
@@ -4968,6 +5000,16 @@ const cargarHistoricoPesos = async () => {
               TABLA_ENGORDE.forEach(s => curvaEsperada.push({ semana: 17 + s.semana, dia: s.edad_fin, peso_esperado: s.peso_final, fase: 'Engorde' }))
               const curvaRecortada = curvaEsperada.filter(p => p.dia <= limDia)
 
+              // Si hay peso inicial registrado, añadirlo como primer punto real en el día de entrada
+              const diaEntradaLote = edadManual !== null && edadManual !== undefined ? edadManual : 43
+              if ((loteDetalle.peso_inicial_promedio || 0) > 0) {
+                const hayPesajeEntrada = puntosPesaje.some(p => Math.abs(p.dia - diaEntradaLote) <= 3)
+                if (!hayPesajeEntrada) {
+                  puntosPesaje.unshift({ dia: diaEntradaLote, peso: loteDetalle.peso_inicial_promedio, peso_min: null, peso_max: null })
+                  puntosPesaje.sort((a, b) => a.dia - b.dia)
+                }
+              }
+
               // Añadir peso actual como punto de hoy si no hay pesaje reciente
               const pesoActualHoy = loteDetalle.peso_promedio_actual || 0
               if (pesoActualHoy > 0) {
@@ -4986,10 +5028,10 @@ const cargarHistoricoPesos = async () => {
               }
 
               // Construir datos con carry-forward
-              // limReal = día actual
+              // lastReal comienza en null — solo se llena desde pesajes reales (incluido el de entrada)
               const semanaHoyDia = Math.floor(edadLote / 7) * 7
               const limReal = Math.max(edadLote, semanaHoyDia)
-              let lastReal = (loteDetalle.peso_inicial_promedio || 0) > 0 ? loteDetalle.peso_inicial_promedio : null
+              let lastReal = null
               let lastRealMin = null, lastRealMax = null
               const datosGrafica = curvaRecortada.map(punto => {
                 puntosPesaje.forEach(p => {
