@@ -3915,12 +3915,16 @@ const cargarHistoricoPesos = async () => {
         })).sort((a, b) => a.dia - b.dia)
 
         const edadLoteActual = lote.edad_dias || 0
-        const edadEntrada = edadManual !== null && edadManual !== undefined ? edadManual : 0
+        // edadEntrada: usa edadManual si está definido; si no, el primer pesaje real o día 43
+        const primerPesajeDia = puntos.length > 0 ? puntos[0].dia : null
+        const edadEntrada = edadManual !== null && edadManual !== undefined
+          ? edadManual
+          : (primerPesajeDia ?? 43)
         const limDia = Math.min(edadLoteActual + 28, 180)
 
-        // Si hay peso inicial y no hay pesaje en el día de entrada, añadirlo como punto real
+        // Añadir peso inicial como punto real solo si edadManual está explícitamente definido
         const puntosConEntrada = [...puntos]
-        if ((lote.peso_inicial_promedio || 0) > 0) {
+        if ((lote.peso_inicial_promedio || 0) > 0 && edadManual !== null && edadManual !== undefined) {
           const hayEntrada = puntosConEntrada.some(p => Math.abs(p.dia - edadEntrada) <= 3)
           if (!hayEntrada) {
             puntosConEntrada.push({ dia: edadEntrada, peso: lote.peso_inicial_promedio })
@@ -3941,18 +3945,17 @@ const cargarHistoricoPesos = async () => {
           }
         }
 
-        // lastReal solo se actualiza desde pesajes reales (no desde pesoBase inicial)
-        let lastReal = null
+        // Solo mostrar peso_real en semanas con pesaje registrado (sin carry-forward)
+        // connectNulls conectará los puntos trazando una línea limpia entre pesajes
         const datos = curva.map(punto => {
-          puntosConEntrada.forEach(p => { if (p.dia <= punto.dia) lastReal = p.peso })
-          const tieneP = puntosConEntrada.some(p => Math.abs(p.dia - punto.dia) <= 3)
+          const pesaje = puntosConEntrada.find(p => Math.abs(p.dia - punto.dia) <= 3)
           return {
             semana: `Sem ${punto.semana}`,
             dia: punto.dia,
             fase: punto.fase,
             peso_esperado: punto.peso_esperado,
-            peso_real: (punto.dia >= edadEntrada && punto.dia <= edadLoteActual + 7 && lastReal !== null) ? lastReal : null,
-            tiene_pesaje: tieneP
+            peso_real: pesaje ? pesaje.peso : null,
+            tiene_pesaje: !!pesaje
           }
         })
 
@@ -5010,46 +5013,18 @@ const cargarHistoricoPesos = async () => {
                 }
               }
 
-              // Añadir peso actual como punto de hoy si no hay pesaje reciente
-              const pesoActualHoy = loteDetalle.peso_promedio_actual || 0
-              if (pesoActualHoy > 0) {
-                const hayPesajeHoy = puntosPesaje.some(p => Math.abs(p.dia - edadLote) <= 4)
-                if (!hayPesajeHoy) {
-                  puntosPesaje.push({ dia: edadLote, peso: pesoActualHoy, peso_min: null, peso_max: null })
-                  puntosPesaje.sort((a, b) => a.dia - b.dia)
-                }
-              }
-
-              // Mover el punto de inicio de semana actual al día real del lote
-              const semActualInicioLote = Math.floor(edadLote / 7) * 7
-              const idxSemActualLote = curvaRecortada.findIndex(p => p.dia === semActualInicioLote)
-              if (idxSemActualLote >= 0 && semActualInicioLote !== edadLote) {
-                curvaRecortada[idxSemActualLote] = { ...curvaRecortada[idxSemActualLote], dia: edadLote }
-              }
-
-              // Construir datos con carry-forward
-              // lastReal comienza en null — solo se llena desde pesajes reales (incluido el de entrada)
-              const semanaHoyDia = Math.floor(edadLote / 7) * 7
-              const limReal = Math.max(edadLote, semanaHoyDia)
-              let lastReal = null
-              let lastRealMin = null, lastRealMax = null
+              // Construir datos: solo peso_real donde hay pesaje registrado (sin carry-forward)
+              // connectNulls conecta los puntos reales — la línea termina en el último pesaje
               const datosGrafica = curvaRecortada.map(punto => {
-                puntosPesaje.forEach(p => {
-                  if (p.dia <= punto.dia) {
-                    lastReal = p.peso
-                    if (p.peso_min != null) lastRealMin = p.peso_min
-                    if (p.peso_max != null) lastRealMax = p.peso_max
-                  }
-                })
-                const enRango = punto.dia <= limReal && lastReal !== null
+                const pesaje = puntosPesaje.find(p => Math.abs(p.dia - punto.dia) <= 3)
                 return {
                   dia: punto.dia,
                   semana: `Sem ${punto.semana}`,
                   peso_esperado: punto.peso_esperado,
-                  peso_real: enRango ? lastReal : null,
-                  peso_rango_min: (enRango && lastRealMin !== null) ? lastRealMin : null,
-                  peso_rango_max: (enRango && lastRealMax !== null) ? lastRealMax : null,
-                  tienePesaje: !!puntosPesaje.find(p => Math.abs(p.dia - punto.dia) <= 3),
+                  peso_real: pesaje ? pesaje.peso : null,
+                  peso_rango_min: pesaje?.peso_min ?? null,
+                  peso_rango_max: pesaje?.peso_max ?? null,
+                  tienePesaje: !!pesaje,
                   fase: punto.fase
                 }
               })
