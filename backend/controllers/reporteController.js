@@ -29,12 +29,14 @@ const Venta      = require('../models/Venta');
 const WaterConsumption = require('../models/WaterConsumption');
 const Alert      = require('../models/Alert');
 const InventarioAlimento = require('../models/InventarioAlimento');
+const Config     = require('../models/Config');
 
 // ═══════════════════════════════════════════════════════════════════════
 // HELPER: CONSTRUIR WORKBOOK COMPLETO
 // ═══════════════════════════════════════════════════════════════════════
 
-async function construirWorkbook() {
+async function construirWorkbook(opciones = {}) {
+  const { tipo = 'completo', desde, hasta } = opciones;
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'COO Alianzas - Sistema de Gestión Porcina';
   workbook.created = new Date();
@@ -103,6 +105,12 @@ async function construirWorkbook() {
   const hoyUTC   = new Date(Date.UTC(ahoraCol.getFullYear(), ahoraCol.getMonth(), ahoraCol.getDate()));
   const hace30d  = new Date(Date.now() - 30  * 24 * 60 * 60 * 1000);
   const hace120d = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000);
+
+  // Filtro de fechas para hojas históricas
+  const fechaDesde = desde ? new Date(desde) : hace120d;
+  const fechaHasta = hasta ? new Date(hasta + 'T23:59:59.999Z') : new Date();
+
+  const config = await Config.findOne();
 
   const fechaStr = new Date().toLocaleDateString('es-CO', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
@@ -257,6 +265,11 @@ async function construirWorkbook() {
   lotesSheet.getColumn('gastos').numFmt = '$#,##0';
 
   // ──────────────────────────────────────────────────────────────────────
+  // HOJAS 3–8: solo en modo completo o histórico (no en general)
+  // ──────────────────────────────────────────────────────────────────────
+  if (tipo !== 'general') {
+
+  // ──────────────────────────────────────────────────────────────────────
   // HOJA 3: PESAJES
   // ──────────────────────────────────────────────────────────────────────
   const pesajesSheet = workbook.addWorksheet('Pesajes');
@@ -270,7 +283,7 @@ async function construirWorkbook() {
   ];
   estilizarHeader(pesajesSheet);
 
-  const pesajes = await Weighing.find().populate('lote', 'nombre').sort({ createdAt: -1 }).limit(200);
+  const pesajes = await Weighing.find({ createdAt: { $gte: fechaDesde, $lte: fechaHasta } }).populate('lote', 'nombre').sort({ createdAt: -1 }).limit(500);
   pesajes.forEach(p => {
     pesajesSheet.addRow({
       fecha:    p.createdAt?.toLocaleString('es-CO', { timeZone: 'America/Bogota' }) || '-',
@@ -301,8 +314,8 @@ async function construirWorkbook() {
 
   // Combinar Costos (gastos) + Ventas (ingresos) — la colección Contabilidad está en desuso
   const [costos, ventas] = await Promise.all([
-    Costo.find({ estado: { $ne: 'anulado' } }).populate('lote', 'nombre').sort({ fecha: -1 }),
-    Venta.find().populate('lote', 'nombre').sort({ fecha: -1 })
+    Costo.find({ estado: { $ne: 'anulado' }, fecha: { $gte: fechaDesde, $lte: fechaHasta } }).populate('lote', 'nombre').sort({ fecha: -1 }).limit(1000),
+    Venta.find({ fecha: { $gte: fechaDesde, $lte: fechaHasta } }).populate('lote', 'nombre').sort({ fecha: -1 }).limit(500)
   ]);
 
   const registrosConta = [
@@ -416,65 +429,71 @@ async function construirWorkbook() {
   ];
   estilizarHeader(tempSheet, AZUL_OSCURO);
 
-  const [lectTemp, lectHum] = await Promise.all([
-    Reading.find({ tipo: 'temp_porqueriza',    createdAt: { $gte: hace120d } }).sort({ createdAt: 1 }),
-    Reading.find({ tipo: 'humedad_porqueriza', createdAt: { $gte: hace120d } }).sort({ createdAt: 1 })
+  // Agregación por día en MongoDB — no carga lecturas crudas en memoria
+  const [tempDiaria, humDiaria, tempResumen, humResumen] = await Promise.all([
+    Reading.aggregate([
+      { $match: { tipo: 'temp_porqueriza', createdAt: { $gte: fechaDesde, $lte: fechaHasta } } },
+      { $group: {
+        _id:   { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Bogota' } },
+        avg:   { $avg: '$valor' },
+        max:   { $max: '$valor' },
+        min:   { $min: '$valor' },
+        count: { $sum: 1 }
+      }},
+      { $sort: { _id: 1 } }
+    ]),
+    Reading.aggregate([
+      { $match: { tipo: 'humedad_porqueriza', createdAt: { $gte: fechaDesde, $lte: fechaHasta } } },
+      { $group: {
+        _id:   { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Bogota' } },
+        avg:   { $avg: '$valor' },
+        max:   { $max: '$valor' },
+        min:   { $min: '$valor' },
+        count: { $sum: 1 }
+      }},
+      { $sort: { _id: 1 } }
+    ]),
+    Reading.aggregate([
+      { $match: { tipo: 'temp_porqueriza' } },
+      { $group: { _id: null, avg: { $avg: '$valor' }, max: { $max: '$valor' }, min: { $min: '$valor' }, count: { $sum: 1 } } }
+    ]),
+    Reading.aggregate([
+      { $match: { tipo: 'humedad_porqueriza' } },
+      { $group: { _id: null, avg: { $avg: '$valor' }, max: { $max: '$valor' }, min: { $min: '$valor' }, count: { $sum: 1 } } }
+    ])
   ]);
 
-  // Agrupar por día (histórico completo)
-  const tempPorDia = {};
-  const humPorDia  = {};
-
-  lectTemp.forEach(r => {
-    const diaKey = new Date(r.createdAt).toLocaleString('es-CO', {
-      timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit'
-    }).replace(',', '').trim();
-    if (!tempPorDia[diaKey]) tempPorDia[diaKey] = [];
-    tempPorDia[diaKey].push(r.valor);
-  });
-
-  lectHum.forEach(r => {
-    const diaKey = new Date(r.createdAt).toLocaleString('es-CO', {
-      timeZone: 'America/Bogota', year: 'numeric', month: '2-digit', day: '2-digit'
-    }).replace(',', '').trim();
-    if (!humPorDia[diaKey]) humPorDia[diaKey] = [];
-    humPorDia[diaKey].push(r.valor);
-  });
-
-  const diasUnicos = [...new Set([...Object.keys(tempPorDia), ...Object.keys(humPorDia)])].sort();
+  const diasTempMap = {};
+  tempDiaria.forEach(d => { diasTempMap[d._id] = d; });
+  const diasHumMap = {};
+  humDiaria.forEach(d => { diasHumMap[d._id] = d; });
+  const diasUnicos = [...new Set([...tempDiaria.map(d => d._id), ...humDiaria.map(d => d._id)])].sort();
 
   if (diasUnicos.length === 0) {
     const nr = tempSheet.addRow({ hora: 'Sin lecturas registradas' });
     nr.getCell('hora').font = { italic: true, color: { argb: '94A3B8' } };
   } else {
     diasUnicos.forEach(dia => {
-      const tVals = tempPorDia[dia] || [];
-      const hVals = humPorDia[dia] || [];
-      const avg   = arr => arr.length ? (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1) : '-';
-      const min   = arr => arr.length ? Math.min(...arr).toFixed(1) : '-';
-      const max   = arr => arr.length ? Math.max(...arr).toFixed(1) : '-';
+      const t = diasTempMap[dia];
+      const h = diasHumMap[dia];
 
       const addedRow = tempSheet.addRow({
         hora:  dia,
-        tMin:  tVals.length ? parseFloat(min(tVals)) : '-',
-        tProm: tVals.length ? parseFloat(avg(tVals)) : '-',
-        tMax:  tVals.length ? parseFloat(max(tVals)) : '-',
-        hMin:  hVals.length ? parseFloat(min(hVals)) : '-',
-        hProm: hVals.length ? parseFloat(avg(hVals)) : '-',
-        hMax:  hVals.length ? parseFloat(max(hVals)) : '-',
-        nTemp: tVals.length,
-        nHum:  hVals.length
+        tMin:  t ? parseFloat(t.min.toFixed(1))  : '-',
+        tProm: t ? parseFloat(t.avg.toFixed(1))  : '-',
+        tMax:  t ? parseFloat(t.max.toFixed(1))  : '-',
+        hMin:  h ? parseFloat(h.min.toFixed(1))  : '-',
+        hProm: h ? parseFloat(h.avg.toFixed(1))  : '-',
+        hMax:  h ? parseFloat(h.max.toFixed(1))  : '-',
+        nTemp: t ? t.count : 0,
+        nHum:  h ? h.count : 0
       });
 
-      // Resaltar temperatura alta
-      const tMaxVal = parseFloat(max(tVals));
-      if (tMaxVal > 37) {
+      if (t && t.max > 37) {
         addedRow.getCell('tMax').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEE2E2' } };
         addedRow.getCell('tMax').font = { bold: true, color: { argb: ROJO } };
       }
-      // Resaltar humedad alta
-      const hMaxVal = parseFloat(max(hVals));
-      if (hMaxVal > 85) {
+      if (h && h.max > 85) {
         addedRow.getCell('hMax').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF3C7' } };
         addedRow.getCell('hMax').font = { bold: true, color: { argb: '92400E' } };
       }
@@ -483,21 +502,21 @@ async function construirWorkbook() {
 
   estilizarFilas(tempSheet, 2, AZUL_CLARO);
 
-  // Resumen histórico al final
-  if (lectTemp.length > 0) {
-    const todosTemp = lectTemp.map(r => r.valor);
-    const todosHum  = lectHum.map(r => r.valor);
+  // Resumen histórico (todo el tiempo) calculado por la BD
+  const tRes = tempResumen[0];
+  const hRes = humResumen[0];
+  if (tRes) {
     const lastR = (tempSheet.lastRow?.number || 1) + 2;
     addTituloSeccion(tempSheet, 'RESUMEN HISTÓRICO', 'A', 'I', lastR, AZUL_OSCURO);
     const dataRows = [
-      ['Temp. Mínima registrada (histórico)', `${Math.min(...todosTemp).toFixed(1)} °C`],
-      ['Temp. Máxima registrada (histórico)', `${Math.max(...todosTemp).toFixed(1)} °C`],
-      ['Temp. Promedio general',             `${(todosTemp.reduce((a,b)=>a+b,0)/todosTemp.length).toFixed(1)} °C`],
-      ['Hum. Mínima registrada (histórico)', todosHum.length ? `${Math.min(...todosHum).toFixed(1)} %` : 'Sin datos'],
-      ['Hum. Máxima registrada (histórico)', todosHum.length ? `${Math.max(...todosHum).toFixed(1)} %` : 'Sin datos'],
-      ['Total Lecturas Temp (histórico)',    lectTemp.length],
-      ['Total Lecturas Hum (histórico)',     lectHum.length],
-      ['Días con registro',                  diasUnicos.length]
+      ['Temp. Mínima registrada (histórico)', `${tRes.min.toFixed(1)} °C`],
+      ['Temp. Máxima registrada (histórico)', `${tRes.max.toFixed(1)} °C`],
+      ['Temp. Promedio general',              `${tRes.avg.toFixed(1)} °C`],
+      ['Hum. Mínima registrada (histórico)',  hRes ? `${hRes.min.toFixed(1)} %` : 'Sin datos'],
+      ['Hum. Máxima registrada (histórico)',  hRes ? `${hRes.max.toFixed(1)} %` : 'Sin datos'],
+      ['Total Lecturas Temp (histórico)',     tRes.count],
+      ['Total Lecturas Hum (histórico)',      hRes ? hRes.count : 0],
+      ['Días con registro',                   diasUnicos.length]
     ];
     dataRows.forEach((d, i) => {
       const r = lastR + 1 + i;
@@ -508,84 +527,107 @@ async function construirWorkbook() {
   }
 
   // ──────────────────────────────────────────────────────────────────────
-  // HOJA 7: CONSUMO DE AGUA — HISTÓRICO COMPLETO
+  // HOJA 7: CONSUMO DE AGUA — COMPARATIVA MENSUAL + COSTO
   // ──────────────────────────────────────────────────────────────────────
   const aguaSheet = workbook.addWorksheet('Consumo de Agua');
   aguaSheet.columns = [
-    { header: 'Rango Horario',        key: 'rango',   width: 28 },
-    { header: 'Litros Consumidos',    key: 'litros',  width: 20 },
-    { header: 'Lecturas Registradas', key: 'lecturas',width: 22 },
-    { header: 'Promedio L/lectura',   key: 'promedio',width: 20 }
+    { header: 'Mes',               key: 'mes',        width: 14 },
+    { header: 'Litros Consumidos', key: 'litros',     width: 20 },
+    { header: 'Costo ($)',         key: 'costo',      width: 16 },
+    { header: 'Días Registrados',  key: 'dias',       width: 18 },
+    { header: 'Prom. L/día',       key: 'promDia',    width: 14 },
+    { header: 'Límite Diario (L)', key: 'limite',     width: 18 },
+    { header: 'Ahorro (+) / Extra (-) ($)', key: 'diferencia', width: 26 }
   ];
   estilizarHeader(aguaSheet, AZUL_OSCURO);
 
-  // Los registros de flujo se guardan en Reading tipo:'flujo_agua' cada 5 min
-  // El valor es el total acumulado del día → calculamos delta entre lecturas consecutivas
-  const lecturasFlujo = await Reading.find({ tipo: 'flujo_agua', createdAt: { $gte: hace120d } }).sort({ createdAt: 1 });
+  const precioAgua   = config?.precio_agua_litro    || 5;
+  const limiteDiario = config?.limite_consumo_bomba_1 || 600;
 
-  const aguaPorHora = {};
-  for (let i = 1; i < lecturasFlujo.length; i++) {
-    const prev = lecturasFlujo[i - 1];
-    const curr = lecturasFlujo[i];
-    const delta = (curr.valor || 0) - (prev.valor || 0);
-    if (delta <= 0) continue; // saltar resets o sin consumo
+  // Agregación mensual + últimos 365 días detallado — sin leer lecturas flujo crudas
+  const [consumoMensual, consumoDiario] = await Promise.all([
+    WaterConsumption.aggregate([
+      { $match: { tipo: 'diario' } },
+      { $group: {
+        _id:         { $dateToString: { format: '%Y-%m', date: '$fecha', timezone: 'America/Bogota' } },
+        totalLitros: { $sum: '$litros' },
+        diasCount:   { $sum: 1 },
+        promDiario:  { $avg: '$litros' }
+      }},
+      { $sort: { _id: 1 } }
+    ]),
+    WaterConsumption.find({ tipo: 'diario' }).sort({ fecha: -1 }).limit(365)
+  ]);
 
-    const dCol = new Date(new Date(curr.createdAt).toLocaleString('en-US', { timeZone: 'America/Bogota' }));
-    const fechaKey = `${dCol.getFullYear()}-${String(dCol.getMonth()+1).padStart(2,'0')}-${String(dCol.getDate()).padStart(2,'0')}_${String(dCol.getHours()).padStart(2,'0')}`;
-    if (!aguaPorHora[fechaKey]) aguaPorHora[fechaKey] = { hora: dCol.getHours(), fecha: dCol, litros: 0, count: 0 };
-    aguaPorHora[fechaKey].litros += delta;
-    aguaPorHora[fechaKey].count++;
-  }
-
-  const horasAgua = Object.entries(aguaPorHora).sort(([a], [b]) => a.localeCompare(b));
-
-  if (horasAgua.length === 0) {
-    const nr = aguaSheet.addRow({ rango: 'Sin registros de consumo' });
-    nr.getCell('rango').font = { italic: true, color: { argb: '94A3B8' } };
+  if (consumoMensual.length === 0) {
+    const nr = aguaSheet.addRow({ mes: 'Sin registros de consumo' });
+    nr.getCell('mes').font = { italic: true, color: { argb: '94A3B8' } };
   } else {
-    let totalLitros = 0;
-    horasAgua.forEach(([, d]) => {
-      const horaStr = `${String(d.hora).padStart(2,'0')}:00`;
-      const horaFin = `${String((d.hora + 1) % 24).padStart(2,'0')}:00`;
-      const fechaDisplay = d.fecha.toLocaleDateString('es-CO');
-      aguaSheet.addRow({
-        rango:    `${fechaDisplay}  ${horaStr} – ${horaFin}`,
-        litros:   parseFloat(d.litros.toFixed(2)),
-        lecturas: d.count,
-        promedio: parseFloat((d.litros / d.count).toFixed(2))
+    let totalLitrosGeneral = 0;
+    let totalCostoGeneral  = 0;
+
+    consumoMensual.forEach(m => {
+      const litros      = parseFloat((m.totalLitros || 0).toFixed(2));
+      const costo       = Math.round(litros * precioAgua);
+      const presupuesto = m.diasCount * limiteDiario * precioAgua;
+      const diferencia  = Math.round(presupuesto - costo); // positivo = ahorro
+
+      const addedRow = aguaSheet.addRow({
+        mes:        m._id,
+        litros,
+        costo,
+        dias:       m.diasCount,
+        promDia:    parseFloat((m.promDiario || 0).toFixed(1)),
+        limite:     limiteDiario,
+        diferencia
       });
-      totalLitros += d.litros;
+
+      if (diferencia > 0) {
+        addedRow.getCell('diferencia').font = { bold: true, color: { argb: VERDE_MEDIO } };
+      } else if (diferencia < 0) {
+        addedRow.getCell('diferencia').font = { bold: true, color: { argb: ROJO } };
+      }
+
+      totalLitrosGeneral += litros;
+      totalCostoGeneral  += costo;
     });
 
     const totalRow = aguaSheet.addRow({
-      rango:    'TOTAL HISTÓRICO',
-      litros:   parseFloat(totalLitros.toFixed(2)),
-      lecturas: lecturasFlujo.length,
-      promedio: '-'
+      mes:        'TOTAL HISTÓRICO',
+      litros:     parseFloat(totalLitrosGeneral.toFixed(2)),
+      costo:      Math.round(totalCostoGeneral),
+      dias:       consumoDiario.length,
+      promDia:    consumoDiario.length ? parseFloat((totalLitrosGeneral / consumoDiario.length).toFixed(1)) : 0,
+      limite:     limiteDiario,
+      diferencia: '-'
     });
     totalRow.eachCell(cell => {
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: AZUL_OSCURO } };
       cell.font = { bold: true, color: { argb: BLANCO } };
     });
   }
+
   estilizarFilas(aguaSheet, 2, AZUL_CLARO);
-  aguaSheet.getColumn('litros').numFmt = '#,##0.00';
-  aguaSheet.getColumn('promedio').numFmt = '#,##0.00';
+  aguaSheet.getColumn('litros').numFmt     = '#,##0.00';
+  aguaSheet.getColumn('costo').numFmt      = '$#,##0';
+  aguaSheet.getColumn('diferencia').numFmt = '$#,##0';
 
-  // Consumo diario histórico completo
-  const consumosDiarios = await WaterConsumption.find({ tipo: 'diario' }).sort({ createdAt: -1 });
-
-  if (consumosDiarios.length > 0) {
+  // Detalle diario (últimos 365 días)
+  if (consumoDiario.length > 0) {
     const lastR2 = (aguaSheet.lastRow?.number || 1) + 2;
-    addTituloSeccion(aguaSheet, 'CONSUMO DIARIO — HISTÓRICO COMPLETO', 'A', 'D', lastR2, AZUL_OSCURO);
+    addTituloSeccion(aguaSheet, 'CONSUMO DIARIO — ÚLTIMOS 365 DÍAS', 'A', 'G', lastR2, AZUL_OSCURO);
     aguaSheet.getCell(`A${lastR2+1}`).value = 'Fecha';
-    aguaSheet.getCell(`B${lastR2+1}`).value = 'Litros Consumidos';
+    aguaSheet.getCell(`B${lastR2+1}`).value = 'Litros';
+    aguaSheet.getCell(`C${lastR2+1}`).value = 'Costo ($)';
     aguaSheet.getRow(lastR2+1).font = { bold: true };
-    consumosDiarios.forEach((c, i) => {
+    consumoDiario.forEach((c, i) => {
       const r = lastR2 + 2 + i;
+      const litrosDia = parseFloat((c.litros || 0).toFixed(2));
       aguaSheet.getCell(`A${r}`).value = c.fecha?.toLocaleDateString('es-CO') || '-';
-      aguaSheet.getCell(`B${r}`).value = parseFloat((c.litros || 0).toFixed(2));
+      aguaSheet.getCell(`B${r}`).value = litrosDia;
       aguaSheet.getCell(`B${r}`).numFmt = '#,##0.00';
+      aguaSheet.getCell(`C${r}`).value = Math.round(litrosDia * precioAgua);
+      aguaSheet.getCell(`C${r}`).numFmt = '$#,##0';
     });
   }
 
@@ -640,6 +682,8 @@ async function construirWorkbook() {
     });
   }
   estilizarFilas(bombaSheet, 2, NARANJA_CLAR);
+
+  } // fin if (tipo !== 'general')
 
   // ──────────────────────────────────────────────────────────────────────
   // HOJA 9: GASTOS POR LOTE
@@ -789,13 +833,15 @@ async function construirWorkbook() {
 // GET /api/reporte/excel
 // ═══════════════════════════════════════════════════════════════════════
 
-exports.generarReporteExcel = async (_req, res) => {
+exports.generarReporteExcel = async (req, res) => {
   try {
-    const workbook = await construirWorkbook();
+    const { tipo = 'completo', desde, hasta } = req.query;
+    const workbook = await construirWorkbook({ tipo, desde, hasta });
 
     const fecha = new Date().toISOString().split('T')[0];
+    const sufijo = tipo === 'general' ? 'General' : tipo === 'historico' ? `Historico_${desde || 'inicio'}_${hasta || fecha}` : 'Completo';
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=Reporte_COO_Alianzas_${fecha}.xlsx`);
+    res.setHeader('Content-Disposition', `attachment; filename=Reporte_COO_${sufijo}_${fecha}.xlsx`);
     await workbook.xlsx.write(res);
     res.end();
 

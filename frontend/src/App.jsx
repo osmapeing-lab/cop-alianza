@@ -222,6 +222,21 @@ const PLAN_ALIMENTACION = [
 const getPlanSemana = (edadDias) =>
   PLAN_ALIMENTACION.find(s => edadDias >= s.dia_inicio && edadDias <= s.dia_fin) || null
 
+// Determina la edad de entrada efectiva de un lote:
+// - Lote comprado con edad_dias_manual explícito → usa ese valor
+// - Lote con fecha_inicio − fecha_nacimiento > 7 días → infiere edad de compra
+// - Lote nacido en la granja → 0 (seguimiento desde nacimiento)
+const getEdadEntradaLote = (lote) => {
+  if (lote.edad_dias_manual !== null && lote.edad_dias_manual !== undefined) {
+    return lote.edad_dias_manual
+  }
+  if (lote.fecha_nacimiento && lote.fecha_inicio) {
+    const diff = Math.round((new Date(lote.fecha_inicio) - new Date(lote.fecha_nacimiento)) / 86400000)
+    if (diff > 7) return diff
+  }
+  return 0
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // ICONOS SVG
 // ═══════════════════════════════════════════════════════════════════════
@@ -2981,6 +2996,12 @@ const cargarHistoricoPesos = async () => {
 
   const [emailReporte, setEmailReporte] = useState('')
   const [enviandoReporte, setEnviandoReporte] = useState(false)
+  const [descargandoReporte, setDescargandoReporte] = useState(false)
+  const [reporteDesde, setReporteDesde] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() - 90)
+    return d.toISOString().split('T')[0]
+  })
+  const [reporteHasta, setReporteHasta] = useState(() => new Date().toISOString().split('T')[0])
   const [testEmailResult, setTestEmailResult] = useState(null)
   const [testandoEmail, setTestandoEmail] = useState(false)
 
@@ -2995,21 +3016,30 @@ const cargarHistoricoPesos = async () => {
     } catch {}
   }
 
-  const descargarReporte = async () => {
+  const descargarReporte = async (tipo = 'general', desde, hasta) => {
+    setDescargandoReporte(tipo)
     try {
-      const res = await axios.get(`${API_URL}/api/reporte/excel`, {
+      let url = `${API_URL}/api/reporte/excel?tipo=${tipo}`
+      if (desde) url += `&desde=${desde}`
+      if (hasta) url += `&hasta=${hasta}`
+      const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` },
-        responseType: 'blob'
+        responseType: 'blob',
+        timeout: 120000
       })
-      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const blobUrl = window.URL.createObjectURL(new Blob([res.data]))
       const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', `Reporte_SAMTR_${new Date().toISOString().split('T')[0]}.xlsx`)
+      link.href = blobUrl
+      const fecha = new Date().toISOString().split('T')[0]
+      const nombre = tipo === 'general' ? `Reporte_General_${fecha}` : `Reporte_Historico_${desde}_${hasta}`
+      link.setAttribute('download', `${nombre}.xlsx`)
       document.body.appendChild(link)
       link.click()
       link.remove()
     } catch (error) {
       alert('Error descargando reporte: ' + (error.response?.data?.mensaje || error.message))
+    } finally {
+      setDescargandoReporte(false)
     }
   }
 
@@ -3915,8 +3945,7 @@ const cargarHistoricoPesos = async () => {
         })).sort((a, b) => a.dia - b.dia)
 
         const edadLoteActual = lote.edad_dias || 0
-        // edadEntrada: usa edadManual si definido; lotes nacidos empiezan desde día 0 (Sem 1)
-        const edadEntrada = edadManual !== null && edadManual !== undefined ? edadManual : 0
+        const edadEntrada = getEdadEntradaLote(lote)
 
         // Añadir peso inicial como punto real solo si edadManual está explícitamente definido
         const puntosConEntrada = [...puntos]
@@ -5004,7 +5033,7 @@ const cargarHistoricoPesos = async () => {
               }))
 
               // Lotes nacidos: desde Sem 1; lotes adquiridos: desde su semana de entrada
-              const diaEntradaLote = esNacido ? 0 : (edadManual || 43)
+              const diaEntradaLote = getEdadEntradaLote(loteDetalle)
               const curvaRecortada = planCurva.filter(p => p.dia >= diaEntradaLote - 4)
               if ((loteDetalle.peso_inicial_promedio || 0) > 0) {
                 const hayPesajeEntrada = puntosPesaje.some(p => Math.abs(p.dia - diaEntradaLote) <= 3)
@@ -6952,35 +6981,69 @@ const cargarHistoricoPesos = async () => {
                   <div className="reporte-icon">
                     <IconReporte />
                   </div>
-                  <h3>Reporte Completo</h3>
-                  <p style={{ marginBottom: '10px', color: '#64748b', fontSize: '13px' }}>
-                    El Excel descargado contiene las siguientes pestañas:
-                  </p>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '8px', marginBottom: '16px' }}>
-                    {[
-                      { hoja: 'Resumen Ejecutivo', desc: 'Indicadores generales: lotes activos, cerdos totales, peso promedio, ingresos y costos del período.' },
-                      { hoja: 'Lotes', desc: 'Detalle de cada lote: nombre, cantidad de cerdos, peso inicial y actual, días de edad, fase y corral.' },
-                      { hoja: 'Pesajes', desc: 'Historial de pesajes por lote con fecha, peso promedio, peso total y ganancia registrada.' },
-                      { hoja: 'Contabilidad', desc: 'Costos registrados con categoría, descripción, monto y estado (registrado/anulado).' },
-                      { hoja: 'Ventas', desc: 'Registro de ventas: lote, cerdos vendidos, precio por kg, peso total y monto cobrado.' },
-                      { hoja: 'Inventario Alimento', desc: 'Stock actual por producto: bultos disponibles, kg totales, precio y movimientos recientes.' },
-                      { hoja: 'Gastos por Lote', desc: 'Gastos semanales manuales por lote con categoría y monto (sin incluir compras de alimento).' },
-                      { hoja: 'Alertas', desc: 'Alertas activas del sistema registradas en la plataforma.' },
-                      { hoja: 'Temperatura/Humedad', desc: 'Lecturas de sensores de las últimas 24 horas por hora.' },
-                      { hoja: 'Consumo Agua', desc: 'Consumo de agua por hora de las últimas 24 horas.' },
-                      { hoja: 'Historial Motobomba', desc: 'Registro de activaciones/desactivaciones del sistema de bombeo.' },
-                    ].map(({ hoja, desc }) => (
-                      <div key={hoja} style={{ padding: '10px 12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
-                        <div style={{ fontWeight: '700', fontSize: '12px', color: '#1d4ed8', marginBottom: '3px' }}>📄 {hoja}</div>
-                        <div style={{ fontSize: '12px', color: '#64748b', lineHeight: '1.4' }}>{desc}</div>
-                      </div>
-                    ))}
+                  <h3>Reportes Excel</h3>
+
+                  {/* REPORTE GENERAL */}
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '16px', marginBottom: '16px' }}>
+                    <div style={{ fontWeight: '700', fontSize: '15px', color: '#166534', marginBottom: '4px' }}>Reporte General (rapido)</div>
+                    <p style={{ fontSize: '13px', color: '#4b5563', marginBottom: '10px' }}>
+                      Resumen ejecutivo, lotes activos, gastos por lote e inventario de alimento. Sin datos historicos, descarga instantanea.
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+                      {['Resumen Ejecutivo', 'Lotes', 'Gastos por Lote', 'Inventario Alimento'].map(h => (
+                        <span key={h} style={{ fontSize: '11px', background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>{h}</span>
+                      ))}
+                    </div>
+                    <button
+                      className="btn-primary"
+                      onClick={() => descargarReporte('general')}
+                      disabled={descargandoReporte === 'general'}
+                      style={{ background: '#16a34a' }}
+                    >
+                      {descargandoReporte === 'general' ? 'Descargando...' : 'Descargar General'}
+                    </button>
                   </div>
 
-                  {/* Descarga directa */}
-                  <button className="btn-primary" onClick={descargarReporte} style={{ marginBottom: '16px' }}>
-                    Descargar Excel
-                  </button>
+                  {/* REPORTE HISTORICO */}
+                  <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '10px', padding: '16px', marginBottom: '16px' }}>
+                    <div style={{ fontWeight: '700', fontSize: '15px', color: '#1e40af', marginBottom: '4px' }}>Reporte Historico (con fechas)</div>
+                    <p style={{ fontSize: '13px', color: '#4b5563', marginBottom: '10px' }}>
+                      Pesajes, contabilidad, alertas, temperatura, consumo de agua e historial de bombas en el rango de fechas seleccionado.
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                      {['Pesajes', 'Contabilidad', 'Alertas', 'Temp y Humedad', 'Consumo Agua', 'Historial Bomba'].map(h => (
+                        <span key={h} style={{ fontSize: '11px', background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '4px', fontWeight: 600 }}>{h}</span>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px' }}>
+                      <label style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>Desde:</label>
+                      <input
+                        type="date"
+                        value={reporteDesde}
+                        onChange={e => setReporteDesde(e.target.value)}
+                        style={{ padding: '5px 8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                      />
+                      <label style={{ fontSize: '13px', fontWeight: 600, color: '#374151' }}>Hasta:</label>
+                      <input
+                        type="date"
+                        value={reporteHasta}
+                        onChange={e => setReporteHasta(e.target.value)}
+                        style={{ padding: '5px 8px', borderRadius: '6px', border: '1px solid #d1d5db', fontSize: '13px' }}
+                      />
+                    </div>
+                    <button
+                      className="btn-primary"
+                      onClick={() => descargarReporte('historico', reporteDesde, reporteHasta)}
+                      disabled={descargandoReporte === 'historico' || !reporteDesde || !reporteHasta}
+                    >
+                      {descargandoReporte === 'historico' ? 'Generando...' : 'Descargar Historico'}
+                    </button>
+                    {descargandoReporte === 'historico' && (
+                      <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '6px' }}>
+                        Procesando datos... puede tardar hasta 30 segundos.
+                      </p>
+                    )}
+                  </div>
 
                   {/* Envío por correo */}
                   <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '14px' }}>
