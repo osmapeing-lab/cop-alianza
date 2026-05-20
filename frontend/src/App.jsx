@@ -3669,269 +3669,160 @@ const cargarHistoricoPesos = async () => {
       </button>
     </div>
 
-    {/* Cuadrícula 2×2: cada métrica con su número y gráfica */}
-    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(300px, 1fr))', gap:'16px', marginBottom:'24px'}}>
+    {/* ── 4 métricas apiladas: valor izquierda | gráfica derecha ── */}
+    <div style={{display:'flex', flexDirection:'column', gap:'10px', marginBottom:'20px'}}>
 
-      {/* Temperatura del Chiquero */}
+      {/* 1. Temperatura */}
       {(() => {
         const estadoT = getEstadoTemp(porqueriza.temp)
         const esAlerta = estadoT.clase === 'alerta' || estadoT.clase === 'critico'
-        const color = esAlerta ? '#ef4444' : '#3b82f6'
-        const tempData = historicoTemperatura.slice(-20)
+        const clr = esAlerta ? '#ef4444' : '#2563eb'
+        const bg  = esAlerta ? '#fef2f2' : '#eff6ff'
+        const bdr = esAlerta ? '#fca5a5' : '#bfdbfe'
         return (
-          <div style={{background: esAlerta ? 'linear-gradient(135deg,#fef2f2,#fff)' : 'linear-gradient(135deg,#eff6ff,#fff)', borderRadius:'16px', padding:'18px 20px', boxShadow:'0 2px 12px rgba(0,0,0,0.08)', border:`2px solid ${esAlerta ? '#fca5a5' : '#bfdbfe'}`}}>
-            <div style={{fontSize:'13px', fontWeight:'700', color:'#475569', marginBottom:'10px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <span><Thermometer size={15} style={{verticalAlign:'middle', marginRight:'6px'}} />Temperatura del Chiquero</span>
-              <span style={{fontSize:'11px', padding:'3px 10px', borderRadius:'20px', fontWeight:'700', background: esAlerta ? '#fee2e2' : '#dcfce7', color: esAlerta ? '#dc2626' : '#16a34a'}}>{estadoT.texto}</span>
+          <div style={{background:bg, border:`1.5px solid ${bdr}`, borderRadius:'14px', padding:'14px 18px', display:'flex', alignItems:'center', gap:'0'}}>
+            <div style={{width:'180px', flexShrink:0}}>
+              <div style={{fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'4px', display:'flex', alignItems:'center', gap:'5px'}}>
+                <Thermometer size={13} color={clr} /> Temperatura
+              </div>
+              <div style={{fontSize:'36px', fontWeight:'900', color:clr, lineHeight:1}}>{porqueriza.temp ?? '--'}<span style={{fontSize:'18px'}}>°C</span></div>
+              <div style={{marginTop:'6px', display:'flex', gap:'8px', flexWrap:'wrap'}}>
+                <span style={{fontSize:'11px', padding:'2px 8px', borderRadius:'12px', fontWeight:'700', background: esAlerta ? '#fee2e2' : '#dcfce7', color: esAlerta ? '#dc2626' : '#16a34a'}}>{estadoT.texto}</span>
+                <span style={{fontSize:'11px', color:'#94a3b8'}}>{porqueriza.conectado ? '● online' : '○ offline'}</span>
+              </div>
+              <div style={{marginTop:'4px', fontSize:'11px', color:'#64748b'}}>
+                <div className="periodo-selector" style={{marginTop:'6px', gap:'4px'}}>
+                  <button className={`periodo-btn ${periodoTemp==='diario'?'activo':''}`} style={{fontSize:'10px',padding:'2px 6px'}} onClick={()=>{setPeriodoTemp('diario');periodoTempRef.current='diario';cargarHistoricoTemperatura('diario')}}>Hoy</button>
+                  <button className={`periodo-btn ${periodoTemp==='semanal'?'activo':''}`} style={{fontSize:'10px',padding:'2px 6px'}} onClick={()=>{setPeriodoTemp('semanal');periodoTempRef.current='semanal';cargarHistoricoTemperatura('semanal')}}>Sem.</button>
+                  <button className={`periodo-btn ${periodoTemp==='mensual'?'activo':''}`} style={{fontSize:'10px',padding:'2px 6px'}} onClick={()=>{setPeriodoTemp('mensual');periodoTempRef.current='mensual';cargarHistoricoTemperatura('mensual')}}>Mes</button>
+                </div>
+              </div>
             </div>
-            <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
-              <div style={{minWidth:'110px'}}>
-                <div style={{fontSize:'40px', fontWeight:'900', color: esAlerta ? '#dc2626' : '#1e3a5f', lineHeight:1}}>
-                  {porqueriza.temp !== null ? `${porqueriza.temp}°` : '--'}
-                </div>
-                <div style={{fontSize:'12px', color:'#64748b', marginTop:'6px'}}>
-                  <Droplets size={12} style={{verticalAlign:'middle'}} /> <strong>{porqueriza.humedad ?? '--'}%</strong> hum.
-                </div>
-                <div style={{fontSize:'11px', color: porqueriza.conectado ? '#16a34a' : '#94a3b8', marginTop:'4px'}}>
-                  {porqueriza.conectado ? '● En línea' : '○ Sin señal'}
-                </div>
-              </div>
-              <div style={{flex:1, minWidth:0}}>
-                {tempData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={80}>
-                    <AreaChart data={tempData} margin={{top:4,right:0,left:0,bottom:0}}>
-                      <defs>
-                        <linearGradient id="gT2" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={color} stopOpacity={0.35}/>
-                          <stop offset="95%" stopColor={color} stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <Area type="monotone" dataKey="temperatura" stroke={color} strokeWidth={2.5} fill="url(#gT2)" dot={false} />
-                      <Tooltip contentStyle={{fontSize:'11px', padding:'4px 8px', borderRadius:'6px'}} formatter={v => [`${v}°C`,'Temp']} />
-                      <XAxis dataKey="hora" hide />
-                      <YAxis domain={['auto','auto']} hide />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div style={{height:'80px', display:'flex', alignItems:'center', justifyContent:'center', color:'#cbd5e1', fontSize:'12px'}}>Sin datos</div>
-                )}
-              </div>
+            <div style={{flex:1, minWidth:0, height:'90px'}}>
+              {historicoTemperatura.length > 0 ? (
+                <ResponsiveContainer width="100%" height={90}>
+                  <AreaChart data={historicoTemperatura.slice(-30)} margin={{top:4,right:4,left:0,bottom:0}}>
+                    <defs><linearGradient id="dT" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={clr} stopOpacity={0.25}/><stop offset="95%" stopColor={clr} stopOpacity={0}/></linearGradient></defs>
+                    <XAxis dataKey="hora" tick={{fontSize:9,fill:'#94a3b8'}} stroke="none" interval="preserveStartEnd" />
+                    <YAxis hide domain={['auto','auto']} />
+                    <Tooltip contentStyle={{fontSize:'11px',padding:'4px 8px',borderRadius:'6px',border:'none',boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}} formatter={v=>[`${v}°C`,'Temp']} />
+                    <Area type="monotone" dataKey="temperatura" stroke={clr} strokeWidth={2.5} fill="url(#dT)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : <div style={{height:'90px',display:'flex',alignItems:'center',justifyContent:'center',color:'#cbd5e1',fontSize:'12px'}}>Sin datos aún</div>}
             </div>
           </div>
         )
       })()}
 
-      {/* Humedad del Chiquero */}
+      {/* 2. Humedad */}
       {(() => {
-        const humActual = porqueriza.humedad
-        const humAlta = humActual > 85
-        const humData = historicoTemperatura.slice(-20)
+        const hum = porqueriza.humedad
+        const alta = hum !== null && hum > 85
+        const clr = '#0369a1'
         return (
-          <div style={{background:'linear-gradient(135deg,#f0f9ff,#fff)', borderRadius:'16px', padding:'18px 20px', boxShadow:'0 2px 12px rgba(0,0,0,0.08)', border:`2px solid ${humAlta ? '#7dd3fc' : '#bae6fd'}`}}>
-            <div style={{fontSize:'13px', fontWeight:'700', color:'#475569', marginBottom:'10px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <span><Droplets size={15} style={{verticalAlign:'middle', marginRight:'6px'}} />Humedad del Chiquero</span>
-              <span style={{fontSize:'11px', padding:'3px 10px', borderRadius:'20px', fontWeight:'700', background: humAlta ? '#e0f2fe' : '#f0fdf4', color: humAlta ? '#0369a1' : '#16a34a'}}>{humAlta ? 'Alta' : 'Normal'}</span>
+          <div style={{background:'#f0f9ff', border:'1.5px solid #bae6fd', borderRadius:'14px', padding:'14px 18px', display:'flex', alignItems:'center', gap:'0'}}>
+            <div style={{width:'180px', flexShrink:0}}>
+              <div style={{fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'4px', display:'flex', alignItems:'center', gap:'5px'}}>
+                <Droplets size={13} color={clr} /> Humedad
+              </div>
+              <div style={{fontSize:'36px', fontWeight:'900', color:clr, lineHeight:1}}>{hum ?? '--'}<span style={{fontSize:'18px'}}>%</span></div>
+              <div style={{marginTop:'6px', display:'flex', gap:'8px', flexWrap:'wrap'}}>
+                <span style={{fontSize:'11px', padding:'2px 8px', borderRadius:'12px', fontWeight:'700', background: alta ? '#e0f2fe' : '#f0fdf4', color: alta ? '#0369a1' : '#16a34a'}}>{alta ? 'Alta' : 'Normal'}</span>
+              </div>
+              <div style={{marginTop:'6px', fontSize:'11px', color:'#64748b'}}>Temp. sensor: {porqueriza.temp ?? '--'}°C</div>
             </div>
-            <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
-              <div style={{minWidth:'110px'}}>
-                <div style={{fontSize:'40px', fontWeight:'900', color:'#0369a1', lineHeight:1}}>
-                  {humActual !== null ? `${humActual}%` : '--'}
-                </div>
-                <div style={{fontSize:'12px', color:'#64748b', marginTop:'6px'}}>
-                  <Thermometer size={12} style={{verticalAlign:'middle'}} /> Temp: <strong>{porqueriza.temp ?? '--'}°C</strong>
-                </div>
-                <div style={{fontSize:'11px', color: porqueriza.conectado ? '#16a34a' : '#94a3b8', marginTop:'4px'}}>
-                  {porqueriza.conectado ? '● En línea' : '○ Sin señal'}
-                </div>
-              </div>
-              <div style={{flex:1, minWidth:0}}>
-                {humData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={80}>
-                    <AreaChart data={humData} margin={{top:4,right:0,left:0,bottom:0}}>
-                      <defs>
-                        <linearGradient id="gH2" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.35}/>
-                          <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <Area type="monotone" dataKey="humedad" stroke="#0ea5e9" strokeWidth={2.5} fill="url(#gH2)" dot={false} />
-                      <Tooltip contentStyle={{fontSize:'11px', padding:'4px 8px', borderRadius:'6px'}} formatter={v => [`${v}%`,'Hum']} />
-                      <XAxis dataKey="hora" hide />
-                      <YAxis domain={['auto','auto']} hide />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div style={{height:'80px', display:'flex', alignItems:'center', justifyContent:'center', color:'#cbd5e1', fontSize:'12px'}}>Sin datos</div>
-                )}
-              </div>
+            <div style={{flex:1, minWidth:0, height:'90px'}}>
+              {historicoTemperatura.length > 0 ? (
+                <ResponsiveContainer width="100%" height={90}>
+                  <AreaChart data={historicoTemperatura.slice(-30)} margin={{top:4,right:4,left:0,bottom:0}}>
+                    <defs><linearGradient id="dH" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.25}/><stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/></linearGradient></defs>
+                    <XAxis dataKey="hora" tick={{fontSize:9,fill:'#94a3b8'}} stroke="none" interval="preserveStartEnd" />
+                    <YAxis hide domain={['auto','auto']} />
+                    <Tooltip contentStyle={{fontSize:'11px',padding:'4px 8px',borderRadius:'6px',border:'none',boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}} formatter={v=>[`${v}%`,'Hum']} />
+                    <Area type="monotone" dataKey="humedad" stroke="#0ea5e9" strokeWidth={2.5} fill="url(#dH)" dot={false} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : <div style={{height:'90px',display:'flex',alignItems:'center',justifyContent:'center',color:'#cbd5e1',fontSize:'12px'}}>Sin datos aún</div>}
             </div>
           </div>
         )
       })()}
 
-      {/* Agua de Hoy */}
+      {/* 3. Agua consumida */}
       {(() => {
-        const aguaData = historicoAgua.slice(-20).map(d => ({ ...d, valor: d.litros ?? d.valor ?? 0 }))
         const aguaHoy = flujo.volumen_diario ?? 0
+        const aguaData = historicoAgua.slice(-30)
         return (
-          <div style={{background:'linear-gradient(135deg,#f0fdf4,#fff)', borderRadius:'16px', padding:'18px 20px', boxShadow:'0 2px 12px rgba(0,0,0,0.08)', border:'2px solid #86efac'}}>
-            <div style={{fontSize:'13px', fontWeight:'700', color:'#475569', marginBottom:'10px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <span><Droplets size={15} style={{verticalAlign:'middle', marginRight:'6px'}} />Agua Consumida Hoy</span>
-              <span style={{fontSize:'11px', color: flujo.conectado ? '#16a34a' : '#94a3b8'}}>{flujo.conectado ? '● En línea' : '○ Sin señal'}</span>
+          <div style={{background:'#f0fdf4', border:'1.5px solid #86efac', borderRadius:'14px', padding:'14px 18px', display:'flex', alignItems:'center', gap:'0'}}>
+            <div style={{width:'180px', flexShrink:0}}>
+              <div style={{fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'4px', display:'flex', alignItems:'center', gap:'5px'}}>
+                <Droplets size={13} color="#16a34a" /> Agua Consumida
+              </div>
+              <div style={{fontSize:'36px', fontWeight:'900', color:'#15803d', lineHeight:1}}>{aguaHoy.toFixed(0)}<span style={{fontSize:'18px'}}> L</span></div>
+              <div style={{marginTop:'6px', fontSize:'11px', color:'#64748b'}}>Caudal: <strong>{flujo.caudal || 0} L/min</strong></div>
+              <div style={{marginTop:'4px', display:'flex', gap:'4px', flexWrap:'wrap'}}>
+                <div className="periodo-selector" style={{marginTop:'4px', gap:'4px'}}>
+                  <button className={`periodo-btn ${periodoAgua==='diario'?'activo':''}`} style={{fontSize:'10px',padding:'2px 6px'}} onClick={()=>{setPeriodoAgua('diario');periodoAguaRef.current='diario';cargarHistoricoAgua('diario')}}>Hoy</button>
+                  <button className={`periodo-btn ${periodoAgua==='semanal'?'activo':''}`} style={{fontSize:'10px',padding:'2px 6px'}} onClick={()=>{setPeriodoAgua('semanal');periodoAguaRef.current='semanal';cargarHistoricoAgua('semanal')}}>Sem.</button>
+                  <button className={`periodo-btn ${periodoAgua==='mensual'?'activo':''}`} style={{fontSize:'10px',padding:'2px 6px'}} onClick={()=>{setPeriodoAgua('mensual');periodoAguaRef.current='mensual';cargarHistoricoAgua('mensual')}}>Mes</button>
+                </div>
+              </div>
+              {(user?.rol === 'superadmin' || user?.rol === 'ingeniero') && (
+                <button style={{marginTop:'6px',background:'none',border:'1px solid #86efac',borderRadius:'6px',padding:'2px 8px',fontSize:'10px',color:'#15803d',cursor:'pointer'}}
+                  onClick={async()=>{const v=window.prompt('Corregir litros de hoy:');if(!v)return;const l=parseFloat(v);if(isNaN(l)||l<0)return;try{await axios.put(`${API_URL}/api/esp/flujo/corregir`,{litros:l},{headers:{Authorization:`Bearer ${token}`}});cargarHistoricoAgua(periodoAgua)}catch(e){alert(e.message)}}}>
+                  Corregir hoy
+                </button>
+              )}
             </div>
-            <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
-              <div style={{minWidth:'110px'}}>
-                <div style={{fontSize:'40px', fontWeight:'900', color:'#15803d', lineHeight:1}}>
-                  {aguaHoy.toFixed(0)}<span style={{fontSize:'18px', fontWeight:'600'}}> L</span>
-                </div>
-                <div style={{fontSize:'12px', color:'#64748b', marginTop:'6px'}}>
-                  <Gauge size={12} style={{verticalAlign:'middle'}} /> <strong>{flujo.caudal || 0}</strong> L/min
-                </div>
-                <div style={{fontSize:'11px', color:'#15803d', marginTop:'4px', fontWeight:'600'}}>Hoy</div>
-              </div>
-              <div style={{flex:1, minWidth:0}}>
-                {aguaData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={80}>
-                    <AreaChart data={aguaData} margin={{top:4,right:0,left:0,bottom:0}}>
-                      <defs>
-                        <linearGradient id="gA2" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#22c55e" stopOpacity={0.35}/>
-                          <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <Area type="monotone" dataKey="valor" stroke="#22c55e" strokeWidth={2.5} fill="url(#gA2)" dot={false} />
-                      <Tooltip contentStyle={{fontSize:'11px', padding:'4px 8px', borderRadius:'6px'}} formatter={v => [`${v} L`,'Agua']} />
-                      <XAxis dataKey="hora" hide />
-                      <YAxis domain={['auto','auto']} hide />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <div style={{height:'80px', display:'flex', alignItems:'center', justifyContent:'center', color:'#cbd5e1', fontSize:'12px'}}>Sin datos</div>
-                )}
-              </div>
+            <div style={{flex:1, minWidth:0, height:'90px'}}>
+              {aguaData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={90}>
+                  <AreaChart data={aguaData} margin={{top:4,right:4,left:0,bottom:0}}>
+                    <defs><linearGradient id="dA" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.25}/><stop offset="95%" stopColor="#22c55e" stopOpacity={0}/></linearGradient></defs>
+                    <XAxis dataKey="dia" tick={{fontSize:9,fill:'#94a3b8'}} stroke="none" interval="preserveStartEnd" />
+                    <YAxis hide domain={['auto','auto']} />
+                    <Tooltip contentStyle={{fontSize:'11px',padding:'4px 8px',borderRadius:'6px',border:'none',boxShadow:'0 2px 8px rgba(0,0,0,0.1)'}} formatter={v=>[`${Number(v).toFixed(1)} L`,'Agua']} />
+                    <Area type="monotone" dataKey="litros" stroke="#22c55e" strokeWidth={2.5} fill="url(#dA)" dot={{r:2,fill:'#fff',stroke:'#22c55e',strokeWidth:1.5}} activeDot={{r:5}} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : <div style={{height:'90px',display:'flex',alignItems:'center',justifyContent:'center',color:'#cbd5e1',fontSize:'12px'}}>Sin datos aún</div>}
             </div>
           </div>
         )
       })()}
 
-      {/* Peso de los Cerdos */}
+      {/* 4. Peso de los cerdos */}
       {(() => {
-        const lotesActivos = lotes.filter(l => l.activo)
-        const pesoTotal = lotesActivos.reduce((s, l) => s + ((l.peso_promedio_actual || 0) * (l.cantidad_cerdos || 0)), 0)
-        const cerdosTotales = lotesActivos.reduce((s, l) => s + (l.cantidad_cerdos || 0), 0)
-        const promedio = cerdosTotales > 0 ? pesoTotal / cerdosTotales : 0
+        const LA = lotes.filter(l=>l.activo)
+        const pesoTotal = LA.reduce((s,l)=>s+((l.peso_promedio_actual||0)*(l.cantidad_cerdos||0)),0)
+        const cerdos = LA.reduce((s,l)=>s+(l.cantidad_cerdos||0),0)
+        const prom = cerdos > 0 ? pesoTotal/cerdos : 0
         return (
-          <div style={{background:'linear-gradient(135deg,#fdf4ff,#fff)', borderRadius:'16px', padding:'18px 20px', boxShadow:'0 2px 12px rgba(0,0,0,0.08)', border:'2px solid #e9d5ff'}}>
-            <div style={{fontSize:'13px', fontWeight:'700', color:'#475569', marginBottom:'10px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <span><Weight size={15} style={{verticalAlign:'middle', marginRight:'6px'}} />Peso de los Cerdos</span>
-              <span style={{fontSize:'11px', padding:'3px 10px', borderRadius:'20px', fontWeight:'700', background:'#f3e8ff', color:'#7e22ce'}}>Prom: {promedio.toFixed(1)} kg/cerdo</span>
+          <div style={{background:'#fdf4ff', border:'1.5px solid #e9d5ff', borderRadius:'14px', padding:'14px 18px', display:'flex', alignItems:'center', gap:'0'}}>
+            <div style={{width:'180px', flexShrink:0}}>
+              <div style={{fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'4px', display:'flex', alignItems:'center', gap:'5px'}}>
+                <Weight size={13} color="#7e22ce" /> Peso de los Cerdos
+              </div>
+              <div style={{fontSize:'36px', fontWeight:'900', color:'#7e22ce', lineHeight:1}}>{pesoTotal.toFixed(0)}<span style={{fontSize:'18px'}}> kg</span></div>
+              <div style={{marginTop:'6px', fontSize:'11px', color:'#64748b'}}>{cerdos} cerdos · prom: <strong>{prom.toFixed(1)} kg</strong></div>
+              <div style={{marginTop:'4px', fontSize:'11px', color:'#7e22ce', fontWeight:'600'}}>{LA.length} lote{LA.length!==1?'s':''} activo{LA.length!==1?'s':''}</div>
             </div>
-            <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
-              <div style={{minWidth:'110px'}}>
-                <div style={{fontSize:'40px', fontWeight:'900', color:'#7e22ce', lineHeight:1}}>
-                  {pesoTotal.toFixed(0)}<span style={{fontSize:'18px', fontWeight:'600'}}> kg</span>
-                </div>
-                <div style={{fontSize:'12px', color:'#64748b', marginTop:'6px'}}>
-                  <strong>{cerdosTotales}</strong> cerdos
-                </div>
-                <div style={{fontSize:'11px', color:'#7e22ce', marginTop:'4px', fontWeight:'600'}}>{lotesActivos.length} lotes activos</div>
-              </div>
-              <div style={{flex:1, minWidth:0, display:'flex', flexDirection:'column', gap:'6px'}}>
-                {lotesActivos.length > 0 ? lotesActivos.map(l => (
-                  <div key={l._id} style={{display:'flex', alignItems:'center', gap:'8px'}}>
-                    <div style={{fontSize:'11px', color:'#64748b', minWidth:'60px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{l.nombre}</div>
-                    <div style={{flex:1, background:'#f3e8ff', borderRadius:'6px', height:'8px', overflow:'hidden'}}>
-                      <div style={{width:`${Math.min(100, ((l.peso_promedio_actual || 0) / 120) * 100)}%`, height:'100%', background:'linear-gradient(90deg,#a855f7,#7e22ce)', borderRadius:'6px'}} />
-                    </div>
-                    <div style={{fontSize:'12px', fontWeight:'700', color:'#6b21a8', minWidth:'45px', textAlign:'right'}}>{(l.peso_promedio_actual || 0).toFixed(1)} kg</div>
+            <div style={{flex:1, minWidth:0, display:'flex', flexDirection:'column', justifyContent:'center', gap:'8px', paddingLeft:'12px'}}>
+              {LA.length > 0 ? LA.map(l => (
+                <div key={l._id} style={{display:'flex', alignItems:'center', gap:'8px'}}>
+                  <div style={{fontSize:'12px', fontWeight:'600', color:'#475569', minWidth:'70px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>{l.nombre}</div>
+                  <div style={{flex:1, background:'#ede9fe', borderRadius:'6px', height:'10px', overflow:'hidden'}}>
+                    <div style={{width:`${Math.min(100,((l.peso_promedio_actual||0)/120)*100)}%`, height:'100%', background:'linear-gradient(90deg,#a855f7,#7e22ce)', borderRadius:'6px', transition:'width 0.5s'}} />
                   </div>
-                )) : (
-                  <div style={{color:'#cbd5e1', fontSize:'12px', textAlign:'center', paddingTop:'20px'}}>Sin lotes activos</div>
-                )}
-              </div>
+                  <div style={{fontSize:'13px', fontWeight:'800', color:'#6b21a8', minWidth:'52px', textAlign:'right'}}>{(l.peso_promedio_actual||0).toFixed(1)} kg</div>
+                </div>
+              )) : <div style={{color:'#cbd5e1',fontSize:'12px'}}>Sin lotes activos</div>}
             </div>
           </div>
         )
       })()}
-    </div>
 
-    {/* Gráfica extendida Temperatura — período selector */}
-    <div style={{background:'#fff', borderRadius:'16px', padding:'20px', boxShadow:'0 2px 12px rgba(0,0,0,0.07)', border:'1px solid #e2e8f0', marginBottom:'16px'}}>
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px', flexWrap:'wrap', gap:'8px'}}>
-        <div style={{fontSize:'15px', fontWeight:'700', color:'#1e293b', display:'flex', alignItems:'center', gap:'8px'}}>
-          <Thermometer size={18} color="#ef4444" /> Temperatura y Humedad del Chiquero
-        </div>
-        <div className="periodo-selector">
-          <button className={`periodo-btn ${periodoTemp === 'diario' ? 'activo' : ''}`} onClick={() => { setPeriodoTemp('diario'); periodoTempRef.current = 'diario'; cargarHistoricoTemperatura('diario') }}>Hoy</button>
-          <button className={`periodo-btn ${periodoTemp === 'semanal' ? 'activo' : ''}`} onClick={() => { setPeriodoTemp('semanal'); periodoTempRef.current = 'semanal'; cargarHistoricoTemperatura('semanal') }}>Semanal</button>
-          <button className={`periodo-btn ${periodoTemp === 'mensual' ? 'activo' : ''}`} onClick={() => { setPeriodoTemp('mensual'); periodoTempRef.current = 'mensual'; cargarHistoricoTemperatura('mensual') }}>Mensual</button>
-        </div>
-      </div>
-      {historicoTemperatura.length === 0 ? (
-        <div style={{height:'180px', display:'flex', alignItems:'center', justifyContent:'center', color:'#cbd5e1', fontSize:'14px'}}>Sin datos de temperatura</div>
-      ) : (
-        <ResponsiveContainer width="100%" height={180}>
-          <AreaChart data={historicoTemperatura} margin={{top:4,right:8,left:0,bottom:0}}>
-            <defs>
-              <linearGradient id="gTExt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/><stop offset="95%" stopColor="#ef4444" stopOpacity={0}/></linearGradient>
-              <linearGradient id="gHExt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="hora" tick={{fontSize:10, fill:'#94a3b8'}} stroke="#e2e8f0" />
-            <YAxis tick={{fontSize:10, fill:'#94a3b8'}} stroke="#e2e8f0" />
-            <Tooltip contentStyle={{borderRadius:'10px', border:'none', boxShadow:'0 4px 20px rgba(0,0,0,0.1)', fontSize:'13px'}} />
-            <Legend wrapperStyle={{fontSize:'13px', paddingTop:'8px'}} />
-            <Area type="monotone" dataKey="temperatura" stroke="#ef4444" strokeWidth={2.5} fill="url(#gTExt)" name="Temperatura °C" dot={false} />
-            <Area type="monotone" dataKey="humedad" stroke="#3b82f6" strokeWidth={2.5} fill="url(#gHExt)" name="Humedad %" dot={false} />
-          </AreaChart>
-        </ResponsiveContainer>
-      )}
-    </div>
-
-    {/* Gráfica extendida Agua — período selector */}
-    <div style={{background:'#fff', borderRadius:'16px', padding:'20px', boxShadow:'0 2px 12px rgba(0,0,0,0.07)', border:'1px solid #e2e8f0', marginBottom:'16px'}}>
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px', flexWrap:'wrap', gap:'8px'}}>
-        <div style={{fontSize:'15px', fontWeight:'700', color:'#1e293b', display:'flex', alignItems:'center', gap:'8px'}}>
-          <Droplets size={18} color="#22c55e" /> Consumo de Agua
-          {historicoAgua.length > 0 && <span style={{fontSize:'13px', fontWeight:'600', color:'#15803d', background:'#f0fdf4', padding:'2px 10px', borderRadius:'20px'}}>{historicoAgua.reduce((s,d) => s+(d.litros||0), 0).toFixed(0)} L total</span>}
-        </div>
-        <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
-          {(user?.rol === 'superadmin' || user?.rol === 'ingeniero') && (
-            <button style={{background:'none', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'4px 10px', fontSize:'12px', color:'#64748b', cursor:'pointer'}}
-              onClick={async () => {
-                const val = window.prompt('Corregir consumo de hoy (litros):')
-                if (val === null) return
-                const litros = parseFloat(val)
-                if (isNaN(litros) || litros < 0) { alert('Valor inválido'); return }
-                try {
-                  await axios.put(`${API_URL}/api/esp/flujo/corregir`, { litros }, { headers: { Authorization: `Bearer ${token}` } })
-                  await cargarHistoricoAgua(periodoAgua)
-                } catch(e) { alert('Error: ' + (e.response?.data?.mensaje || e.message)) }
-              }}>Corregir hoy</button>
-          )}
-          <div className="periodo-selector">
-            <button className={`periodo-btn ${periodoAgua === 'diario' ? 'activo' : ''}`} onClick={() => { setPeriodoAgua('diario'); periodoAguaRef.current = 'diario'; cargarHistoricoAgua('diario') }}>Hoy</button>
-            <button className={`periodo-btn ${periodoAgua === 'semanal' ? 'activo' : ''}`} onClick={() => { setPeriodoAgua('semanal'); periodoAguaRef.current = 'semanal'; cargarHistoricoAgua('semanal') }}>Semanal</button>
-            <button className={`periodo-btn ${periodoAgua === 'mensual' ? 'activo' : ''}`} onClick={() => { setPeriodoAgua('mensual'); periodoAguaRef.current = 'mensual'; cargarHistoricoAgua('mensual') }}>Mensual</button>
-          </div>
-        </div>
-      </div>
-      {historicoAgua.length === 0 ? (
-        <div style={{height:'180px', display:'flex', alignItems:'center', justifyContent:'center', color:'#cbd5e1', fontSize:'14px'}}>Sin datos de agua</div>
-      ) : (
-        <ResponsiveContainer width="100%" height={180}>
-          <AreaChart data={historicoAgua} margin={{top:4,right:8,left:0,bottom:0}}>
-            <defs>
-              <linearGradient id="gradAguaExt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/><stop offset="95%" stopColor="#22c55e" stopOpacity={0}/></linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="dia" tick={{fontSize:10, fill:'#94a3b8'}} stroke="#e2e8f0" />
-            <YAxis tick={{fontSize:10, fill:'#94a3b8'}} stroke="#e2e8f0" unit=" L" />
-            <Tooltip contentStyle={{borderRadius:'10px', border:'none', boxShadow:'0 4px 20px rgba(0,0,0,0.1)', fontSize:'13px'}} formatter={v => [`${Number(v).toFixed(1)} L`, 'Consumo']} />
-            <Area type="monotone" dataKey="litros" stroke="#22c55e" strokeWidth={2.5} fill="url(#gradAguaExt)" dot={{r:3,fill:'#fff',stroke:'#22c55e',strokeWidth:2}} activeDot={{r:6}} name="Litros" />
-          </AreaChart>
-        </ResponsiveContainer>
-      )}
     </div>
 
     {/* Gráficas individuales por lote — Peso Real vs Meta Plan */}
