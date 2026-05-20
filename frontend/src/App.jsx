@@ -13,7 +13,7 @@ import {
   RefreshCw, DollarSign, Wallet, Archive,
   AlertTriangle, CheckCircle, XCircle, Clock, Calendar,
   Home, ChevronRight, MoreVertical,
-  Wifi, WifiOff, Power, PowerOff, Gauge
+  Wifi, WifiOff, Power, PowerOff, Gauge, BookOpen, FileText, Settings, Zap, Shield
 } from 'lucide-react'
 // ═══════════════════════════════════════════════════════════════════════
 // CONFIGURACIÓN
@@ -1422,7 +1422,7 @@ const [mostrarTablaFinca, setMostrarTablaFinca] = useState(false)
   // Estados de pesajes
   const [pesajes, setPesajes] = useState([])
   const [mostrarModalPesaje, setMostrarModalPesaje] = useState(false)
-  const [nuevoPesaje, setNuevoPesaje] = useState({ lote: '', notas: '' })
+  const [nuevoPesaje, setNuevoPesaje] = useState({ lote: '', notas: '', justificacion_perdida: '' })
   const [editFechaPesaje, setEditFechaPesaje] = useState(null) // { id, fecha } del pesaje a editar
   const [pesosIngresados, setPesosIngresados] = useState([])   // array de números (pesos individuales del pesaje)
   const [pesoInputTmp, setPesoInputTmp]   = useState('')        // campo texto del último peso escrito
@@ -2617,7 +2617,7 @@ const eliminarGastoSemanal = async (loteId, gastoId) => {
         )
       }
       setMostrarModalPesaje(false)
-      setNuevoPesaje({ lote: '', notas: '' })
+      setNuevoPesaje({ lote: '', notas: '', justificacion_perdida: '' })
       setPesosIngresados([])
       setPesoInputTmp('')
       cargarPesajes()
@@ -3567,15 +3567,7 @@ const cargarHistoricoPesos = async () => {
               <IconAlerta />
               <span>Alertas</span>
             </button>
-{user?.rol === 'superadmin' && (
-  <button
-    className={`nav-item ${pagina === 'camaras' ? 'activo' : ''}`}
-    onClick={() => { setPagina('camaras'); setMenuAbierto(false) }}
-  >
-    <IconCamara />
-    <span>Cámaras</span>
-  </button>
-)}
+{/* Cámaras ocultas — módulo en desarrollo */}
 
 
 <button
@@ -3603,7 +3595,15 @@ const cargarHistoricoPesos = async () => {
               </button>
             )}
             
-            <button 
+            <button
+              className={`nav-item ${pagina === 'manual' ? 'activo' : ''}`}
+              onClick={() => { setPagina('manual'); setMenuAbierto(false) }}
+            >
+              <BookOpen size={20} />
+              <span>Manual</span>
+            </button>
+
+            <button
               className={`nav-item ${pagina === 'config' ? 'activo' : ''}`}
               onClick={() => { setPagina('config'); setMenuAbierto(false) }}
             >
@@ -3644,75 +3644,177 @@ const cargarHistoricoPesos = async () => {
       </button>
     </div>
 
-    {/* Tarjetas de monitoreo en tiempo real */}
-    <div className="cards-grid">
-      {/* Clima Lorica */}
-      <div className="card">
-        <div className="card-header">
-          <Thermometer size={20} />
-          <h3>Clima Lorica</h3>
-        </div>
-        <div className="card-body">
-          <div className="dato-principal">{clima.temp !== null ? `${clima.temp}°C` : '--'}</div>
-          <div className="dato-secundario">
-            <Droplets size={14} /> Humedad: {clima.humedad !== null ? `${clima.humedad}%` : '--'}
-          </div>
-        </div>
-      </div>
+    {/* Tarjetas de monitoreo rediseñadas */}
+    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))', gap:'16px', marginBottom:'24px'}}>
 
-      {/* Granja Porcina */}
-      <div className={`card ${getEstadoTemp(porqueriza.temp).clase}`}>
-        <div className="card-header">
-          <Thermometer size={20} />
-          <h3>Granja Porcina</h3>
-          <span className={`estado-badge ${porqueriza.conectado ? 'conectado' : 'desconectado'}`}>
-            {porqueriza.conectado ? <><Wifi size={12} /> Conectado</> : <><WifiOff size={12} /> Desconectado</>}
-          </span>
-        </div>
-        <div className="card-body">
-          <div className="dato-principal">{porqueriza.temp !== null ? `${porqueriza.temp}°C` : '--'}</div>
-          <div className="dato-secundario">
-            <Droplets size={14} /> Humedad: {porqueriza.humedad !== null ? `${porqueriza.humedad}%` : '--'}
+      {/* Temperatura Granja */}
+      {(() => {
+        const estadoT = getEstadoTemp(porqueriza.temp)
+        const esAlerta = estadoT.clase === 'alerta' || estadoT.clase === 'critico'
+        const tempData = historicoTemperatura.slice(-12)
+        return (
+          <div style={{background: esAlerta ? 'linear-gradient(135deg,#fef2f2,#fff)' : 'linear-gradient(135deg,#eff6ff,#fff)', borderRadius:'16px', padding:'20px', boxShadow:'0 2px 12px rgba(0,0,0,0.08)', border:`2px solid ${esAlerta ? '#fca5a5' : '#bfdbfe'}`}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'8px'}}>
+              <div>
+                <div style={{fontSize:'12px', fontWeight:'600', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em'}}>Temperatura Granja</div>
+                <div style={{fontSize:'42px', fontWeight:'800', color: esAlerta ? '#dc2626' : '#1e3a5f', lineHeight:1.1, marginTop:'4px'}}>
+                  {porqueriza.temp !== null ? `${porqueriza.temp}°C` : '--'}
+                </div>
+                <div style={{fontSize:'14px', color:'#475569', marginTop:'4px'}}>
+                  <Droplets size={13} style={{verticalAlign:'middle', marginRight:'4px'}} />
+                  Humedad: <strong>{porqueriza.humedad !== null ? `${porqueriza.humedad}%` : '--'}</strong>
+                </div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:'11px', padding:'3px 8px', borderRadius:'20px', fontWeight:'600',
+                  background: esAlerta ? '#fee2e2' : '#dcfce7', color: esAlerta ? '#dc2626' : '#16a34a'}}>
+                  {estadoT.texto}
+                </div>
+                <div style={{fontSize:'11px', color: porqueriza.conectado ? '#16a34a' : '#94a3b8', marginTop:'6px'}}>
+                  {porqueriza.conectado ? '● Conectado' : '○ Desconectado'}
+                </div>
+              </div>
+            </div>
+            {tempData.length > 0 && (
+              <ResponsiveContainer width="100%" height={60}>
+                <AreaChart data={tempData} margin={{top:0,right:0,left:0,bottom:0}}>
+                  <defs>
+                    <linearGradient id="gT" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={esAlerta ? '#ef4444' : '#3b82f6'} stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor={esAlerta ? '#ef4444' : '#3b82f6'} stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="temperatura" stroke={esAlerta ? '#ef4444' : '#3b82f6'} strokeWidth={2} fill="url(#gT)" dot={false} />
+                  <Tooltip contentStyle={{fontSize:'11px', padding:'4px 8px', borderRadius:'6px'}} formatter={v => [`${v}°C`,'Temp']} labelFormatter={() => ''} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </div>
-          <div className={`estado-texto ${getEstadoTemp(porqueriza.temp).clase}`}>
-            {getEstadoTemp(porqueriza.temp).texto}
-          </div>
-        </div>
-      </div>
+        )
+      })()}
 
-      {/* Flujo de agua */}
-      <div className="card">
-        <div className="card-header">
-          <Droplets size={20} />
-          <h3>Consumo Agua</h3>
-          <span className={`estado-badge ${flujo.conectado ? 'conectado' : 'desconectado'}`}>
-            {flujo.conectado ? <><Wifi size={12} /> Conectado</> : <><WifiOff size={12} /> Desconectado</>}
-          </span>
-        </div>
-        <div className="card-body">
-          <div className="dato-principal">{flujo.volumen_diario ? `${flujo.volumen_diario.toFixed(1)} L` : '0 L'}</div>
-          <div className="dato-secundario">Consumo Hoy</div>
-          <div className="dato-secundario">
-            <Gauge size={14} /> Caudal: {flujo.caudal || 0} L/min
+      {/* Humedad Granja */}
+      {(() => {
+        const humData = historicoTemperatura.slice(-12)
+        const humActual = porqueriza.humedad
+        const humAlta = humActual > 85
+        return (
+          <div style={{background:'linear-gradient(135deg,#f0f9ff,#fff)', borderRadius:'16px', padding:'20px', boxShadow:'0 2px 12px rgba(0,0,0,0.08)', border:`2px solid ${humAlta ? '#7dd3fc' : '#bae6fd'}`}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'8px'}}>
+              <div>
+                <div style={{fontSize:'12px', fontWeight:'600', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em'}}>Humedad Granja</div>
+                <div style={{fontSize:'42px', fontWeight:'800', color:'#0369a1', lineHeight:1.1, marginTop:'4px'}}>
+                  {humActual !== null ? `${humActual}%` : '--'}
+                </div>
+                <div style={{fontSize:'14px', color:'#475569', marginTop:'4px'}}>
+                  <Thermometer size={13} style={{verticalAlign:'middle', marginRight:'4px'}} />
+                  Clima Lorica: <strong>{clima.temp !== null ? `${clima.temp}°C` : '--'}</strong>
+                </div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:'11px', padding:'3px 8px', borderRadius:'20px', fontWeight:'600',
+                  background: humAlta ? '#e0f2fe' : '#f0fdf4', color: humAlta ? '#0369a1' : '#16a34a'}}>
+                  {humAlta ? 'Húmedo' : 'Normal'}
+                </div>
+                <div style={{fontSize:'11px', color:'#94a3b8', marginTop:'6px'}}>Hum. exterior: {clima.humedad ?? '--'}%</div>
+              </div>
+            </div>
+            {humData.length > 0 && (
+              <ResponsiveContainer width="100%" height={60}>
+                <AreaChart data={humData} margin={{top:0,right:0,left:0,bottom:0}}>
+                  <defs>
+                    <linearGradient id="gH" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="humedad" stroke="#0ea5e9" strokeWidth={2} fill="url(#gH)" dot={false} />
+                  <Tooltip contentStyle={{fontSize:'11px', padding:'4px 8px', borderRadius:'6px'}} formatter={v => [`${v}%`,'Hum']} labelFormatter={() => ''} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </div>
-        </div>
-      </div>
+        )
+      })()}
 
-      {/* Peso Total Lotes */}
-      <div className="card">
-        <div className="card-header">
-          <Weight size={20} />
-          <h3>Peso Total Granja</h3>
-        </div>
-        <div className="card-body">
-          <div className="dato-principal">
-            {lotes.filter(l => l.activo).reduce((sum, l) => sum + ((l.peso_promedio_actual || 0) * (l.cantidad_cerdos || 0)), 0).toFixed(1)} kg
+      {/* Consumo de Agua */}
+      {(() => {
+        const aguaData = historicoAgua.slice(-12).map(d => ({ ...d, valor: d.litros ?? d.valor ?? 0 }))
+        const aguaHoy = flujo.volumen_diario ?? 0
+        return (
+          <div style={{background:'linear-gradient(135deg,#f0fdf4,#fff)', borderRadius:'16px', padding:'20px', boxShadow:'0 2px 12px rgba(0,0,0,0.08)', border:'2px solid #86efac'}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'8px'}}>
+              <div>
+                <div style={{fontSize:'12px', fontWeight:'600', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em'}}>Consumo de Agua</div>
+                <div style={{fontSize:'42px', fontWeight:'800', color:'#15803d', lineHeight:1.1, marginTop:'4px'}}>
+                  {aguaHoy.toFixed(0)} <span style={{fontSize:'20px', fontWeight:'600'}}>L</span>
+                </div>
+                <div style={{fontSize:'14px', color:'#475569', marginTop:'4px'}}>
+                  <Gauge size={13} style={{verticalAlign:'middle', marginRight:'4px'}} />
+                  Caudal: <strong>{flujo.caudal || 0} L/min</strong>
+                </div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:'11px', padding:'3px 8px', borderRadius:'20px', fontWeight:'600', background:'#dcfce7', color:'#15803d'}}>
+                  Hoy
+                </div>
+                <div style={{fontSize:'11px', color: flujo.conectado ? '#16a34a' : '#94a3b8', marginTop:'6px'}}>
+                  {flujo.conectado ? '● Conectado' : '○ Desconectado'}
+                </div>
+              </div>
+            </div>
+            {aguaData.length > 0 && (
+              <ResponsiveContainer width="100%" height={60}>
+                <AreaChart data={aguaData} margin={{top:0,right:0,left:0,bottom:0}}>
+                  <defs>
+                    <linearGradient id="gA" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <Area type="monotone" dataKey="valor" stroke="#22c55e" strokeWidth={2} fill="url(#gA)" dot={false} />
+                  <Tooltip contentStyle={{fontSize:'11px', padding:'4px 8px', borderRadius:'6px'}} formatter={v => [`${v} L`,'Agua']} labelFormatter={() => ''} />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </div>
-          <div className="dato-secundario">
-            {lotes.filter(l => l.activo).length} lotes activos — {lotes.filter(l => l.activo).reduce((sum, l) => sum + (l.cantidad_cerdos || 0), 0)} cerdos
+        )
+      })()}
+
+      {/* Peso Total Granja */}
+      {(() => {
+        const lotesActivos = lotes.filter(l => l.activo)
+        const pesoTotal = lotesActivos.reduce((s, l) => s + ((l.peso_promedio_actual || 0) * (l.cantidad_cerdos || 0)), 0)
+        const cerdosTotales = lotesActivos.reduce((s, l) => s + (l.cantidad_cerdos || 0), 0)
+        return (
+          <div style={{background:'linear-gradient(135deg,#fdf4ff,#fff)', borderRadius:'16px', padding:'20px', boxShadow:'0 2px 12px rgba(0,0,0,0.08)', border:'2px solid #e9d5ff'}}>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'8px'}}>
+              <div>
+                <div style={{fontSize:'12px', fontWeight:'600', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em'}}>Peso Total Granja</div>
+                <div style={{fontSize:'42px', fontWeight:'800', color:'#7e22ce', lineHeight:1.1, marginTop:'4px'}}>
+                  {pesoTotal.toFixed(0)} <span style={{fontSize:'20px', fontWeight:'600'}}>kg</span>
+                </div>
+                <div style={{fontSize:'14px', color:'#475569', marginTop:'4px'}}>
+                  <strong>{cerdosTotales}</strong> cerdos · <strong>{lotesActivos.length}</strong> lotes activos
+                </div>
+              </div>
+              <div style={{textAlign:'right'}}>
+                <div style={{fontSize:'11px', padding:'3px 8px', borderRadius:'20px', fontWeight:'600', background:'#f3e8ff', color:'#7e22ce'}}>
+                  Prom: {cerdosTotales > 0 ? (pesoTotal / cerdosTotales).toFixed(1) : 0} kg/cerdo
+                </div>
+              </div>
+            </div>
+            <div style={{display:'flex', gap:'8px', marginTop:'12px', flexWrap:'wrap'}}>
+              {lotesActivos.map(l => (
+                <div key={l._id} style={{flex:1, minWidth:'80px', background:'#f3e8ff', borderRadius:'10px', padding:'8px 10px', textAlign:'center'}}>
+                  <div style={{fontSize:'16px', fontWeight:'800', color:'#6b21a8'}}>{(l.peso_promedio_actual || 0).toFixed(1)} kg</div>
+                  <div style={{fontSize:'11px', color:'#7e22ce', marginTop:'2px'}}>{l.nombre}</div>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      </div>
+        )
+      })()}
     </div>
 
     {/* Estado General de la Granja */}
@@ -5893,6 +5995,43 @@ const cargarHistoricoPesos = async () => {
                         })()}
                       </div>
 
+                      {/* Alerta de pérdida de peso con justificación obligatoria */}
+                      {(() => {
+                        if (pesosIngresados.length === 0 || !nuevoPesaje.lote) return null
+                        const avgActual = pesosIngresados.reduce((s,v) => s+v, 0) / pesosIngresados.length
+                        const ultimoPesajeLote = [...pesajes]
+                          .filter(p => p.lote === nuevoPesaje.lote || p.lote?._id === nuevoPesaje.lote)
+                          .sort((a,b) => new Date(b.fecha) - new Date(a.fecha))[0]
+                        const avgAnterior = ultimoPesajeLote
+                          ? (ultimoPesajeLote.peso / (ultimoPesajeLote.cantidad_cerdos_pesados || 1))
+                          : null
+                        if (avgAnterior === null || avgActual >= avgAnterior) return null
+                        return (
+                          <div style={{background:'#fef2f2', border:'2px solid #fca5a5', borderRadius:'12px', padding:'14px 16px', marginBottom:'12px'}}>
+                            <div style={{display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px'}}>
+                              <AlertTriangle size={18} color="#dc2626" />
+                              <strong style={{color:'#dc2626', fontSize:'14px'}}>Pérdida de peso detectada</strong>
+                            </div>
+                            <div style={{fontSize:'13px', color:'#7f1d1d', marginBottom:'10px'}}>
+                              Promedio anterior: <strong>{avgAnterior.toFixed(1)} kg</strong> → Promedio actual: <strong style={{color:'#dc2626'}}>{avgActual.toFixed(1)} kg</strong>
+                              <span style={{marginLeft:'8px', color:'#dc2626', fontWeight:'700'}}>
+                                ({(avgActual - avgAnterior).toFixed(1)} kg)
+                              </span>
+                            </div>
+                            <label style={{fontSize:'13px', fontWeight:'600', color:'#991b1b', display:'block', marginBottom:'6px'}}>
+                              Justificación obligatoria *
+                            </label>
+                            <textarea
+                              value={nuevoPesaje.justificacion_perdida}
+                              onChange={e => setNuevoPesaje({ ...nuevoPesaje, justificacion_perdida: e.target.value })}
+                              placeholder='Ej: "Los cerdos pesan demasiado para pesaje manual" / "Día indispuesto para laboral" / "Error en báscula"...'
+                              rows={2}
+                              style={{width:'100%', borderRadius:'8px', border:'1px solid #fca5a5', padding:'8px', fontSize:'13px', resize:'vertical', boxSizing:'border-box'}}
+                            />
+                          </div>
+                        )
+                      })()}
+
                       <div className="form-group">
                         <label>Fecha del pesaje</label>
                         <input type="date" className="form-control"
@@ -5913,9 +6052,22 @@ const cargarHistoricoPesos = async () => {
                     </div>
                     <div className="modal-footer">
                       <button className="btn-secondary" onClick={() => { setMostrarModalPesaje(false); setPesosIngresados([]); setPesoInputTmp('') }}>Cancelar</button>
-                      <button className="btn-primary" onClick={crearPesaje} disabled={pesosIngresados.length === 0}>
-                        Registrar Pesaje {pesosIngresados.length > 0 ? `(${pesosIngresados.length} cerdos)` : ''}
-                      </button>
+                      {(() => {
+                        const avgActual = pesosIngresados.length > 0 ? pesosIngresados.reduce((s,v) => s+v, 0) / pesosIngresados.length : null
+                        const ultimoPesajeLote = nuevoPesaje.lote ? [...pesajes]
+                          .filter(p => p.lote === nuevoPesaje.lote || p.lote?._id === nuevoPesaje.lote)
+                          .sort((a,b) => new Date(b.fecha) - new Date(a.fecha))[0] : null
+                        const avgAnterior = ultimoPesajeLote ? (ultimoPesajeLote.peso / (ultimoPesajeLote.cantidad_cerdos_pesados || 1)) : null
+                        const hayPerdida = avgActual !== null && avgAnterior !== null && avgActual < avgAnterior
+                        const requiereJustif = hayPerdida && !nuevoPesaje.justificacion_perdida.trim()
+                        return (
+                          <button className="btn-primary" onClick={crearPesaje}
+                            disabled={pesosIngresados.length === 0 || requiereJustif}
+                            title={requiereJustif ? 'Debes justificar la pérdida de peso' : ''}>
+                            Registrar Pesaje {pesosIngresados.length > 0 ? `(${pesosIngresados.length} cerdos)` : ''}
+                          </button>
+                        )
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -7701,6 +7853,162 @@ const cargarHistoricoPesos = async () => {
     )}
   </div>
 )}
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {/* PÁGINA: MANUAL DE USUARIO */}
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {pagina === 'manual' && (
+            <div className="page-content" style={{maxWidth:'900px', margin:'0 auto'}}>
+              <div className="page-header" style={{marginBottom:'24px'}}>
+                <h2 style={{display:'flex', alignItems:'center', gap:'10px'}}><BookOpen size={24} /> Manual de Usuario</h2>
+                <p style={{color:'#64748b', margin:0, fontSize:'14px'}}>Guía completa de cada módulo del sistema COO Alianzas</p>
+              </div>
+
+              {[
+                {
+                  icon: <Home size={22} color="#1d4ed8" />,
+                  titulo: 'Dashboard',
+                  color: '#eff6ff', border: '#bfdbfe', iconBg: '#dbeafe',
+                  descripcion: 'Vista principal de la granja en tiempo real.',
+                  funciones: [
+                    'Temperatura y humedad en vivo del chiquero (sensor IoT)',
+                    'Consumo de agua del día actual',
+                    'Peso total de todos los lotes activos',
+                    'Gráficas de las últimas 24 horas de temperatura y agua',
+                    'Estado general: cerdos activos, lotes, bombas encendidas',
+                    'Mini-gráficas de progreso por lote con curva del plan técnico',
+                  ],
+                  conexiones: 'Sensor ESP32 (temp/hum), Sensor de flujo de agua, API de clima externa, MongoDB (lotes, pesajes)',
+                },
+                {
+                  icon: <PiggyBank size={22} color="#15803d" />,
+                  titulo: 'Lotes',
+                  color: '#f0fdf4', border: '#86efac', iconBg: '#dcfce7',
+                  descripcion: 'Gestión completa del ciclo de vida de cada lote de cerdos.',
+                  funciones: [
+                    'Crear, editar y cerrar lotes (nacidos o comprados)',
+                    'Registrar pesajes manuales con pesos individuales',
+                    'Ver curva de peso real vs plan técnico de producción',
+                    'Seguimiento semana a semana con tabla de semana actual',
+                    'Registro de gastos propios del lote (alimento, veterinario, etc.)',
+                    'Historial completo de pesajes con mínimo, máximo y promedio',
+                    'Justificación automática cuando se detecta pérdida de peso',
+                  ],
+                  conexiones: 'MongoDB (lotes, pesajes, gastos), Plan de alimentación interno (26 semanas), TABLA_FINCA (plan de granja)',
+                },
+                {
+                  icon: <Droplets size={22} color="#0369a1" />,
+                  titulo: 'Ambiente',
+                  color: '#f0f9ff', border: '#bae6fd', iconBg: '#e0f2fe',
+                  descripcion: 'Monitoreo ambiental continuo del chiquero y consumo de agua.',
+                  funciones: [
+                    'Historial de temperatura y humedad por hora, día o semana',
+                    'Consumo diario y mensual de agua',
+                    'Comparativa de consumo vs límite configurado',
+                    'Estado de las bombas de agua (encendido/apagado remoto)',
+                    'Alertas automáticas si la temperatura supera el umbral',
+                    'Resumen diario de agua enviado automáticamente a las 7 PM',
+                  ],
+                  conexiones: 'Sensor ESP32, Sensor de flujo, TP-Link smart plug, MongoDB (readings, WaterConsumption, Motorbomb)',
+                },
+                {
+                  icon: <DollarSign size={22} color="#b45309" />,
+                  titulo: 'Finanzas',
+                  color: '#fffbeb', border: '#fcd34d', iconBg: '#fef3c7',
+                  descripcion: 'Control financiero completo de la operación porcina.',
+                  funciones: [
+                    'Registro de costos (alimento, medicamentos, mano de obra, servicios)',
+                    'Registro de ventas con precio por kg y comprador',
+                    'Comparativo de costos vs ingresos por mes',
+                    'Balance acumulado de la granja',
+                    'Desglose de gastos por categoría',
+                    'Proyección de ganancia según peso actual y precio de mercado',
+                  ],
+                  conexiones: 'MongoDB (costos, ventas, config.precio_kg_venta)',
+                },
+                {
+                  icon: <Package size={22} color="#7e22ce" />,
+                  titulo: 'Inventario',
+                  color: '#fdf4ff', border: '#e9d5ff', iconBg: '#f3e8ff',
+                  descripcion: 'Control de stock de alimento y materiales de la granja.',
+                  funciones: [
+                    'Stock actual de cada tipo de alimento (bultos y kg)',
+                    'Registro de entradas y salidas de inventario',
+                    'Alertas automáticas cuando el stock baja de 10 kg',
+                    'Historial de movimientos por producto',
+                    'Cálculo automático de consumo estimado por lote activo',
+                  ],
+                  conexiones: 'MongoDB (inventario), Notificaciones WhatsApp/Push cuando stock crítico',
+                },
+                {
+                  icon: <Bell size={22} color="#dc2626" />,
+                  titulo: 'Alertas',
+                  color: '#fef2f2', border: '#fca5a5', iconBg: '#fee2e2',
+                  descripcion: 'Centro de notificaciones y recordatorios de la granja.',
+                  funciones: [
+                    'Alertas de temperatura alta en el chiquero (cooldown 60 min)',
+                    'Alertas de nivel de agua del tanque (100%, 20%, 10%)',
+                    'Recordatorio de pesaje semanal (día anterior al pesaje)',
+                    'Tareas del calendario sanitario (vacunas, castración, etc.)',
+                    'Alerta de bomba encendida por más de 45 minutos',
+                    'Historial de alertas enviadas',
+                  ],
+                  conexiones: 'WhatsApp (Twilio/Meta), Push Web, Firebase FCM, Email (Brevo/Resend), MongoDB (NotificationState)',
+                },
+                {
+                  icon: <FileText size={22} color="#475569" />,
+                  titulo: 'Reportes',
+                  color: '#f8fafc', border: '#cbd5e1', iconBg: '#e2e8f0',
+                  descripcion: 'Descarga de reportes en Excel para análisis y archivo.',
+                  funciones: [
+                    'Reporte General: resumen de lotes, gastos e inventario (descarga rápida)',
+                    'Reporte Histórico: pesajes, contabilidad, alertas, temperatura, agua (con filtro de fechas)',
+                    'Cada reporte incluye hasta 10 hojas organizadas por tema',
+                    'Datos de temperatura y agua consolidados por día (no raw readings)',
+                  ],
+                  conexiones: 'ExcelJS, MongoDB (todos los modelos), Agregaciones por fecha seleccionada',
+                },
+                {
+                  icon: <Settings size={22} color="#64748b" />,
+                  titulo: 'Configuración',
+                  color: '#f8fafc', border: '#cbd5e1', iconBg: '#e2e8f0',
+                  descripcion: 'Parámetros del sistema, umbrales y datos de la granja.',
+                  funciones: [
+                    'Umbral de temperatura máxima (alerta de calor)',
+                    'Límite diario de consumo de agua de la bomba',
+                    'Precio del agua por litro (para cálculo de costos)',
+                    'Email de reportes automáticos',
+                    'Precio de venta por kg de cerdo',
+                    'Gestión de usuarios y roles (superadmin, jefa, cliente)',
+                  ],
+                  conexiones: 'MongoDB (Config, User)',
+                },
+              ].map((mod, i) => (
+                <div key={i} style={{background: mod.color, border:`1.5px solid ${mod.border}`, borderRadius:'16px', padding:'20px 24px', marginBottom:'16px'}}>
+                  <div style={{display:'flex', alignItems:'center', gap:'14px', marginBottom:'14px'}}>
+                    <div style={{background: mod.iconBg, borderRadius:'10px', padding:'10px', display:'flex', alignItems:'center', justifyContent:'center'}}>
+                      {mod.icon}
+                    </div>
+                    <div>
+                      <div style={{fontSize:'18px', fontWeight:'700', color:'#1e293b'}}>{mod.titulo}</div>
+                      <div style={{fontSize:'13px', color:'#64748b', marginTop:'2px'}}>{mod.descripcion}</div>
+                    </div>
+                  </div>
+                  <div style={{display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'12px'}}>
+                    {mod.funciones.map((f, j) => (
+                      <div key={j} style={{display:'flex', alignItems:'flex-start', gap:'8px', fontSize:'13px', color:'#334155'}}>
+                        <CheckCircle size={14} color="#22c55e" style={{marginTop:'2px', flexShrink:0}} />
+                        {f}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{background:'rgba(0,0,0,0.04)', borderRadius:'8px', padding:'8px 12px', fontSize:'12px', color:'#64748b'}}>
+                    <strong>Conexiones:</strong> {mod.conexiones}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* ════════════════════════════════════════════════════════════════ */}
           {/* PÁGINA: CONFIGURACIÓN */}
           {/* ════════════════════════════════════════════════════════════════ */}
