@@ -3650,17 +3650,29 @@ const cargarHistoricoPesos = async () => {
 {/* ════════════════════════════════════════════════════════════════ */}
 {pagina === 'dashboard' && (
   <div className="page-dashboard">
-    <div className="page-header">
-      <h2><Home size={24} /> Dashboard - Estado de la Granja</h2>
-      <button className="btn-refresh" onClick={cargarDatos}>
+    {/* Barra de título simple */}
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px', flexWrap:'wrap', gap:'12px'}}>
+      <div>
+        <h2 style={{margin:0, fontSize:'22px', fontWeight:'800', color:'#1e293b'}}>Estado de la Granja</h2>
+        <div style={{display:'flex', gap:'12px', marginTop:'6px', flexWrap:'wrap'}}>
+          {[
+            { label: `${lotes.filter(l=>l.activo).reduce((s,l)=>s+l.cantidad_cerdos,0)} cerdos activos`, color:'#dcfce7', text:'#15803d' },
+            { label: `${lotes.filter(l=>l.activo).length} lotes`, color:'#eff6ff', text:'#1d4ed8' },
+            { label: `${bombas.filter(b=>!b.estado).length}/${bombas.length} bombas encendidas`, color: bombas.filter(b=>!b.estado).length>0 ? '#fef3c7':'#f1f5f9', text: bombas.filter(b=>!b.estado).length>0 ? '#b45309':'#64748b' },
+          ].map((c,i) => (
+            <span key={i} style={{fontSize:'13px', fontWeight:'600', background:c.color, color:c.text, padding:'3px 12px', borderRadius:'20px'}}>{c.label}</span>
+          ))}
+        </div>
+      </div>
+      <button className="btn-refresh" onClick={cargarDatos} style={{flexShrink:0}}>
         <RefreshCw size={18} />
       </button>
     </div>
 
-    {/* Tarjetas de monitoreo rediseñadas */}
-    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))', gap:'16px', marginBottom:'24px'}}>
+    {/* Cuadrícula 2×2: cada métrica con su número y gráfica */}
+    <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(300px, 1fr))', gap:'16px', marginBottom:'24px'}}>
 
-      {/* Temperatura Granja */}
+      {/* Temperatura del Chiquero */}
       {(() => {
         const estadoT = getEstadoTemp(porqueriza.temp)
         const esAlerta = estadoT.clase === 'alerta' || estadoT.clase === 'critico'
@@ -3668,9 +3680,9 @@ const cargarHistoricoPesos = async () => {
         const tempData = historicoTemperatura.slice(-20)
         return (
           <div style={{background: esAlerta ? 'linear-gradient(135deg,#fef2f2,#fff)' : 'linear-gradient(135deg,#eff6ff,#fff)', borderRadius:'16px', padding:'18px 20px', boxShadow:'0 2px 12px rgba(0,0,0,0.08)', border:`2px solid ${esAlerta ? '#fca5a5' : '#bfdbfe'}`}}>
-            <div style={{fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'10px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <span><Thermometer size={13} style={{verticalAlign:'middle', marginRight:'4px'}} />Temperatura Granja</span>
-              <span style={{fontSize:'10px', padding:'2px 7px', borderRadius:'20px', fontWeight:'700', background: esAlerta ? '#fee2e2' : '#dcfce7', color: esAlerta ? '#dc2626' : '#16a34a'}}>{estadoT.texto}</span>
+            <div style={{fontSize:'13px', fontWeight:'700', color:'#475569', marginBottom:'10px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <span><Thermometer size={15} style={{verticalAlign:'middle', marginRight:'6px'}} />Temperatura del Chiquero</span>
+              <span style={{fontSize:'11px', padding:'3px 10px', borderRadius:'20px', fontWeight:'700', background: esAlerta ? '#fee2e2' : '#dcfce7', color: esAlerta ? '#dc2626' : '#16a34a'}}>{estadoT.texto}</span>
             </div>
             <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
               <div style={{minWidth:'110px'}}>
@@ -3709,16 +3721,16 @@ const cargarHistoricoPesos = async () => {
         )
       })()}
 
-      {/* Humedad Granja */}
+      {/* Humedad del Chiquero */}
       {(() => {
         const humActual = porqueriza.humedad
         const humAlta = humActual > 85
         const humData = historicoTemperatura.slice(-20)
         return (
           <div style={{background:'linear-gradient(135deg,#f0f9ff,#fff)', borderRadius:'16px', padding:'18px 20px', boxShadow:'0 2px 12px rgba(0,0,0,0.08)', border:`2px solid ${humAlta ? '#7dd3fc' : '#bae6fd'}`}}>
-            <div style={{fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'10px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <span><Droplets size={13} style={{verticalAlign:'middle', marginRight:'4px'}} />Humedad Granja</span>
-              <span style={{fontSize:'10px', padding:'2px 7px', borderRadius:'20px', fontWeight:'700', background: humAlta ? '#e0f2fe' : '#f0fdf4', color: humAlta ? '#0369a1' : '#16a34a'}}>{humAlta ? 'Húmedo' : 'Normal'}</span>
+            <div style={{fontSize:'13px', fontWeight:'700', color:'#475569', marginBottom:'10px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <span><Droplets size={15} style={{verticalAlign:'middle', marginRight:'6px'}} />Humedad del Chiquero</span>
+              <span style={{fontSize:'11px', padding:'3px 10px', borderRadius:'20px', fontWeight:'700', background: humAlta ? '#e0f2fe' : '#f0fdf4', color: humAlta ? '#0369a1' : '#16a34a'}}>{humAlta ? 'Alta' : 'Normal'}</span>
             </div>
             <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
               <div style={{minWidth:'110px'}}>
@@ -3726,10 +3738,10 @@ const cargarHistoricoPesos = async () => {
                   {humActual !== null ? `${humActual}%` : '--'}
                 </div>
                 <div style={{fontSize:'12px', color:'#64748b', marginTop:'6px'}}>
-                  <Thermometer size={12} style={{verticalAlign:'middle'}} /> <strong>{clima.temp ?? '--'}°C</strong> ext.
+                  <Thermometer size={12} style={{verticalAlign:'middle'}} /> Temp: <strong>{porqueriza.temp ?? '--'}°C</strong>
                 </div>
-                <div style={{fontSize:'11px', color:'#94a3b8', marginTop:'4px'}}>
-                  Hum. ext: {clima.humedad ?? '--'}%
+                <div style={{fontSize:'11px', color: porqueriza.conectado ? '#16a34a' : '#94a3b8', marginTop:'4px'}}>
+                  {porqueriza.conectado ? '● En línea' : '○ Sin señal'}
                 </div>
               </div>
               <div style={{flex:1, minWidth:0}}>
@@ -3757,14 +3769,14 @@ const cargarHistoricoPesos = async () => {
         )
       })()}
 
-      {/* Consumo de Agua */}
+      {/* Agua de Hoy */}
       {(() => {
         const aguaData = historicoAgua.slice(-20).map(d => ({ ...d, valor: d.litros ?? d.valor ?? 0 }))
         const aguaHoy = flujo.volumen_diario ?? 0
         return (
           <div style={{background:'linear-gradient(135deg,#f0fdf4,#fff)', borderRadius:'16px', padding:'18px 20px', boxShadow:'0 2px 12px rgba(0,0,0,0.08)', border:'2px solid #86efac'}}>
-            <div style={{fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'10px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <span><Droplets size={13} style={{verticalAlign:'middle', marginRight:'4px'}} />Consumo de Agua</span>
+            <div style={{fontSize:'13px', fontWeight:'700', color:'#475569', marginBottom:'10px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <span><Droplets size={15} style={{verticalAlign:'middle', marginRight:'6px'}} />Agua Consumida Hoy</span>
               <span style={{fontSize:'11px', color: flujo.conectado ? '#16a34a' : '#94a3b8'}}>{flujo.conectado ? '● En línea' : '○ Sin señal'}</span>
             </div>
             <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
@@ -3802,7 +3814,7 @@ const cargarHistoricoPesos = async () => {
         )
       })()}
 
-      {/* Peso Total Granja */}
+      {/* Peso de los Cerdos */}
       {(() => {
         const lotesActivos = lotes.filter(l => l.activo)
         const pesoTotal = lotesActivos.reduce((s, l) => s + ((l.peso_promedio_actual || 0) * (l.cantidad_cerdos || 0)), 0)
@@ -3810,9 +3822,9 @@ const cargarHistoricoPesos = async () => {
         const promedio = cerdosTotales > 0 ? pesoTotal / cerdosTotales : 0
         return (
           <div style={{background:'linear-gradient(135deg,#fdf4ff,#fff)', borderRadius:'16px', padding:'18px 20px', boxShadow:'0 2px 12px rgba(0,0,0,0.08)', border:'2px solid #e9d5ff'}}>
-            <div style={{fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:'10px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-              <span><Weight size={13} style={{verticalAlign:'middle', marginRight:'4px'}} />Peso Total Granja</span>
-              <span style={{fontSize:'10px', padding:'2px 7px', borderRadius:'20px', fontWeight:'700', background:'#f3e8ff', color:'#7e22ce'}}>Prom: {promedio.toFixed(1)} kg</span>
+            <div style={{fontSize:'13px', fontWeight:'700', color:'#475569', marginBottom:'10px', display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+              <span><Weight size={15} style={{verticalAlign:'middle', marginRight:'6px'}} />Peso de los Cerdos</span>
+              <span style={{fontSize:'11px', padding:'3px 10px', borderRadius:'20px', fontWeight:'700', background:'#f3e8ff', color:'#7e22ce'}}>Prom: {promedio.toFixed(1)} kg/cerdo</span>
             </div>
             <div style={{display:'flex', alignItems:'center', gap:'12px'}}>
               <div style={{minWidth:'110px'}}>
@@ -3843,211 +3855,83 @@ const cargarHistoricoPesos = async () => {
       })()}
     </div>
 
-    {/* Estado General de la Granja */}
-    <div className="dashboard-section estado-granja">
-      <h3><Activity size={20} /> Estado General de la Granja</h3>
-      <div className="estado-granja-grid">
-        <div className="estado-item">
-          <div className="estado-icono">
-            <PiggyBank size={32} className="icono-verde" />
-          </div>
-          <div className="estado-info">
-            <span className="estado-numero">{lotes.filter(l => l.activo).reduce((sum, l) => sum + l.cantidad_cerdos, 0)}</span>
-            <span className="estado-label">Cerdos Activos</span>
-          </div>
+    {/* Gráfica extendida Temperatura — período selector */}
+    <div style={{background:'#fff', borderRadius:'16px', padding:'20px', boxShadow:'0 2px 12px rgba(0,0,0,0.07)', border:'1px solid #e2e8f0', marginBottom:'16px'}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px', flexWrap:'wrap', gap:'8px'}}>
+        <div style={{fontSize:'15px', fontWeight:'700', color:'#1e293b', display:'flex', alignItems:'center', gap:'8px'}}>
+          <Thermometer size={18} color="#ef4444" /> Temperatura y Humedad del Chiquero
         </div>
-        <div className="estado-item">
-          <div className="estado-icono">
-            <Package size={32} className="icono-verde" />
-          </div>
-          <div className="estado-info">
-            <span className="estado-numero">{lotes.filter(l => l.activo).length}</span>
-            <span className="estado-label">Lotes Activos</span>
-          </div>
-        </div>
-        <div className="estado-item">
-          <div className="estado-icono">
-            <Weight size={32} className="icono-verde" />
-          </div>
-          <div className="estado-info">
-            <span className="estado-numero">
-              {lotes.filter(l => l.activo).length > 0
-                ? (lotes.filter(l => l.activo).reduce((sum, l) => sum + (l.peso_promedio_actual || 0), 0) / lotes.filter(l => l.activo).length).toFixed(1)
-                : 0} kg
-            </span>
-            <span className="estado-label">Promedio entre Lotes</span>
-          </div>
-        </div>
-        <div className="estado-item">
-          <div className="estado-icono">
-            {bombas.filter(b => !b.estado).length > 0 ? <Power size={32} className="icono-verde" /> : <PowerOff size={32} className="icono-gris" />}
-          </div>
-          <div className="estado-info">
-            <span className="estado-numero">{bombas.filter(b => !b.estado).length}/{bombas.length}</span>
-            <span className="estado-label">Bombas Activas</span>
-          </div>
+        <div className="periodo-selector">
+          <button className={`periodo-btn ${periodoTemp === 'diario' ? 'activo' : ''}`} onClick={() => { setPeriodoTemp('diario'); periodoTempRef.current = 'diario'; cargarHistoricoTemperatura('diario') }}>Hoy</button>
+          <button className={`periodo-btn ${periodoTemp === 'semanal' ? 'activo' : ''}`} onClick={() => { setPeriodoTemp('semanal'); periodoTempRef.current = 'semanal'; cargarHistoricoTemperatura('semanal') }}>Semanal</button>
+          <button className={`periodo-btn ${periodoTemp === 'mensual' ? 'activo' : ''}`} onClick={() => { setPeriodoTemp('mensual'); periodoTempRef.current = 'mensual'; cargarHistoricoTemperatura('mensual') }}>Mensual</button>
         </div>
       </div>
+      {historicoTemperatura.length === 0 ? (
+        <div style={{height:'180px', display:'flex', alignItems:'center', justifyContent:'center', color:'#cbd5e1', fontSize:'14px'}}>Sin datos de temperatura</div>
+      ) : (
+        <ResponsiveContainer width="100%" height={180}>
+          <AreaChart data={historicoTemperatura} margin={{top:4,right:8,left:0,bottom:0}}>
+            <defs>
+              <linearGradient id="gTExt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/><stop offset="95%" stopColor="#ef4444" stopOpacity={0}/></linearGradient>
+              <linearGradient id="gHExt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/><stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/></linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+            <XAxis dataKey="hora" tick={{fontSize:10, fill:'#94a3b8'}} stroke="#e2e8f0" />
+            <YAxis tick={{fontSize:10, fill:'#94a3b8'}} stroke="#e2e8f0" />
+            <Tooltip contentStyle={{borderRadius:'10px', border:'none', boxShadow:'0 4px 20px rgba(0,0,0,0.1)', fontSize:'13px'}} />
+            <Legend wrapperStyle={{fontSize:'13px', paddingTop:'8px'}} />
+            <Area type="monotone" dataKey="temperatura" stroke="#ef4444" strokeWidth={2.5} fill="url(#gTExt)" name="Temperatura °C" dot={false} />
+            <Area type="monotone" dataKey="humedad" stroke="#3b82f6" strokeWidth={2.5} fill="url(#gHExt)" name="Humedad %" dot={false} />
+          </AreaChart>
+        </ResponsiveContainer>
+      )}
     </div>
 
-    {/* GRÁFICAS PRINCIPALES */}
-    <div className="graficas-grid">
-      {/* Gráfica de Temperatura */}
-      <div className="dashboard-section grafica-section">
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', flexWrap:'wrap', gap:'8px'}}>
-          <h3 style={{margin:0}}><Thermometer size={20} /> Temperatura y Humedad — Granja Porcina</h3>
+    {/* Gráfica extendida Agua — período selector */}
+    <div style={{background:'#fff', borderRadius:'16px', padding:'20px', boxShadow:'0 2px 12px rgba(0,0,0,0.07)', border:'1px solid #e2e8f0', marginBottom:'16px'}}>
+      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px', flexWrap:'wrap', gap:'8px'}}>
+        <div style={{fontSize:'15px', fontWeight:'700', color:'#1e293b', display:'flex', alignItems:'center', gap:'8px'}}>
+          <Droplets size={18} color="#22c55e" /> Consumo de Agua
+          {historicoAgua.length > 0 && <span style={{fontSize:'13px', fontWeight:'600', color:'#15803d', background:'#f0fdf4', padding:'2px 10px', borderRadius:'20px'}}>{historicoAgua.reduce((s,d) => s+(d.litros||0), 0).toFixed(0)} L total</span>}
+        </div>
+        <div style={{display:'flex', gap:'8px', alignItems:'center'}}>
+          {(user?.rol === 'superadmin' || user?.rol === 'ingeniero') && (
+            <button style={{background:'none', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'4px 10px', fontSize:'12px', color:'#64748b', cursor:'pointer'}}
+              onClick={async () => {
+                const val = window.prompt('Corregir consumo de hoy (litros):')
+                if (val === null) return
+                const litros = parseFloat(val)
+                if (isNaN(litros) || litros < 0) { alert('Valor inválido'); return }
+                try {
+                  await axios.put(`${API_URL}/api/esp/flujo/corregir`, { litros }, { headers: { Authorization: `Bearer ${token}` } })
+                  await cargarHistoricoAgua(periodoAgua)
+                } catch(e) { alert('Error: ' + (e.response?.data?.mensaje || e.message)) }
+              }}>Corregir hoy</button>
+          )}
           <div className="periodo-selector">
-            <button className={`periodo-btn ${periodoTemp === 'diario' ? 'activo' : ''}`} onClick={() => { setPeriodoTemp('diario'); periodoTempRef.current = 'diario'; cargarHistoricoTemperatura('diario') }}>Hoy</button>
-            <button className={`periodo-btn ${periodoTemp === 'semanal' ? 'activo' : ''}`} onClick={() => { setPeriodoTemp('semanal'); periodoTempRef.current = 'semanal'; cargarHistoricoTemperatura('semanal') }}>Semanal</button>
-            <button className={`periodo-btn ${periodoTemp === 'mensual' ? 'activo' : ''}`} onClick={() => { setPeriodoTemp('mensual'); periodoTempRef.current = 'mensual'; cargarHistoricoTemperatura('mensual') }}>Mensual</button>
+            <button className={`periodo-btn ${periodoAgua === 'diario' ? 'activo' : ''}`} onClick={() => { setPeriodoAgua('diario'); periodoAguaRef.current = 'diario'; cargarHistoricoAgua('diario') }}>Hoy</button>
+            <button className={`periodo-btn ${periodoAgua === 'semanal' ? 'activo' : ''}`} onClick={() => { setPeriodoAgua('semanal'); periodoAguaRef.current = 'semanal'; cargarHistoricoAgua('semanal') }}>Semanal</button>
+            <button className={`periodo-btn ${periodoAgua === 'mensual' ? 'activo' : ''}`} onClick={() => { setPeriodoAgua('mensual'); periodoAguaRef.current = 'mensual'; cargarHistoricoAgua('mensual') }}>Mensual</button>
           </div>
         </div>
-        <div className="grafica-container">
-          <ResponsiveContainer width="100%" height={250}>
-            <AreaChart data={historicoTemperatura}>
-              <defs>
-                <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.8}/>
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0.1}/>
-                </linearGradient>
-                <linearGradient id="colorHum" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.8}/>
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.1}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
-              <XAxis dataKey="hora" tick={{ fontSize: 11 }} stroke="#666" />
-              <YAxis tick={{ fontSize: 11 }} stroke="#666" />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: '#fff', 
-                  border: '1px solid #e0e0e0',
-                  borderRadius: '8px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-                }}
-              />
-              <Legend />
-              <Area 
-                type="monotone" 
-                dataKey="temperatura" 
-                stroke="#ef4444" 
-                fillOpacity={1} 
-                fill="url(#colorTemp)" 
-                name="Temperatura °C"
-              />
-              <Area 
-                type="monotone" 
-                dataKey="humedad" 
-                stroke="#3b82f6" 
-                fillOpacity={1} 
-                fill="url(#colorHum)" 
-                name="Humedad %"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
       </div>
-
-      
-     {/* Gráfica de Consumo de Agua */}
-<div className="dashboard-section grafica-section">
-  <div className="grafica-header-agua">
-    <h3><Droplets size={20} /> Consumo de Agua</h3>
-    <div style={{display:'flex',gap:'8px',alignItems:'center'}}>
-    {(user?.rol === 'superadmin' || user?.rol === 'ingeniero') && (
-      <button
-        title="Corregir consumo de hoy"
-        style={{background:'none',border:'1px solid #e2e8f0',borderRadius:'8px',padding:'4px 10px',fontSize:'12px',color:'#64748b',cursor:'pointer'}}
-        onClick={async () => {
-          const val = window.prompt('Ingresa el consumo real de hoy en litros (0 para resetear):')
-          if (val === null) return
-          const litros = parseFloat(val)
-          if (isNaN(litros) || litros < 0) { alert('Valor inválido'); return }
-          try {
-            await axios.put(`${API_URL}/api/esp/flujo/corregir`, { litros }, { headers: { Authorization: `Bearer ${token}` } })
-            await cargarHistoricoAgua(periodoAgua)
-            alert(`Consumo de hoy corregido a ${litros} L`)
-          } catch(e) { alert('Error al corregir: ' + (e.response?.data?.mensaje || e.message)) }
-        }}
-      >Corregir hoy</button>
-    )}
-    <div className="periodo-selector">
-      <button 
-        className={`periodo-btn ${periodoAgua === 'diario' ? 'activo' : ''}`}
-        onClick={() => {
-          setPeriodoAgua('diario')
-          periodoAguaRef.current = 'diario'
-          cargarHistoricoAgua('diario')
-        }}
-      >
-        Hoy
-      </button>
-      <button
-        className={`periodo-btn ${periodoAgua === 'semanal' ? 'activo' : ''}`}
-        onClick={() => {
-          setPeriodoAgua('semanal')
-          periodoAguaRef.current = 'semanal'
-          cargarHistoricoAgua('semanal')
-        }}
-      >
-        Semanal
-      </button>
-      <button
-        className={`periodo-btn ${periodoAgua === 'mensual' ? 'activo' : ''}`}
-        onClick={() => {
-          setPeriodoAgua('mensual')
-          periodoAguaRef.current = 'mensual'
-          cargarHistoricoAgua('mensual')
-        }}
-      >
-        Mensual
-      </button>
-    </div>
-    </div>
-  </div>
-  <div className="grafica-container">
-    {historicoAgua.length === 0 ? (
-      <p className="sin-datos">No hay datos de consumo</p>
-    ) : (
-      <ResponsiveContainer width="100%" height={250}>
-        <AreaChart data={historicoAgua}>
-          <defs>
-            <linearGradient id="gradAgua" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.35}/>
-              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0.02}/>
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis dataKey="dia" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" />
-          <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" unit=" L" />
-          <Tooltip
-            contentStyle={{ backgroundColor: 'rgba(255,255,255,0.96)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}
-            formatter={(value) => [`${Number(value).toFixed(1)} L`, 'Consumo']}
-          />
-          <Area
-            type="monotone"
-            dataKey="litros"
-            stroke="#3b82f6"
-            strokeWidth={2.5}
-            fillOpacity={1}
-            fill="url(#gradAgua)"
-            dot={{ r: 3, fill: '#fff', stroke: '#3b82f6', strokeWidth: 2 }}
-            activeDot={{ r: 6, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }}
-            name="Litros"
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    )}
-    {historicoAgua.length > 0 && (
-      <div className="agua-total-periodo">
-        <Droplets size={18} />
-        <span>Total {periodoAgua === 'diario' ? 'Hoy' : periodoAgua === 'semanal' ? 'Semanal' : 'Mensual'}:</span>
-        <strong>{historicoAgua.reduce((sum, d) => sum + (d.litros || 0), 0).toFixed(1)} L</strong>
-        <span className="agua-promedio">| Promedio: {(historicoAgua.reduce((sum, d) => sum + (d.litros || 0), 0) / historicoAgua.length).toFixed(1)} L/día</span>
-      </div>
-    )}
-  </div>
-</div>
+      {historicoAgua.length === 0 ? (
+        <div style={{height:'180px', display:'flex', alignItems:'center', justifyContent:'center', color:'#cbd5e1', fontSize:'14px'}}>Sin datos de agua</div>
+      ) : (
+        <ResponsiveContainer width="100%" height={180}>
+          <AreaChart data={historicoAgua} margin={{top:4,right:8,left:0,bottom:0}}>
+            <defs>
+              <linearGradient id="gradAguaExt" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/><stop offset="95%" stopColor="#22c55e" stopOpacity={0}/></linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+            <XAxis dataKey="dia" tick={{fontSize:10, fill:'#94a3b8'}} stroke="#e2e8f0" />
+            <YAxis tick={{fontSize:10, fill:'#94a3b8'}} stroke="#e2e8f0" unit=" L" />
+            <Tooltip contentStyle={{borderRadius:'10px', border:'none', boxShadow:'0 4px 20px rgba(0,0,0,0.1)', fontSize:'13px'}} formatter={v => [`${Number(v).toFixed(1)} L`, 'Consumo']} />
+            <Area type="monotone" dataKey="litros" stroke="#22c55e" strokeWidth={2.5} fill="url(#gradAguaExt)" dot={{r:3,fill:'#fff',stroke:'#22c55e',strokeWidth:2}} activeDot={{r:6}} name="Litros" />
+          </AreaChart>
+        </ResponsiveContainer>
+      )}
     </div>
 
     {/* Gráficas individuales por lote — Peso Real vs Meta Plan */}
@@ -5690,9 +5574,9 @@ const cargarHistoricoPesos = async () => {
                       {pesoLive.peso.toFixed(1)}
                       <span className="peso-unidad">kg</span>
                     </div>
-                    <div className={`estado-peso ${pesoLive.estable ? 'estable' : ''}`}>
-                      {pesoLive.estable ? '✓ Peso Estable' : '~ Estabilizando...'}
-                    </div>
+                    {pesoLive.estable && (
+                      <div className="estado-peso estable">✓ Listo para guardar</div>
+                    )}
                   </div>
 
                   <div className="bascula-controles">
@@ -5830,86 +5714,90 @@ const cargarHistoricoPesos = async () => {
                 </div>
               </div>
 
-              {/* Estadísticas */}
-              <div className="stats-grid">
-                <div className="stat-card">
-                  <span>Total Pesajes</span>
-                  <strong>{pesajes.length}</strong>
-                </div>
-                <div className="stat-card">
-                  <span>Último Peso</span>
-                  <strong>{ultimoPeso ? `${ultimoPeso.peso} kg` : '--'}</strong>
-                </div>
-                <div className="stat-card">
-                  <span>Prom. por Pesaje</span>
-                  <strong>
-                    {pesajes.length > 0 
-                      ? (pesajes.reduce((sum, p) => sum + (p.peso_promedio || p.peso), 0) / pesajes.length).toFixed(1) 
-                      : 0} kg
-                  </strong>
-                </div>
+              {/* Estadísticas resumidas */}
+              <div style={{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(160px, 1fr))', gap:'12px', marginBottom:'20px'}}>
+                {[
+                  { label:'Total de pesajes', valor: pesajes.length, color:'#eff6ff', border:'#bfdbfe', texto:'#1d4ed8' },
+                  { label:'Último peso registrado', valor: ultimoPeso ? `${ultimoPeso.peso} kg` : '--', color:'#f0fdf4', border:'#86efac', texto:'#15803d' },
+                  { label:'Promedio por pesaje', valor: pesajes.length > 0 ? `${(pesajes.reduce((s,p) => s+(p.peso_promedio||p.peso),0)/pesajes.length).toFixed(1)} kg` : '--', color:'#fdf4ff', border:'#e9d5ff', texto:'#7e22ce' },
+                ].map((s,i) => (
+                  <div key={i} style={{background:s.color, border:`1.5px solid ${s.border}`, borderRadius:'14px', padding:'16px 18px'}}>
+                    <div style={{fontSize:'26px', fontWeight:'900', color:s.texto}}>{s.valor}</div>
+                    <div style={{fontSize:'13px', color:'#64748b', marginTop:'4px'}}>{s.label}</div>
+                  </div>
+                ))}
               </div>
 
-              {/* Tabla de pesajes */}
-              <div className="table-container">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Fecha</th>
-                      <th>Lote</th>
-                      <th>Sem. Lote</th>
-                      <th>Peso Total</th>
-                      <th>Cerdos Pesados</th>
-                      <th>Prom./Cerdo</th>
-                      <th>Notas</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pesajes.length === 0 ? (
-                      <tr>
-                        <td colSpan="8" className="sin-datos">No hay pesajes registrados</td>
-                      </tr>
-                    ) : (
-                      pesajes.map(pesaje => {
-                        // Calcular semana del lote para este pesaje
-                        const loteDelPesaje = lotes.find(l => String(l._id) === String(pesaje.lote?._id || pesaje.lote))
-                        let semLote = '-'
-                        if (loteDelPesaje) {
-                          const edadManual = loteDelPesaje.edad_dias_manual ?? null
-                          const refDate = edadManual !== null
-                            ? (loteDelPesaje.fecha_inicio ? new Date(loteDelPesaje.fecha_inicio) : null)
-                            : (loteDelPesaje.fecha_nacimiento ? new Date(loteDelPesaje.fecha_nacimiento) : (loteDelPesaje.fecha_inicio ? new Date(loteDelPesaje.fecha_inicio) : null))
-                          if (refDate) {
-                            const diasDesdeRef = Math.round((new Date(pesaje.createdAt) - refDate) / (1000 * 60 * 60 * 24))
-                            const diaLote = edadManual !== null ? (edadManual + diasDesdeRef) : diasDesdeRef
-                            const planSemPesaje = getPlanSemana(diaLote)
-                            semLote = planSemPesaje ? `Sem ${planSemPesaje.semana} (Día ${diaLote})` : `Sem ${Math.floor(diaLote / 7) + 1} (Día ${diaLote})`
-                          }
-                        }
-                        return (
-                        <tr key={pesaje._id}>
-                          <td>{formatearFecha(pesaje.createdAt)}</td>
-                          <td>{pesaje.lote?.nombre || 'Sin lote'}</td>
-                          <td><span style={{fontSize:'11px', background:'#f0fdf4', color:'#16a34a', border:'1px solid #86efac', borderRadius:'12px', padding:'2px 8px', fontWeight:'600'}}>{semLote}</span></td>
-                          <td><strong>{pesaje.peso} kg</strong></td>
-                          <td>{pesaje.cantidad_cerdos_pesados || 1}</td>
-                          <td>{pesaje.peso_promedio ? `${pesaje.peso_promedio.toFixed(1)} kg` : '-'}</td>
-                          <td>{pesaje.notas || '-'}</td>
-                          <td style={{display:'flex',gap:'4px'}}>
-                            <button className="btn-icon" title="Cambiar fecha" style={{color:'#2563eb'}} onClick={() => setEditFechaPesaje({ id: pesaje._id, fecha: pesaje.createdAt?.slice(0,10) })}>
-                              <Edit size={14} />
-                            </button>
-                            <button className="btn-icon btn-danger" onClick={() => eliminarPesaje(pesaje._id)}>
-                              <IconEliminar />
-                            </button>
-                          </td>
-                        </tr>
-                        )
-                      })
-                    )}
-                  </tbody>
-                </table>
+              {/* Lista de pesajes — tarjetas en lugar de tabla */}
+              <div style={{display:'flex', flexDirection:'column', gap:'10px'}}>
+                {pesajes.length === 0 ? (
+                  <div style={{textAlign:'center', padding:'40px', color:'#94a3b8', fontSize:'14px', background:'#f8fafc', borderRadius:'12px'}}>
+                    No hay pesajes registrados aún
+                  </div>
+                ) : pesajes.map(pesaje => {
+                  const loteDelPesaje = lotes.find(l => String(l._id) === String(pesaje.lote?._id || pesaje.lote))
+                  let semLote = '-'
+                  if (loteDelPesaje) {
+                    const edadManual = loteDelPesaje.edad_dias_manual ?? null
+                    const refDate = edadManual !== null
+                      ? (loteDelPesaje.fecha_inicio ? new Date(loteDelPesaje.fecha_inicio) : null)
+                      : (loteDelPesaje.fecha_nacimiento ? new Date(loteDelPesaje.fecha_nacimiento) : (loteDelPesaje.fecha_inicio ? new Date(loteDelPesaje.fecha_inicio) : null))
+                    if (refDate) {
+                      const diasDesdeRef = Math.round((new Date(pesaje.createdAt) - refDate) / (1000*60*60*24))
+                      const diaLote = edadManual !== null ? (edadManual + diasDesdeRef) : diasDesdeRef
+                      const planSemPesaje = getPlanSemana(diaLote)
+                      semLote = planSemPesaje ? `Semana ${planSemPesaje.semana}` : `Semana ${Math.floor(diaLote/7)+1}`
+                    }
+                  }
+                  const promPorCerdo = pesaje.peso_promedio || (pesaje.peso / (pesaje.cantidad_cerdos_pesados || 1))
+                  return (
+                    <div key={pesaje._id} style={{background:'#fff', border:'1.5px solid #e2e8f0', borderRadius:'14px', padding:'14px 18px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap'}}>
+                      {/* Fecha */}
+                      <div style={{minWidth:'90px', textAlign:'center'}}>
+                        <div style={{fontSize:'14px', fontWeight:'700', color:'#1e293b'}}>{formatearFecha(pesaje.createdAt)}</div>
+                        <div style={{fontSize:'11px', color:'#94a3b8', marginTop:'2px'}}>fecha</div>
+                      </div>
+                      {/* Lote y semana */}
+                      <div style={{flex:1, minWidth:'120px'}}>
+                        <div style={{fontSize:'15px', fontWeight:'700', color:'#1e293b'}}>{pesaje.lote?.nombre || 'Sin lote'}</div>
+                        <span style={{fontSize:'11px', background:'#f0fdf4', color:'#16a34a', border:'1px solid #86efac', borderRadius:'10px', padding:'2px 8px', fontWeight:'600'}}>{semLote}</span>
+                      </div>
+                      {/* Peso total */}
+                      <div style={{textAlign:'center', minWidth:'80px'}}>
+                        <div style={{fontSize:'22px', fontWeight:'900', color:'#7e22ce'}}>{pesaje.peso} <span style={{fontSize:'14px'}}>kg</span></div>
+                        <div style={{fontSize:'11px', color:'#94a3b8'}}>total</div>
+                      </div>
+                      {/* Cerdos */}
+                      <div style={{textAlign:'center', minWidth:'60px'}}>
+                        <div style={{fontSize:'18px', fontWeight:'800', color:'#1e293b'}}>{pesaje.cantidad_cerdos_pesados || 1}</div>
+                        <div style={{fontSize:'11px', color:'#94a3b8'}}>cerdos</div>
+                      </div>
+                      {/* Promedio */}
+                      <div style={{textAlign:'center', minWidth:'80px'}}>
+                        <div style={{fontSize:'18px', fontWeight:'800', color:'#15803d'}}>{promPorCerdo.toFixed(1)} <span style={{fontSize:'13px'}}>kg</span></div>
+                        <div style={{fontSize:'11px', color:'#94a3b8'}}>prom/cerdo</div>
+                      </div>
+                      {/* Notas + justificación */}
+                      {(pesaje.notas || pesaje.justificacion_perdida) && (
+                        <div style={{flex:2, minWidth:'120px', fontSize:'12px', color:'#64748b', fontStyle:'italic'}}>
+                          {pesaje.justificacion_perdida && <div style={{color:'#dc2626', fontWeight:'600', fontStyle:'normal', marginBottom:'2px'}}>⚠ {pesaje.justificacion_perdida}</div>}
+                          {pesaje.notas}
+                        </div>
+                      )}
+                      {/* Acciones */}
+                      <div style={{display:'flex', gap:'6px', flexShrink:0}}>
+                        <button title="Cambiar fecha" style={{background:'#eff6ff', border:'none', borderRadius:'8px', padding:'6px 10px', color:'#2563eb', cursor:'pointer', fontSize:'13px'}}
+                          onClick={() => setEditFechaPesaje({ id: pesaje._id, fecha: pesaje.createdAt?.slice(0,10) })}>
+                          <Edit size={14} />
+                        </button>
+                        <button style={{background:'#fef2f2', border:'none', borderRadius:'8px', padding:'6px 10px', color:'#dc2626', cursor:'pointer', fontSize:'13px'}}
+                          onClick={() => eliminarPesaje(pesaje._id)}>
+                          <IconEliminar />
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
 
               {/* Modal editar fecha pesaje */}
