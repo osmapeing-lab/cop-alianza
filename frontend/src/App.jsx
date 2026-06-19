@@ -222,17 +222,12 @@ const PLAN_ALIMENTACION = [
 const getPlanSemana = (edadDias) =>
   PLAN_ALIMENTACION.find(s => edadDias >= s.dia_inicio && edadDias <= s.dia_fin) || null
 
-// Determina la edad de entrada efectiva de un lote:
-// - Lote comprado con edad_dias_manual explícito → usa ese valor
-// - Lote con fecha_inicio − fecha_nacimiento > 7 días → infiere edad de compra
-// - Lote nacido en la granja → 0 (seguimiento desde nacimiento)
+// Determina la edad de entrada efectiva de un lote.
+// Solo lotes con edad_dias_manual explícito (comprados) usan ese valor.
+// Todos los demás (nacidos en granja) empiezan desde Sem 1 / Día 0.
 const getEdadEntradaLote = (lote) => {
   if (lote.edad_dias_manual !== null && lote.edad_dias_manual !== undefined) {
     return lote.edad_dias_manual
-  }
-  if (lote.fecha_nacimiento && lote.fecha_inicio) {
-    const diff = Math.round((new Date(lote.fecha_inicio) - new Date(lote.fecha_nacimiento)) / 86400000)
-    if (diff > 7) return diff
   }
   return 0
 }
@@ -3835,18 +3830,25 @@ const cargarHistoricoPesos = async () => {
       {lotesActivos.map((lote, i) => {
         const color = COLORES_LOTE[i % COLORES_LOTE.length]
         const edadManual = lote.edad_dias_manual ?? null
+        // Para lotes comprados: fecha_inicio como referencia (llegaron con X días)
+        // Para lotes nacidos: fecha_nacimiento como referencia (Día 0 = nacimiento)
         const refDate = edadManual !== null
           ? (lote.fecha_inicio ? new Date(lote.fecha_inicio) : null)
           : (lote.fecha_nacimiento ? new Date(lote.fecha_nacimiento) : (lote.fecha_inicio ? new Date(lote.fecha_inicio) : null))
 
         const porDia = {}
         if (refDate) {
-          pesajes.filter(p => String(p.lote?._id || p.lote) === String(lote._id) && p.peso_promedio)
+          pesajes
+            .filter(p => String(p.lote?._id || p.lote) === String(lote._id) && (p.peso > 0 || p.peso_promedio > 0))
             .forEach(p => {
-              const diasDesdeRef = Math.round((new Date(p.createdAt) - refDate) / (1000 * 60 * 60 * 24))
+              const promedio = p.peso_promedio || (p.peso / (p.cantidad_cerdos_pesados || 1))
+              if (!promedio || promedio <= 0) return
+              const fechaPesaje = new Date(p.fecha || p.createdAt)
+              const diasDesdeRef = Math.round((fechaPesaje - refDate) / (1000 * 60 * 60 * 24))
               const dia = edadManual !== null ? (edadManual + diasDesdeRef) : diasDesdeRef
+              if (dia < 0) return
               if (!porDia[dia]) porDia[dia] = []
-              porDia[dia].push(p.peso_promedio)
+              porDia[dia].push(promedio)
             })
         }
         const puntos = Object.entries(porDia).map(([dia, ps]) => ({
@@ -4234,9 +4236,8 @@ const cargarHistoricoPesos = async () => {
               <span className="stat-label">Peso Prom. por Cerdo</span>
               {(() => {
                 // Agrupar pesajes del lote por fecha (día), tomar el día más reciente
-                const lotePs = pesajes.filter(p => String(p.lote?._id || p.lote) === String(loteDetalle._id) && p.peso_promedio)
+                const lotePs = pesajes.filter(p => String(p.lote?._id || p.lote) === String(loteDetalle._id) && (p.peso > 0 || p.peso_promedio > 0))
                 if (lotePs.length === 0) return null
-                // Hallar la fecha del pesaje más reciente (por timestamp real, no por string de día)
                 const masRecientePs = lotePs.reduce((a, b) => new Date(a.createdAt) > new Date(b.createdAt) ? a : b)
                 const ultimaFecha = new Date(masRecientePs.createdAt).toDateString()
                 const delDia = lotePs.filter(p => new Date(p.createdAt).toDateString() === ultimaFecha)
@@ -4901,16 +4902,19 @@ const cargarHistoricoPesos = async () => {
               // Mapear pesajes a edad del cerdo, agrupando por día
               const pesajesLote = pesajes.filter(p => {
                 const loteId = p.lote?._id || p.lote
-                return String(loteId) === String(loteDetalle._id) && p.peso_promedio
+                return String(loteId) === String(loteDetalle._id) && (p.peso > 0 || p.peso_promedio > 0)
               })
               const pesajesPorDia = {}
               if (refDateLote) {
                 pesajesLote.forEach(p => {
-                  const fechaPesaje = new Date(p.createdAt)
+                  const promedio = p.peso_promedio || (p.peso / (p.cantidad_cerdos_pesados || 1))
+                  if (!promedio || promedio <= 0) return
+                  const fechaPesaje = new Date(p.fecha || p.createdAt)
                   const diasDesdeRef = Math.round((fechaPesaje - refDateLote) / (1000 * 60 * 60 * 24))
                   const dia = edadManual !== null ? (edadManual + diasDesdeRef) : diasDesdeRef
+                  if (dia < 0) return
                   if (!pesajesPorDia[dia]) pesajesPorDia[dia] = { pesos: [], mins: [], maxs: [] }
-                  pesajesPorDia[dia].pesos.push(p.peso_promedio)
+                  pesajesPorDia[dia].pesos.push(promedio)
                   if (p.peso_min != null) pesajesPorDia[dia].mins.push(p.peso_min)
                   if (p.peso_max != null) pesajesPorDia[dia].maxs.push(p.peso_max)
                 })
@@ -5089,7 +5093,7 @@ const cargarHistoricoPesos = async () => {
             const semanaEnFase = refSemana ? refSemana.semana : '—'
             const consumoRef = refSemana ? (refSemana.consumo_dia || `${refSemana.consumo_dia_min}-${refSemana.consumo_dia_max}`) : '—'
             // Rango de pesos: derivar del último día de pesajes (min/max explícito o de pesos individuales)
-            const lotePs = pesajes.filter(p => String(p.lote?._id || p.lote) === String(loteDetalle._id) && p.peso_promedio)
+            const lotePs = pesajes.filter(p => String(p.lote?._id || p.lote) === String(loteDetalle._id) && (p.peso > 0 || p.peso_promedio > 0))
             const masRecienteFinca = lotePs.length > 0 ? lotePs.reduce((a, b) => new Date(a.createdAt) > new Date(b.createdAt) ? a : b) : null
             const ultimaFechaFinca = masRecienteFinca ? new Date(masRecienteFinca.createdAt).toDateString() : null
             const delDiaFinca = ultimaFechaFinca ? lotePs.filter(p => new Date(p.createdAt).toDateString() === ultimaFechaFinca) : []
