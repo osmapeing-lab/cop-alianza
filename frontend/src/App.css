@@ -1959,18 +1959,22 @@ table td.sin-datos {
 
 .stat-card.ingresos {
   border-left-color: #22c55e;
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
 }
 
 .stat-card.cobrado {
-  border-left-color: #2d6a4f;
+  border-left-color: #3b82f6;
+  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
 }
 
 .stat-card.pendiente {
   border-left-color: #f59e0b;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
 }
 
 .stat-card.ventas {
-  border-left-color: #3b82f6;
+  border-left-color: #8b5cf6;
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
 }
 
 .stat-label {
@@ -4672,6 +4676,11 @@ table td.sin-datos {
   box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 
+.tab-btn.tab-resumen.activo { background: #eff6ff; color: #2563eb; box-shadow: 0 2px 8px rgba(37,99,235,0.15); border-bottom: 2px solid #3b82f6; }
+.tab-btn.tab-costos.activo  { background: #fff1f2; color: #dc2626; box-shadow: 0 2px 8px rgba(220,38,38,0.15);  border-bottom: 2px solid #ef4444; }
+.tab-btn.tab-ventas.activo  { background: #f0fdf4; color: #16a34a; box-shadow: 0 2px 8px rgba(22,163,74,0.15);  border-bottom: 2px solid #22c55e; }
+.tab-btn.tab-lote.activo    { background: #f5f3ff; color: #7c3aed; box-shadow: 0 2px 8px rgba(124,58,237,0.15); border-bottom: 2px solid #8b5cf6; }
+
 /* Tarjetas financieras */
 .finanzas-cards {
   display: grid;
@@ -4696,18 +4705,18 @@ table td.sin-datos {
 .fc-valor { display: block; font-size: 1.3rem; font-weight: 700; color: #1e293b; }
 .fc-pct { display: block; font-size: 0.8rem; font-weight: 600; }
 
-.finanza-card.ingresos { border-left: 4px solid #22c55e; }
+.finanza-card.ingresos { border-left: 4px solid #22c55e; background: linear-gradient(135deg, #f0fdf4 0%, #fff 60%); }
 .finanza-card.ingresos svg { color: #22c55e; }
-.finanza-card.gastos { border-left: 4px solid #ef4444; }
+.finanza-card.gastos { border-left: 4px solid #ef4444; background: linear-gradient(135deg, #fff1f2 0%, #fff 60%); }
 .finanza-card.gastos svg { color: #ef4444; }
-.finanza-card.balance.positivo { border-left: 4px solid #22c55e; }
-.finanza-card.balance.positivo svg { color: #22c55e; }
+.finanza-card.balance { border-left: 4px solid #8b5cf6; background: linear-gradient(135deg, #f5f3ff 0%, #fff 60%); }
+.finanza-card.balance svg { color: #8b5cf6; }
+.finanza-card.balance.positivo .fc-valor { color: #16a34a; }
+.finanza-card.balance.negativo .fc-valor { color: #dc2626; }
 .finanza-card.balance.positivo .fc-pct { color: #16a34a; }
-.finanza-card.balance.negativo { border-left: 4px solid #ef4444; }
-.finanza-card.balance.negativo svg { color: #ef4444; }
 .finanza-card.balance.negativo .fc-pct { color: #dc2626; }
-.finanza-card.ventas-count { border-left: 4px solid #3b82f6; }
-.finanza-card.ventas-count svg { color: #3b82f6; }
+.finanza-card.ventas-count { border-left: 4px solid #f59e0b; background: linear-gradient(135deg, #fffbeb 0%, #fff 60%); }
+.finanza-card.ventas-count svg { color: #f59e0b; }
 
 /* Desglose */
 .finanzas-desglose, .finanzas-comparativo {

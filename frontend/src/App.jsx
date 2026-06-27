@@ -5749,11 +5749,11 @@ const cargarHistoricoPesos = async () => {
 
               {/* Tabs de navegación */}
               <div className="finanzas-tabs">
-                <button className={`tab-btn ${tabFinanzas === 'resumen' ? 'activo' : ''}`} onClick={() => setTabFinanzas('resumen')}>Resumen</button>
-                <button className={`tab-btn ${tabFinanzas === 'costos' ? 'activo' : ''}`} onClick={() => setTabFinanzas('costos')}>Costos</button>
-                <button className={`tab-btn ${tabFinanzas === 'ventas' ? 'activo' : ''}`} onClick={() => setTabFinanzas('ventas')}>Ventas</button>
+                <button className={`tab-btn tab-resumen ${tabFinanzas === 'resumen' ? 'activo' : ''}`} onClick={() => setTabFinanzas('resumen')}>Resumen</button>
+                <button className={`tab-btn tab-costos ${tabFinanzas === 'costos' ? 'activo' : ''}`} onClick={() => setTabFinanzas('costos')}>Costos</button>
+                <button className={`tab-btn tab-ventas ${tabFinanzas === 'ventas' ? 'activo' : ''}`} onClick={() => setTabFinanzas('ventas')}>Ventas</button>
 {/* Tab Registros legado oculto */}
-                <button className={`tab-btn ${tabFinanzas === 'gastos-lote' ? 'activo' : ''}`} onClick={() => { setTabFinanzas('gastos-lote'); cargarLotes() }}>Por Lote</button>
+                <button className={`tab-btn tab-lote ${tabFinanzas === 'gastos-lote' ? 'activo' : ''}`} onClick={() => { setTabFinanzas('gastos-lote'); cargarLotes() }}>Por Lote</button>
               </div>
 
               {/* ── TAB: RESUMEN ── */}
@@ -6106,8 +6106,8 @@ const cargarHistoricoPesos = async () => {
                       const totalIngresos = ventas.reduce((s, v) => s + (v.total || 0), 0)
                       const balance = totalIngresos - totalGastos
                       return (
-                        <div style={{flex:'1', minWidth:'160px', padding:'14px', background: balance >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius:'10px', border:`1px solid ${balance >= 0 ? '#86efac' : '#fca5a5'}`}}>
-                          <div style={{fontSize:'12px', color:'#64748b'}}>Balance General</div>
+                        <div style={{flex:'1', minWidth:'160px', padding:'14px', background:'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)', borderRadius:'10px', border:'2px solid #8b5cf6'}}>
+                          <div style={{fontSize:'12px', color:'#7c3aed', fontWeight:'700', letterSpacing:'0.3px'}}>Balance General</div>
                           <div style={{fontSize:'22px', fontWeight:'800', color: balance >= 0 ? '#16a34a' : '#dc2626'}}>
                             {formatearDinero(balance)}
                           </div>
@@ -6143,8 +6143,8 @@ const cargarHistoricoPesos = async () => {
                                 <span style={{fontSize:'13px', fontWeight:'700', color: balance >= 0 ? '#16a34a' : '#dc2626', background: balance >= 0 ? '#dcfce7' : '#fee2e2', padding:'4px 14px', borderRadius:'8px'}}>
                                   Balance: {formatearDinero(balance)}
                                 </span>
-                                <button className="btn-sm btn-primary" onClick={() => { setPagina('lotes'); verDetalleLote(lote._id) }}>
-                                  Ver Detalle
+                                <button className="btn-sm btn-primary" style={{background:'#22c55e', borderColor:'#16a34a'}} onClick={() => { setGastoInlineLote(gastoInlineLote === lote._id ? null : lote._id); setGastoInlineForm({ descripcion:'', monto:'', categoria:'otro' }) }}>
+                                  {gastoInlineLote === lote._id ? '✕ Cancelar' : '+ Registrar Gasto'}
                                 </button>
                               </div>
                             </div>
@@ -6211,9 +6211,6 @@ const cargarHistoricoPesos = async () => {
 
                             {/* Botones acción rápida */}
                             <div style={{padding:'10px 18px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'8px', flexWrap:'wrap'}}>
-                              <button className="btn-sm btn-primary" onClick={() => { setGastoInlineLote(gastoInlineLote === lote._id ? null : lote._id); setGastoInlineForm({ descripcion:'', monto:'', categoria:'otro' }) }}>
-                                {gastoInlineLote === lote._id ? '✕ Cancelar' : '+ Registrar Gasto'}
-                              </button>
                               <button className="btn-sm btn-outline" onClick={() => { setPagina('lotes'); verDetalleLote(lote._id) }}>
                                 Ver Detalle completo →
                               </button>
