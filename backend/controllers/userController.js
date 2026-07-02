@@ -15,24 +15,26 @@ const axios = require('axios');
 // ═══════════════════════════════════════════════════════════════════════
 exports.register = async (req, res) => {
   try {
-    const { usuario, correo, password, rol, granja_id } = req.body;
-    
+    const { usuario, correo, password, granja_id } = req.body;
+
     // Verificar si ya existe
     const existe = await User.findOne({ $or: [{ usuario }, { correo }] });
     if (existe) {
       return res.status(400).json({ mensaje: 'Usuario o correo ya existe' });
     }
-    
+
     // Hash de contraseña
     const hashedPassword = await bcrypt.hash(password, 12);
-    
-    // Crear usuario
-    const user = new User({ 
-      usuario, 
-      correo, 
-      password: hashedPassword, 
-      rol, 
-      granja_id 
+
+    // Crear usuario — esta ruta es pública, así que el rol nunca se toma
+    // del body: siempre se crea como 'cliente'. Roles superiores solo se
+    // asignan desde el panel de administración autenticado.
+    const user = new User({
+      usuario,
+      correo,
+      password: hashedPassword,
+      rol: 'cliente',
+      granja_id
     });
     await user.save();
     

@@ -67,6 +67,35 @@ exports.toggleMotorbomb = async (req, res) => {
     // Ingeniero/superadmin puede forzar el encendido enviando { forzar: true }
     const forzar = req.body.forzar === true;
 
+    // ──────────────────────────────────────────────────────────────────
+    // RESTRICCIÓN NOCTURNA (TODAS LAS BOMBAS)
+    // Ninguna bomba puede encenderse entre 6:00pm y 6:00am (hora Colombia)
+    // ──────────────────────────────────────────────────────────────────
+    if (vaAEncender && !forzar) {
+      const ahoraColombiaNoche = new Date(
+        new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' })
+      );
+      const horaActualNoche = ahoraColombiaNoche.getHours();
+      const minActualNoche  = ahoraColombiaNoche.getMinutes();
+      const esHorarioNocturno = horaActualNoche >= 18 || horaActualNoche < 6;
+
+      if (esHorarioNocturno) {
+        const horaStrNoche = `${String(horaActualNoche).padStart(2, '0')}:${String(minActualNoche).padStart(2, '0')}`;
+
+        const alertaNoche = new Alert({
+          tipo: 'alerta',
+          mensaje: `🌙 Intento de encender "${motorbomb.nombre}" en horario nocturno no permitido (${horaStrNoche} hora Colombia)`
+        });
+        await alertaNoche.save();
+
+        return res.status(400).json({
+          mensaje: 'Horario no permitido. Las bombas no pueden encenderse entre las 6:00pm y las 6:00am.',
+          hora_actual: horaStrNoche,
+          codigo: 'HORARIO_NOCTURNO_NO_PERMITIDO'
+        });
+      }
+    }
+
     if (esBomba1 && vaAEncender && !forzar) {
 
       // ── VALIDACIÓN 1: Horario permitido ─────────────────────────────
@@ -204,8 +233,33 @@ exports.createMotorbomb = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.updateMotorbomb = async (req, res) => {
   try {
-    const motorbomb = await Motorbomb.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const motorbomb = await Motorbomb.findById(req.params.id);
     if (!motorbomb) return res.status(404).json({ mensaje: 'Motorbomba no encontrada' });
+
+    // Evitar que esta ruta genérica se use para saltarse la restricción
+    // nocturna del /toggle: si el body intenta encender la bomba
+    // (estado true→false) fuera de 6am-6pm, se rechaza igual.
+    const vaAEncender = motorbomb.estado === true && req.body.estado === false;
+    const forzar = req.body.forzar === true;
+
+    if (vaAEncender && !forzar) {
+      const ahoraColombia = new Date(
+        new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' })
+      );
+      const horaActual = ahoraColombia.getHours();
+      const esHorarioNocturno = horaActual >= 18 || horaActual < 6;
+
+      if (esHorarioNocturno) {
+        return res.status(400).json({
+          mensaje: 'Horario no permitido. Las bombas no pueden encenderse entre las 6:00pm y las 6:00am.',
+          codigo: 'HORARIO_NOCTURNO_NO_PERMITIDO'
+        });
+      }
+    }
+
+    Object.assign(motorbomb, req.body);
+    motorbomb.fecha_cambio = Date.now();
+    await motorbomb.save();
     res.json(motorbomb);
   } catch (error) {
     res.status(400).json({ mensaje: error.message });
