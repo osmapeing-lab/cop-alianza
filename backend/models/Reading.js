@@ -8,7 +8,17 @@ const readingSchema = new mongoose.Schema({
   tipo: {
     type: String,
     required: true,
-    enum: ['temp_porqueriza', 'humedad_porqueriza', 'flujo_agua', 'peso', 'volumen_diario', 'caudal_agua']
+    // 'temp_clima_gps': temperatura obtenida por GPS + API de clima externa
+    // desde la app móvil (sin sensor físico) — ver plan de migración móvil §3.
+    enum: [
+      'temp_porqueriza',
+      'humedad_porqueriza',
+      'flujo_agua',
+      'peso',
+      'volumen_diario',
+      'caudal_agua',
+      'temp_clima_gps'
+    ]
   },
   valor: {
     type: Number,

@@ -5,6 +5,10 @@ const sessionSchema = new mongoose.Schema({
   usuario: String,
   ip: String,
   dispositivo: { type: String, default: 'Desconocido' },
+  // 'web' (default) o 'mobile' — informativo; el límite de dispositivos
+  // simultáneos ahora depende del plan del usuario, no de la plataforma
+  // (ver userController.login).
+  plataforma: { type: String, enum: ['web', 'mobile'], default: 'web' },
   token: String,
   fecha_entrada: { type: Date, default: Date.now },
   fecha_salida: Date,

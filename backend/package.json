@@ -18,11 +18,13 @@
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "firebase-admin": "^13.6.1",
+    "googleapis": "^173.0.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.1.2",
     "nodemailer": "^7.0.12",
     "resend": "^6.7.0",
     "socket.io": "^4.8.3",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "xml2js": "^0.6.2"
   }
 }

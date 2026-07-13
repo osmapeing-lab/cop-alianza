@@ -36,6 +36,7 @@ const inventarioRoutes = require('./routes/inventario');
 const inventarioAlimentoRoutes = require('./routes/inventarioAlimento');
 const fcmRoutes = require('./routes/fcm');
 const pushRoutes = require('./routes/push');
+const mercadoRoutes = require('./routes/mercado');
 
   // ═══════════════════════════════════════════════════════════════════════
   // INICIALIZAR EXPRESS Y WEBSOCKET
@@ -96,6 +97,7 @@ app.use('/api/inventario', inventarioRoutes);
 app.use('/api/inventario-alimento', inventarioAlimentoRoutes);
 app.use('/api/fcm', fcmRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api/mercado', mercadoRoutes);
 
   // ═══════════════════════════════════════════════════════════════════════
   // RUTA RAÍZ (Información de la API)
