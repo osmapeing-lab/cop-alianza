@@ -1513,6 +1513,7 @@ const [historicoTemperatura, setHistoricoTemperatura] = useState([])
 const [historicoAgua, setHistoricoAgua] = useState([])
 const [periodoAgua, setPeriodoAgua] = useState('semanal')
 const periodoAguaRef = useRef('semanal')
+const [promedioAgua, setPromedioAgua] = useState({ semanal: 0, mensual: 0 })
 const [periodoTemp, setPeriodoTemp] = useState('diario')
 const periodoTempRef = useRef('diario')
 const [historicoContable, setHistoricoContable] = useState([])
@@ -1899,6 +1900,7 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
   // Cargar datos para gráficas después de tener los datos base
   cargarHistoricoTemperatura()
   cargarHistoricoAgua()
+  cargarPromedioAgua()
   cargarHistoricoContable()
   // cargarHistoricoPesos se llama desde useEffect cuando pesajes cambia
   
@@ -2949,6 +2951,28 @@ const cargarHistoricoAgua = async (periodo) => {
     setHistoricoAgua([])
   }
 }
+const cargarPromedioAgua = async () => {
+  try {
+    const res = await axios.get(`${API_URL}/api/esp/flujo/historico?dias=30`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+
+    if (res.data && res.data.length > 0) {
+      const ordenados = [...res.data].sort((a, b) => new Date(a.fecha) - new Date(b.fecha))
+      const promedio = (arr) => arr.length > 0 ? arr.reduce((s, d) => s + (d.litros || 0), 0) / arr.length : 0
+
+      setPromedioAgua({
+        semanal: promedio(ordenados.slice(-7)),
+        mensual: promedio(ordenados.slice(-30))
+      })
+    } else {
+      setPromedioAgua({ semanal: 0, mensual: 0 })
+    }
+  } catch (error) {
+    console.error('Error cargando promedio agua:', error)
+    setPromedioAgua({ semanal: 0, mensual: 0 })
+  }
+}
 
 const cargarHistoricoContable = async () => {
   try {
@@ -3756,6 +3780,8 @@ const cargarHistoricoPesos = async () => {
               </div>
               <div style={{fontSize:'36px', fontWeight:'900', color:'#15803d', lineHeight:1}}>{aguaHoy.toFixed(0)}<span style={{fontSize:'18px'}}> L</span></div>
               <div style={{marginTop:'6px', fontSize:'11px', color:'#64748b'}}>Caudal: <strong>{flujo.caudal || 0} L/min</strong></div>
+              <div style={{marginTop:'4px', fontSize:'11px', color:'#64748b'}}>Prom. semanal: <strong>{promedioAgua.semanal.toFixed(0)} L/día</strong></div>
+              <div style={{marginTop:'2px', fontSize:'11px', color:'#64748b'}}>Prom. mensual: <strong>{promedioAgua.mensual.toFixed(0)} L/día</strong></div>
               <div style={{marginTop:'4px', display:'flex', gap:'4px', flexWrap:'wrap'}}>
                 <div className="periodo-selector" style={{marginTop:'4px', gap:'4px'}}>
                   <button className={`periodo-btn ${periodoAgua==='diario'?'activo':''}`} style={{fontSize:'10px',padding:'2px 6px'}} onClick={()=>{setPeriodoAgua('diario');periodoAguaRef.current='diario';cargarHistoricoAgua('diario')}}>Hoy</button>
@@ -3765,7 +3791,7 @@ const cargarHistoricoPesos = async () => {
               </div>
               {(user?.rol === 'superadmin' || user?.rol === 'ingeniero') && (
                 <button style={{marginTop:'6px',background:'none',border:'1px solid #86efac',borderRadius:'6px',padding:'2px 8px',fontSize:'10px',color:'#15803d',cursor:'pointer'}}
-                  onClick={async()=>{const v=window.prompt('Corregir litros de hoy:');if(!v)return;const l=parseFloat(v);if(isNaN(l)||l<0)return;try{await axios.put(`${API_URL}/api/esp/flujo/corregir`,{litros:l},{headers:{Authorization:`Bearer ${token}`}});cargarHistoricoAgua(periodoAgua)}catch(e){alert(e.message)}}}>
+                  onClick={async()=>{const v=window.prompt('Corregir litros de hoy:');if(!v)return;const l=parseFloat(v);if(isNaN(l)||l<0)return;try{await axios.put(`${API_URL}/api/esp/flujo/corregir`,{litros:l},{headers:{Authorization:`Bearer ${token}`}});cargarHistoricoAgua(periodoAgua);cargarPromedioAgua()}catch(e){alert(e.message)}}}>
                   Corregir hoy
                 </button>
               )}
