@@ -107,22 +107,20 @@ exports.login = async (req, res) => {
     // valor (o ausencia del campo) preserva el comportamiento actual de la web.
     const plataforma = req.body.plataforma === 'mobile' ? 'mobile' : 'web';
 
-    if (plataforma === 'mobile') {
-      // App móvil: no hay reCAPTCHA v2 nativo. Se verifica en su lugar un
-      // token de Firebase App Check (ver utils/appCheckService.js). Si el
-      // servidor no tiene App Check configurado, se deja pasar sin bloquear
-      // el login — mismo criterio que ya usa reCAPTCHA (solo exige si
-      // RECAPTCHA_SECRET está seteado).
-      if (appCheckConfigurado() && !forzar) {
-        const valido = await verificarAppCheckToken(appCheckToken);
-        if (!valido) {
-          return res.status(400).json({
-            mensaje: 'No se pudo verificar la app. Actualiza a la última versión e intenta de nuevo.'
-          });
-        }
+    if (plataforma === 'mobile' && appCheckConfigurado() && !forzar) {
+      // Firebase App Check real (ver utils/appCheckService.js) — solo se
+      // exige cuando el servidor lo activa explícitamente con
+      // APP_CHECK_ENFORCE=true, una vez la app ya sepa generar el token.
+      const valido = await verificarAppCheckToken(appCheckToken);
+      if (!valido) {
+        return res.status(400).json({
+          mensaje: 'No se pudo verificar la app. Actualiza a la última versión e intenta de nuevo.'
+        });
       }
     } else if (process.env.RECAPTCHA_SECRET && !forzar) {
-      // Verificar reCAPTCHA (solo web)
+      // reCAPTCHA v2 — mismo checkbox que la web, embebido en un WebView
+      // dentro de la app para el login móvil (ver LoginScreen/RecaptchaScreen
+      // en Flutter). Se usa aquí también mientras App Check no esté activo.
       if (!captchaToken) {
         return res.status(400).json({ mensaje: 'Completa el captcha' });
       }

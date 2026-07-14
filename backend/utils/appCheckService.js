@@ -11,6 +11,16 @@
  * Reutiliza las mismas credenciales de servicio que fcmService.js
  * (FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL / FIREBASE_PRIVATE_KEY) —
  * mismo proyecto de Firebase, sin configuración adicional.
+ *
+ * IMPORTANTE: esas credenciales ya existían en el servidor para FCM (push)
+ * antes de que la app móvil implementara App Check de verdad. Si
+ * `appCheckConfigurado()` dependiera solo de que existan esas credenciales,
+ * el login móvil empezaría a exigir un token que la app todavía no sabe
+ * generar (el SDK de App Check no está integrado del lado de Flutter) y
+ * nadie podría iniciar sesión. Por eso la exigencia requiere ADEMÁS la
+ * bandera explícita `APP_CHECK_ENFORCE=true` — actívala en las variables
+ * de entorno del servidor únicamente cuando la app ya envíe `appCheckToken`
+ * de verdad.
  * ═══════════════════════════════════════════════════════════════════════
  */
 
@@ -61,4 +71,4 @@ exports.verificarAppCheckToken = async (token) => {
   }
 };
 
-exports.appCheckConfigurado = () => initFirebase();
+exports.appCheckConfigurado = () => process.env.APP_CHECK_ENFORCE === 'true' && initFirebase();
