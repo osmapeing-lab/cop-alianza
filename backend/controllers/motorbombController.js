@@ -26,13 +26,21 @@ const Config          = require('../models/Config');
 const WaterConsumption = require('../models/WaterConsumption');
 const { notificarBomba } = require('../utils/notificationManager');
 
+async function motorbombDeLaGranja(id, granjaId) {
+  const motorbomb = await Motorbomb.findById(id);
+  if (!motorbomb || String(motorbomb.granja) !== String(granjaId)) {
+    return null;
+  }
+  return motorbomb;
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // OBTENER TODAS LAS MOTOBOMBAS
 // GET /api/motorbombs
 // ═══════════════════════════════════════════════════════════════════════
 exports.getAllMotorbombs = async (req, res) => {
   try {
-    const motorbombs = await Motorbomb.find();
+    const motorbombs = await Motorbomb.find({ granja: req.user.granja_id });
     res.json(motorbombs);
   } catch (error) {
     res.status(500).json({ mensaje: error.message });
@@ -46,13 +54,13 @@ exports.getAllMotorbombs = async (req, res) => {
 exports.toggleMotorbomb = async (req, res) => {
   try {
     const { id } = req.params;
-    const motorbomb = await Motorbomb.findById(id);
+    const motorbomb = await motorbombDeLaGranja(id, req.user.granja_id);
 
     if (!motorbomb) {
       return res.status(404).json({ mensaje: 'Motorbomba no encontrada' });
     }
 
-    const config = await Config.findOne();
+    const config = await Config.findOne({ granja_id: req.user.granja_id });
 
     // ──────────────────────────────────────────────────────────────────
     // VALIDACIONES SOLO PARA BOMBA 1 (MB001) AL ENCENDER
@@ -144,7 +152,8 @@ exports.toggleMotorbomb = async (req, res) => {
 
       const consumoHoy = await WaterConsumption.findOne({
         fecha: { $gte: hoy },
-        tipo: 'diario'
+        tipo: 'diario',
+        granja_id: req.user.granja_id
       });
 
       const limite = config?.limite_consumo_bomba_1 ?? 600;
@@ -219,7 +228,7 @@ exports.toggleMotorbomb = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.createMotorbomb = async (req, res) => {
   try {
-    const motorbomb = new Motorbomb(req.body);
+    const motorbomb = new Motorbomb({ ...req.body, granja: req.user.granja_id });
     await motorbomb.save();
     res.status(201).json(motorbomb);
   } catch (error) {
@@ -233,8 +242,10 @@ exports.createMotorbomb = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.updateMotorbomb = async (req, res) => {
   try {
-    const motorbomb = await Motorbomb.findById(req.params.id);
+    const motorbomb = await motorbombDeLaGranja(req.params.id, req.user.granja_id);
     if (!motorbomb) return res.status(404).json({ mensaje: 'Motorbomba no encontrada' });
+
+    delete req.body.granja;
 
     // Evitar que esta ruta genérica se use para saltarse la restricción
     // nocturna del /toggle: si el body intenta encender la bomba
@@ -272,8 +283,9 @@ exports.updateMotorbomb = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.deleteMotorbomb = async (req, res) => {
   try {
-    const motorbomb = await Motorbomb.findByIdAndDelete(req.params.id);
+    const motorbomb = await motorbombDeLaGranja(req.params.id, req.user.granja_id);
     if (!motorbomb) return res.status(404).json({ mensaje: 'Motorbomba no encontrada' });
+    await Motorbomb.findByIdAndDelete(req.params.id);
     res.json({ mensaje: 'Motorbomba eliminada' });
   } catch (error) {
     res.status(400).json({ mensaje: error.message });
@@ -286,7 +298,7 @@ exports.deleteMotorbomb = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.getMotorbombStatus = async (req, res) => {
   try {
-    const motorbombs = await Motorbomb.find();
+    const motorbombs = await Motorbomb.find({ granja: req.user.granja_id });
     const status = {};
     motorbombs.forEach(b => { status[b.codigo_bomba] = b.estado; });
     res.json(status);

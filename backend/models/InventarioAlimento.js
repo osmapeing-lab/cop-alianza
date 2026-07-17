@@ -7,6 +7,13 @@
 const mongoose = require('mongoose');
 
 const inventarioAlimentoSchema = new mongoose.Schema({
+  // Granja dueña de este ítem de inventario — aísla los datos entre
+  // distintos clientes de la app (ver middleware/auth.js).
+  granja: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Farm'
+  },
+
   // Tipo de alimento
   nombre: {
     type: String,
@@ -165,8 +172,8 @@ inventarioAlimentoSchema.methods.registrarSalida = async function(bultos, loteId
 };
 
 // Método estático para obtener resumen
-inventarioAlimentoSchema.statics.getResumen = async function() {
-  const inventarios = await this.find({ activo: true });
+inventarioAlimentoSchema.statics.getResumen = async function(granjaId) {
+  const inventarios = await this.find({ activo: true, granja: granjaId });
   
   let totalBultos = 0;
   let totalKg = 0;

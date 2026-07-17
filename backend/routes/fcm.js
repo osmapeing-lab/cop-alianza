@@ -14,17 +14,21 @@ const express   = require('express');
 const router    = express.Router();
 const FCMToken  = require('../models/FCMToken');
 const { enviarNotificacion, verificarConfiguracion } = require('../utils/fcmService');
+const { verificarToken } = require('../middleware/auth');
 
 // Registrar token del dispositivo Android
-// La app Android llama esto al iniciar sesión o al iniciar la app
-router.post('/token', async (req, res) => {
+// La app Android llama esto al iniciar sesión o al iniciar la app.
+// Autenticado: `usuario_id` se toma de req.user, nunca del body, para poder
+// dirigir notificaciones a un usuario específico con confianza (ver
+// utils/notificationManager.js verificarPesajeSemanal).
+router.post('/token', verificarToken, async (req, res) => {
   try {
     const { token, dispositivo, usuario } = req.body;
     if (!token) return res.status(400).json({ mensaje: 'Token FCM requerido' });
 
     await FCMToken.findOneAndUpdate(
       { token },
-      { token, dispositivo: dispositivo || 'android', usuario: usuario || '', activo: true },
+      { token, dispositivo: dispositivo || 'android', usuario: usuario || '', usuario_id: req.user.id, activo: true },
       { upsert: true, new: true }
     );
     console.log(`[FCM] Token registrado: ${token.slice(-12)} (${dispositivo || 'android'})`);
@@ -35,7 +39,7 @@ router.post('/token', async (req, res) => {
 });
 
 // Eliminar token (al cerrar sesión en la app Android)
-router.delete('/token', async (req, res) => {
+router.delete('/token', verificarToken, async (req, res) => {
   try {
     const { token } = req.body;
     if (!token) return res.status(400).json({ mensaje: 'Token requerido' });

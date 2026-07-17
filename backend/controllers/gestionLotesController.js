@@ -61,9 +61,21 @@ async function repararCantidadCerdos(lote) {
   }
 }
 
+// Busca un lote y verifica que pertenezca a la granja del usuario que hace
+// la petición — sin esto, cualquiera podría leer/editar/borrar el lote de
+// otro cliente adivinando o reutilizando un id.
+async function loteDeLaGranja(loteId, granjaId) {
+  const lote = await Lote.findById(loteId);
+  if (!lote) return { lote: null, error: 404, mensaje: 'Lote no encontrado' };
+  if (String(lote.granja) !== String(granjaId)) {
+    return { lote: null, error: 404, mensaje: 'Lote no encontrado' };
+  }
+  return { lote, error: null };
+}
+
 exports.getLotes = async (req, res) => {
   try {
-    const lotes = await Lote.find().sort({ createdAt: -1 });
+    const lotes = await Lote.find({ granja: req.user.granja_id }).sort({ createdAt: -1 });
     await Promise.all(lotes.map(l => repararCantidadCerdos(l)));
     res.json(lotes);
   } catch (error) {
@@ -73,7 +85,7 @@ exports.getLotes = async (req, res) => {
 
 exports.getLotesActivos = async (req, res) => {
   try {
-    const lotes = await Lote.find({ activo: true }).sort({ createdAt: -1 });
+    const lotes = await Lote.find({ activo: true, granja: req.user.granja_id }).sort({ createdAt: -1 });
     await Promise.all(lotes.map(l => repararCantidadCerdos(l)));
     res.json(lotes);
   } catch (error) {
@@ -83,10 +95,8 @@ exports.getLotesActivos = async (req, res) => {
 
 exports.getLote = async (req, res) => {
   try {
-    const lote = await Lote.findById(req.params.id);
-    if (!lote) {
-      return res.status(404).json({ mensaje: 'Lote no encontrado' });
-    }
+    const { lote, error, mensaje } = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (error) return res.status(error).json({ mensaje });
     await repararCantidadCerdos(lote);
     res.json(lote.toObject({ virtuals: true }));
   } catch (error) {
@@ -96,7 +106,7 @@ exports.getLote = async (req, res) => {
 
 exports.createLote = async (req, res) => {
   try {
-    const lote = new Lote(req.body);
+    const lote = new Lote({ ...req.body, granja: req.user.granja_id });
     await lote.save();
     res.status(201).json(lote.toObject({ virtuals: true }));
   } catch (error) {
@@ -106,10 +116,11 @@ exports.createLote = async (req, res) => {
 
 exports.updateLote = async (req, res) => {
   try {
-    const lote = await Lote.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!lote) {
-      return res.status(404).json({ mensaje: 'Lote no encontrado' });
-    }
+    const { error, mensaje } = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (error) return res.status(error).json({ mensaje });
+    // No se permite mover un lote a otra granja desde el body.
+    const { granja, ...datos } = req.body;
+    const lote = await Lote.findByIdAndUpdate(req.params.id, datos, { new: true });
     res.json(lote.toObject({ virtuals: true }));
   } catch (error) {
     res.status(400).json({ mensaje: error.message });
@@ -118,10 +129,9 @@ exports.updateLote = async (req, res) => {
 
 exports.deleteLote = async (req, res) => {
   try {
-    const lote = await Lote.findByIdAndDelete(req.params.id);
-    if (!lote) {
-      return res.status(404).json({ mensaje: 'Lote no encontrado' });
-    }
+    const { error, mensaje } = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (error) return res.status(error).json({ mensaje });
+    await Lote.findByIdAndDelete(req.params.id);
     await AlimentacionLote.deleteMany({ lote: req.params.id });
     res.json({ mensaje: 'Lote eliminado' });
   } catch (error) {
@@ -131,10 +141,8 @@ exports.deleteLote = async (req, res) => {
 
 exports.finalizarLote = async (req, res) => {
   try {
-    const lote = await Lote.findById(req.params.id);
-    if (!lote) {
-      return res.status(404).json({ mensaje: 'Lote no encontrado' });
-    }
+    const { lote, error, mensaje } = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (error) return res.status(error).json({ mensaje });
     await lote.finalizar();
     res.json(lote.toObject({ virtuals: true }));
   } catch (error) {
@@ -166,6 +174,9 @@ exports.registrarAlimentacion = async (req, res) => {
       return res.status(400).json({ mensaje: 'lote, cantidad_kg y precio_kg son requeridos' });
     }
 
+    const propio = await loteDeLaGranja(lote, req.user.granja_id);
+    if (propio.error) return res.status(propio.error).json({ mensaje: propio.mensaje });
+
     const alimentacion = new AlimentacionLote({
       lote,
       tipo_alimento: tipo_alimento || 'engorde',
@@ -195,6 +206,8 @@ exports.registrarAlimentacion = async (req, res) => {
 
 exports.getAlimentacionLote = async (req, res) => {
   try {
+    const propio = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (propio.error) return res.status(propio.error).json({ mensaje: propio.mensaje });
     const limite = parseInt(req.query.limite) || 30;
     const alimentacion = await AlimentacionLote.find({ lote: req.params.id })
       .sort({ fecha: -1 })
@@ -208,10 +221,16 @@ exports.getAlimentacionLote = async (req, res) => {
 
 exports.eliminarAlimentacion = async (req, res) => {
   try {
-    const alimentacion = await AlimentacionLote.findByIdAndDelete(req.params.alimentacionId);
-    if (!alimentacion) {
+    const registro = await AlimentacionLote.findById(req.params.alimentacionId);
+    if (!registro) {
       return res.status(404).json({ mensaje: 'Registro de alimentación no encontrado' });
     }
+    const propio = await loteDeLaGranja(registro.lote, req.user.granja_id);
+    if (propio.error) return res.status(propio.error).json({ mensaje: propio.mensaje });
+    // findByIdAndDelete (no .deleteOne() del documento) porque el modelo
+    // solo define el hook de limpieza del Costo asociado en
+    // post('findOneAndDelete'), no en post('deleteOne') de documento.
+    await AlimentacionLote.findByIdAndDelete(req.params.alimentacionId);
     res.json({ mensaje: 'Alimentación eliminada y costo asociado también' });
   } catch (error) {
     res.status(500).json({ mensaje: error.message });
@@ -237,10 +256,9 @@ exports.registrarGastoSemanal = async (req, res) => {
       return res.status(400).json({ mensaje: 'monto es requerido y debe ser mayor a 0' });
     }
 
-    const lote = await Lote.findById(req.params.id);
-    if (!lote) {
-      return res.status(404).json({ mensaje: 'Lote no encontrado' });
-    }
+    const propio = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (propio.error) return res.status(propio.error).json({ mensaje: propio.mensaje });
+    const lote = propio.lote;
 
     if (!lote.activo) {
       return res.status(400).json({ mensaje: 'No se pueden registrar gastos en un lote finalizado' });
@@ -282,6 +300,7 @@ exports.registrarGastoSemanal = async (req, res) => {
       precio_unitario: monto,
       total:           monto,
       lote:            req.params.id,
+      granja:          req.user.granja_id,
       fecha:           ahora,
       estado:          'registrado',
       metodo_pago:     'efectivo'
@@ -312,12 +331,11 @@ exports.registrarGastoSemanal = async (req, res) => {
  */
 exports.getGastosSemanales = async (req, res) => {
   try {
+    const propio = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (propio.error) return res.status(propio.error).json({ mensaje: propio.mensaje });
+
     const lote = await Lote.findById(req.params.id)
       .populate('gastos_semanales.registrado_por', 'usuario');
-
-    if (!lote) {
-      return res.status(404).json({ mensaje: 'Lote no encontrado' });
-    }
 
     const gastos = [...lote.gastos_semanales].sort(
       (a, b) => new Date(b.fecha) - new Date(a.fecha)
@@ -338,10 +356,9 @@ exports.getGastosSemanales = async (req, res) => {
  */
 exports.eliminarGastoSemanal = async (req, res) => {
   try {
-    const lote = await Lote.findById(req.params.id);
-    if (!lote) {
-      return res.status(404).json({ mensaje: 'Lote no encontrado' });
-    }
+    const propio = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (propio.error) return res.status(propio.error).json({ mensaje: propio.mensaje });
+    const lote = propio.lote;
 
     const idx = lote.gastos_semanales.findIndex(
       g => g._id.toString() === req.params.gastoId
@@ -400,9 +417,13 @@ exports.registrarAlimentacionConInventario = async (req, res) => {
       InventarioAlimento.findById(inventario_id)
     ]);
 
-    if (!lote)        return res.status(404).json({ mensaje: 'Lote no encontrado' });
+    if (!lote || String(lote.granja) !== String(req.user.granja_id)) {
+      return res.status(404).json({ mensaje: 'Lote no encontrado' });
+    }
     if (!lote.activo) return res.status(400).json({ mensaje: 'No se puede registrar en un lote finalizado' });
-    if (!inventario)  return res.status(404).json({ mensaje: 'Producto de inventario no encontrado' });
+    if (!inventario || String(inventario.granja) !== String(req.user.granja_id)) {
+      return res.status(404).json({ mensaje: 'Producto de inventario no encontrado' });
+    }
 
     // ── Validar unicidad semanal (una carga por semana por lote) ──────────
     const semanaActual = getSemanaISO();
@@ -516,8 +537,8 @@ exports.registrarConsumoHistorico = async (req, res) => {
       return res.status(400).json({ mensaje: 'semana_iso debe tener formato YYYY-WNN (ej: 2026-W08)' });
     }
 
-    const lote = await Lote.findById(lote_id);
-    if (!lote) return res.status(404).json({ mensaje: 'Lote no encontrado' });
+    const propio = await loteDeLaGranja(lote_id, req.user.granja_id);
+    if (propio.error) return res.status(propio.error).json({ mensaje: propio.mensaje });
 
     // Verificar si ya existe registro para esa semana
     const existente = await AlimentacionLote.findOne({ lote: lote_id, semana_iso });
@@ -561,10 +582,9 @@ exports.registrarConsumoHistorico = async (req, res) => {
 
 exports.getResumenLote = async (req, res) => {
   try {
-    const lote = await Lote.findById(req.params.id);
-    if (!lote) {
-      return res.status(404).json({ mensaje: 'Lote no encontrado' });
-    }
+    const propio = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (propio.error) return res.status(propio.error).json({ mensaje: propio.mensaje });
+    const lote = propio.lote;
 
     const pesajes      = await Weighing.find({ lote: req.params.id }).sort({ createdAt: -1 });
     const contabilidad = await Contabilidad.find({ lote: req.params.id }).sort({ fecha: -1 });
@@ -610,6 +630,8 @@ exports.getResumenLote = async (req, res) => {
 
 exports.getGraficaPeso = async (req, res) => {
   try {
+    const propio = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (propio.error) return res.status(propio.error).json({ mensaje: propio.mensaje });
     const dias = parseInt(req.query.dias) || 60;
     const fechaLimite = new Date();
     fechaLimite.setDate(fechaLimite.getDate() - dias);
@@ -633,6 +655,8 @@ exports.getGraficaPeso = async (req, res) => {
 
 exports.getGraficaAlimentacion = async (req, res) => {
   try {
+    const propio = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (propio.error) return res.status(propio.error).json({ mensaje: propio.mensaje });
     const dias  = parseInt(req.query.dias) || 30;
     const datos = await AlimentacionLote.getAlimentacionDiaria(req.params.id, dias);
 
@@ -644,6 +668,8 @@ exports.getGraficaAlimentacion = async (req, res) => {
 
 exports.getGraficaEvolucion = async (req, res) => {
   try {
+    const propio = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (propio.error) return res.status(propio.error).json({ mensaje: propio.mensaje });
     const dias = parseInt(req.query.dias) || 60;
     const fechaLimite = new Date();
     fechaLimite.setDate(fechaLimite.getDate() - dias);

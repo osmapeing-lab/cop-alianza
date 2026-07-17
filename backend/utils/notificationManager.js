@@ -14,7 +14,7 @@
  */
 
 const { enviarWhatsApp } = require('./whatsappService');
-const { enviarNotificacion: enviarFCM } = require('./fcmService');
+const { enviarNotificacion: enviarFCM, enviarNotificacionAUsuarios } = require('./fcmService');
 const { enviarPushATodos } = require('./pushService');
 const { enviarEmail } = require('./emailService');
 const Lote = require('../models/lote');
@@ -23,6 +23,7 @@ const Motorbomb = require('../models/Motorbomb');
 const Config = require('../models/Config');
 const NotificationState = require('../models/NotificationState');
 const Pesaje = require('../models/pesaje');
+const User = require('../models/User');
 
 // WhatsApp solo si está configurado
 const wsp = async (msg) => {
@@ -548,19 +549,23 @@ async function verificarPesajeSemanal() {
           `Último pesaje: ${fechaUltima} (hace ${diasDesde} días)\n` +
           `Prepara la romana y registra los pesos para llevar el control.`;
 
+        // Dirigido solo a los usuarios de ESTA granja (dueño sin restricción
+        // de permisos, o cuentas restringidas con permiso 'pesajes') — antes
+        // se transmitía por FCM/web-push a TODOS los dispositivos
+        // registrados en la plataforma, sin importar la granja.
+        const usuariosGranja = await User.find({ granja_id: lote.granja, activo: true }).select('_id permisos');
+        const destinatarios = usuariosGranja
+          .filter(u => !u.permisos || u.permisos.length === 0 || u.permisos.includes('pesajes'))
+          .map(u => u._id);
+
         await Promise.all([
           wsp(msg),
-          enviarFCM({
+          enviarNotificacionAUsuarios(destinatarios, {
             titulo: `⚖️ Mañana: Día de Pesaje — ${lote.nombre}`,
             cuerpo: `Hace ${diasDesde} días del último pesaje. Prepara la romana.`,
             tipo: 'info',
             datos: { pantalla: 'lotes', lote_id: String(lote._id) }
-          }).catch(e => console.error('[FCM] Error pesaje:', e.message)),
-          enviarPushATodos({
-            title: `⚖️ Mañana: Día de Pesaje`,
-            body: `Lote ${lote.nombre} — Hace ${diasDesde} días del último pesaje. Prepara la romana.`,
-            data: { url: '/' }
-          }).catch(e => console.error('[PUSH] Error pesaje:', e.message))
+          }).catch(e => console.error('[FCM] Error pesaje:', e.message))
         ]);
 
         console.log(`[PESAJE] Alerta enviada para lote "${lote.nombre}" — ${diasDesde} días desde último pesaje`);

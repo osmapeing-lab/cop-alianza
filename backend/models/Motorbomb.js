@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const motorbombSchema = new mongoose.Schema({
+  granja: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Farm',
+    index: true
+  },
   codigo_bomba: {
     type: String,
     required: true,

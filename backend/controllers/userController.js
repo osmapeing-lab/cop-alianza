@@ -7,6 +7,7 @@
 const crypto = require('crypto');
 const User = require('../models/User');
 const Session = require('../models/Session');
+const Farm = require('../models/Farm');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const axios = require('axios');
@@ -21,7 +22,7 @@ const PLANES_VALIDOS = ['corral', 'granja', 'alianza', 'empresas', 'corporativo'
 // ═══════════════════════════════════════════════════════════════════════
 exports.register = async (req, res) => {
   try {
-    const { usuario, correo, password, granja_id } = req.body;
+    const { usuario, correo, password } = req.body;
 
     // Verificar si ya existe
     const existe = await User.findOne({ $or: [{ usuario }, { correo }] });
@@ -31,6 +32,13 @@ exports.register = async (req, res) => {
 
     // Hash de contraseña
     const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Cada registro público crea su propia granja nueva y vacía — nunca se
+    // toma un `granja_id` del cuerpo de la petición (eso permitiría que
+    // cualquiera se uniera a los datos de otra granja con solo mandar su
+    // id). Unirse a una granja existente (varios usuarios de un mismo
+    // cliente) queda para una fase posterior con código de invitación.
+    const farm = await Farm.create({ nombre: `Granja de ${usuario}` });
 
     // Crear usuario — esta ruta es pública, así que el rol nunca se toma
     // del body: siempre se crea como 'cliente'. Roles superiores solo se
@@ -43,7 +51,7 @@ exports.register = async (req, res) => {
       correo,
       password: hashedPassword,
       rol: 'cliente',
-      granja_id,
+      granja_id: farm._id,
       plan: 'corral'
     });
     await user.save();
@@ -229,7 +237,8 @@ exports.login = async (req, res) => {
         rol: user.rol,
         plan: user.plan,
         limite_dispositivos_custom: user.limite_dispositivos_custom,
-        granja_id: user.granja_id
+        granja_id: user.granja_id,
+        permisos: user.permisos || []
       },
       session_id: session._id,
       expira_en: session.expira_en

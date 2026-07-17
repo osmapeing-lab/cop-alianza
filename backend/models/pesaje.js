@@ -7,6 +7,15 @@
 const mongoose = require('mongoose');
 
 const pesajeSchema = new mongoose.Schema({
+  // Granja dueña de este pesaje — aísla los datos entre distintos
+  // clientes de la app (ver middleware/auth.js). Se copia de la granja
+  // del usuario que registra el pesaje, no del lote, para no depender de
+  // un populate extra al filtrar.
+  granja: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Farm',
+    index: true
+  },
   lote: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Lote',

@@ -103,6 +103,60 @@ exports.enviarNotificacion = async ({ titulo, cuerpo, tipo = 'info', datos = {} 
 };
 
 /**
+ * Envía una notificación push solo a los usuarios indicados (por su
+ * User._id) — usado para avisos que deben quedar dentro de una sola granja,
+ * en vez de transmitirse a toda la plataforma como hace enviarNotificacion.
+ * @param {string[]|ObjectId[]} usuarioIds
+ * @param {object} opts - mismo shape que enviarNotificacion
+ */
+exports.enviarNotificacionAUsuarios = async (usuarioIds, { titulo, cuerpo, tipo = 'info', datos = {} }) => {
+  if (!initFirebase()) return false;
+  if (!usuarioIds || usuarioIds.length === 0) return false;
+
+  const FCMToken = require('../models/FCMToken');
+  const tokens = await FCMToken.find({ activo: true, usuario_id: { $in: usuarioIds } }).lean();
+  if (tokens.length === 0) return false;
+
+  let enviados = 0;
+  for (const t of tokens) {
+    try {
+      await admin.messaging().send({
+        token: t.token,
+        notification: {
+          title: titulo,
+          body:  cuerpo
+        },
+        data: {
+          tipo,
+          timestamp: Date.now().toString(),
+          ...Object.fromEntries(Object.entries(datos).map(([k, v]) => [k, String(v)]))
+        },
+        android: {
+          priority: tipo === 'critico' ? 'high' : 'normal',
+          notification: {
+            sound:       'default',
+            channelId:   'coo_alianzas_alertas',
+            clickAction: 'FLUTTER_NOTIFICATION_CLICK'
+          }
+        }
+      });
+      enviados++;
+    } catch (e) {
+      console.error(`[FCM] Error enviando a token ${t.token.slice(-10)}:`, e.message);
+      if (
+        e.code === 'messaging/registration-token-not-registered' ||
+        e.code === 'messaging/invalid-registration-token'
+      ) {
+        await FCMToken.updateOne({ token: t.token }, { activo: false });
+      }
+    }
+  }
+
+  console.log(`[FCM] Notificación dirigida enviada a ${enviados}/${tokens.length} dispositivos: "${titulo}"`);
+  return enviados > 0;
+};
+
+/**
  * Verifica si Firebase está configurado correctamente.
  */
 exports.verificarConfiguracion = () => {

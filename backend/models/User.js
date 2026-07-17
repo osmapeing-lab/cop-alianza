@@ -25,6 +25,12 @@ const userSchema = new mongoose.Schema({
   // plan (o el default de 'corporativo' si aplica).
   limite_dispositivos_custom: { type: Number, min: 1, default: null },
   granja_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Farm' },
+  // Permisos de una cuenta restringida "extensión" de la granja (ej. un
+  // empleado que solo debe poder operar bombas o registrar pesajes) — sin
+  // setear (undefined/[]) significa acceso completo según su `rol`. Ver
+  // middleware/auth.js `requirePermiso`. Genérico y reutilizable por
+  // cualquier granja, no atado a personas específicas.
+  permisos: { type: [String], enum: ['bombas', 'alertas', 'pesajes'], default: undefined },
   activo: { type: Boolean, default: true },
   ultimo_acceso: Date,
   reset_token_hash: { type: String, select: false },

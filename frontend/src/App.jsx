@@ -1529,6 +1529,16 @@ const [historicoPesos, setHistoricoPesos] = useState([])
     rol: 'cliente'
   })
 
+  // Estados del panel de administración de granjas (superadmin) —
+  // administra TODAS las granjas de la plataforma, no solo la del usuario
+  // logueado (ver GET/PUT/DELETE /api/admin/farms en el backend).
+  const [granjas, setGranjas] = useState([])
+  const [analiticaGlobal, setAnaliticaGlobal] = useState(null)
+  const [granjaDetalle, setGranjaDetalle] = useState(null)
+  const [granjaAEliminar, setGranjaAEliminar] = useState(null)
+  const [confirmarNombreGranja, setConfirmarNombreGranja] = useState('')
+  const [nuevoMiembroGranja, setNuevoMiembroGranja] = useState({ usuario: '', correo: '', password: '', permisos: [] })
+
 
 // Estados alimentación desde inventario (modal en lote detalle)
 const [mostrarModalAlimInv, setMostrarModalAlimInv] = useState(false)
@@ -1906,6 +1916,10 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
   
   if (user?.rol === 'superadmin' || user?.rol === 'ingeniero') {
     cargarUsuarios()
+  }
+  if (user?.rol === 'superadmin') {
+    cargarGranjas()
+    cargarAnaliticaGlobal()
   }
 }
 const cargarCamaras = async () => {
@@ -2875,6 +2889,93 @@ const eliminarBomba = async (id) => {
       alert('Error: ' + (error.response?.data?.mensaje || error.message))
     }
   }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // FUNCIONES DE ADMINISTRACIÓN DE GRANJAS (SuperAdmin — /api/admin/farms)
+  // ═══════════════════════════════════════════════════════════════════════
+
+  const cargarGranjas = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/api/admin/farms`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setGranjas(res.data)
+    } catch (error) {
+      console.error('Error cargando granjas:', error)
+    }
+  }
+
+  const cargarAnaliticaGlobal = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/api/admin/analytics/resumen`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setAnaliticaGlobal(res.data)
+    } catch (error) {
+      console.error('Error cargando analítica global:', error)
+    }
+  }
+
+  const verDetalleGranja = async (id) => {
+    try {
+      const res = await axios.get(`${API_URL}/api/admin/farms/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setGranjaDetalle(res.data)
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.mensaje || error.message))
+    }
+  }
+
+  const toggleGranja = async (id) => {
+    try {
+      await axios.put(`${API_URL}/api/admin/farms/${id}/toggle`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      cargarGranjas()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.mensaje || error.message))
+    }
+  }
+
+  const cambiarPlanGranja = async (id, plan) => {
+    try {
+      await axios.put(`${API_URL}/api/admin/farms/${id}/plan`, { plan }, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      cargarGranjas()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.mensaje || error.message))
+    }
+  }
+
+  const agregarMiembroGranja = async () => {
+    if (!granjaDetalle) return
+    try {
+      await axios.post(`${API_URL}/api/admin/farms/${granjaDetalle.farm._id}/usuarios`, nuevoMiembroGranja, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setNuevoMiembroGranja({ usuario: '', correo: '', password: '', permisos: [] })
+      await verDetalleGranja(granjaDetalle.farm._id)
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.mensaje || error.message))
+    }
+  }
+
+  const eliminarGranjaConfirmada = async () => {
+    if (!granjaAEliminar) return
+    try {
+      await axios.delete(`${API_URL}/api/admin/farms/${granjaAEliminar._id}`, {
+        data: { confirmarNombre: confirmarNombreGranja },
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setGranjaAEliminar(null)
+      setConfirmarNombreGranja('')
+      cargarGranjas()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.mensaje || error.message))
+    }
+  }
 // ═══════════════════════════════════════════════════════════════════════
 // FUNCIONES DE CARGA PARA GRÁFICAS
 // ═══════════════════════════════════════════════════════════════════════
@@ -3618,7 +3719,7 @@ const cargarHistoricoPesos = async () => {
             </button>
             
             {(user.rol === 'superadmin' || user.rol === 'ingeniero') && (
-              <button 
+              <button
                 className={`nav-item ${pagina === 'usuarios' ? 'activo' : ''}`}
                 onClick={() => { setPagina('usuarios'); setMenuAbierto(false) }}
               >
@@ -3626,7 +3727,17 @@ const cargarHistoricoPesos = async () => {
                 <span>Usuarios</span>
               </button>
             )}
-            
+
+            {user.rol === 'superadmin' && (
+              <button
+                className={`nav-item ${pagina === 'admin' ? 'activo' : ''}`}
+                onClick={() => { setPagina('admin'); setMenuAbierto(false); cargarGranjas(); cargarAnaliticaGlobal() }}
+              >
+                <Shield size={20} />
+                <span>Administración</span>
+              </button>
+            )}
+
             <button
               className={`nav-item ${pagina === 'manual' ? 'activo' : ''}`}
               onClick={() => { setPagina('manual'); setMenuAbierto(false) }}
@@ -7121,6 +7232,274 @@ const cargarHistoricoPesos = async () => {
             </div>
           )}
 
+{/* ════════════════════════════════════════════════════════════════ */}
+{/* PÁGINA: ADMINISTRACIÓN DE GRANJAS (SuperAdmin) */}
+{/* ════════════════════════════════════════════════════════════════ */}
+{pagina === 'admin' && user.rol === 'superadmin' && (
+  <div className="page-admin">
+    <div className="page-header">
+      <h2><Shield size={24} style={{verticalAlign:'middle', marginRight:8}} />Administración de Granjas</h2>
+    </div>
+
+    <div className="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Granja</th>
+            <th>Dueño</th>
+            <th>Plan</th>
+            <th>Estado</th>
+            <th>Última actividad</th>
+            <th>Lotes</th>
+            <th>Ventas</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          {granjas.length === 0 ? (
+            <tr>
+              <td colSpan="8" className="sin-datos">No hay granjas registradas</td>
+            </tr>
+          ) : (
+            granjas.map(g => (
+              <tr key={g._id}>
+                <td><strong>{g.nombre}</strong></td>
+                <td>{g.owner ? `${g.owner.usuario} (${g.owner.correo})` : 'Sin usuario'}</td>
+                <td>
+                  <select
+                    value={g.owner?.plan || ''}
+                    onChange={e => cambiarPlanGranja(g._id, e.target.value)}
+                    disabled={!g.owner}
+                  >
+                    <option value="corral">Corral</option>
+                    <option value="granja">Granja</option>
+                    <option value="alianza">Alianza</option>
+                    <option value="empresas">Empresas</option>
+                    <option value="corporativo">Corporativo</option>
+                  </select>
+                </td>
+                <td>
+                  <span className={`estado-badge ${g.activo ? 'activo' : 'inactivo'}`}>
+                    {g.activo ? 'Activa' : 'Desactivada'}
+                  </span>
+                </td>
+                <td>{g.owner?.ultimo_acceso ? new Date(g.owner.ultimo_acceso).toLocaleDateString() : '—'}</td>
+                <td>{g.lotes}</td>
+                <td>{g.ventas}</td>
+                <td>
+                  <button className="btn-icon" onClick={() => verDetalleGranja(g._id)} title="Ver detalle">
+                    <Eye size={16} />
+                  </button>
+                  <button
+                    className="btn-icon"
+                    onClick={() => toggleGranja(g._id)}
+                    title={g.activo ? 'Desactivar granja' : 'Activar granja'}
+                  >
+                    {g.activo ? <PowerOff size={16} /> : <Power size={16} />}
+                  </button>
+                  <button
+                    className="btn-icon btn-danger"
+                    onClick={() => { setGranjaAEliminar(g); setConfirmarNombreGranja('') }}
+                    title="Eliminar granja"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+
+    {/* Analítica global de uso */}
+    {analiticaGlobal && (
+      <div className="admin-analitica" style={{marginTop: '32px'}}>
+        <h3>Analítica de uso (últimos {analiticaGlobal.periodo_dias} días)</h3>
+        <div className="stats-grid" style={{display:'flex', gap:'16px', flexWrap:'wrap', margin:'12px 0'}}>
+          <div className="stat-card">
+            <span className="stat-label">Granjas activas</span>
+            <span className="stat-value">{analiticaGlobal.actividad.granjas_activas}</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-label">Granjas inactivas</span>
+            <span className="stat-value">{analiticaGlobal.actividad.granjas_inactivas}</span>
+          </div>
+          <div className="stat-card">
+            <span className="stat-label">Total granjas</span>
+            <span className="stat-value">{analiticaGlobal.actividad.total_granjas}</span>
+          </div>
+        </div>
+
+        <div style={{display:'flex', gap:'24px', flexWrap:'wrap'}}>
+          <div style={{flex:'1 1 260px'}}>
+            <h4>Pantallas más usadas</h4>
+            <ul>
+              {analiticaGlobal.pantallas_mas_usadas.length === 0 ? (
+                <li className="sin-datos">Sin datos todavía</li>
+              ) : (
+                analiticaGlobal.pantallas_mas_usadas.map(p => (
+                  <li key={p._id}>{p._id}: {p.total}</li>
+                ))
+              )}
+            </ul>
+          </div>
+          <div style={{flex:'1 1 260px'}}>
+            <h4>Funciones más usadas</h4>
+            <ul>
+              {analiticaGlobal.funciones_mas_usadas.length === 0 ? (
+                <li className="sin-datos">Sin datos todavía</li>
+              ) : (
+                analiticaGlobal.funciones_mas_usadas.map(f => (
+                  <li key={f._id}>{f._id}: {f.total}</li>
+                ))
+              )}
+            </ul>
+          </div>
+          <div style={{flex:'1 1 260px'}}>
+            <h4>Granjas más cerca del límite de su plan</h4>
+            <ul>
+              {analiticaGlobal.ranking_limites_plan.length === 0 ? (
+                <li className="sin-datos">Sin datos todavía</li>
+              ) : (
+                analiticaGlobal.ranking_limites_plan.map(r => (
+                  <li key={r.granja || 'sin-granja'}>{r.nombreGranja}: {r.total} ({r.limites.join(', ')})</li>
+                ))
+              )}
+            </ul>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Modal: detalle de granja */}
+    {granjaDetalle && (
+      <div className="modal-overlay" onClick={() => setGranjaDetalle(null)}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>{granjaDetalle.farm.nombre}</h3>
+            <button className="btn-cerrar" onClick={() => setGranjaDetalle(null)}>&times;</button>
+          </div>
+          <div className="modal-body">
+            <h4>Usuarios</h4>
+            <ul>
+              {granjaDetalle.usuarios.map(u => (
+                <li key={u._id}>
+                  {u.usuario} ({u.correo}) — {u.rol} — plan {u.plan} — {u.activo ? 'activo' : 'inactivo'}
+                </li>
+              ))}
+            </ul>
+            <h4>Conteos</h4>
+            <ul>
+              <li>Lotes: {granjaDetalle.conteos.lotes}</li>
+              <li>Pesajes: {granjaDetalle.conteos.pesajes}</li>
+              <li>Costos: {granjaDetalle.conteos.costos}</li>
+              <li>Ventas: {granjaDetalle.conteos.ventas}</li>
+              <li>Alertas: {granjaDetalle.conteos.alertas}</li>
+              <li>Inventario de alimento: {granjaDetalle.conteos.inventario}</li>
+            </ul>
+            <h4>Agregar miembro restringido</h4>
+            <p style={{fontSize: '0.85em', color: '#666'}}>
+              Cuenta "extensión" de esta granja con acceso solo a las funciones marcadas (ej. un
+              empleado que solo debe operar bombas o registrar pesajes).
+            </p>
+            <div className="form-group">
+              <label>Usuario</label>
+              <input
+                type="text"
+                value={nuevoMiembroGranja.usuario}
+                onChange={e => setNuevoMiembroGranja({ ...nuevoMiembroGranja, usuario: e.target.value })}
+                placeholder="Nombre de usuario"
+              />
+            </div>
+            <div className="form-group">
+              <label>Correo</label>
+              <input
+                type="email"
+                value={nuevoMiembroGranja.correo}
+                onChange={e => setNuevoMiembroGranja({ ...nuevoMiembroGranja, correo: e.target.value })}
+                placeholder="correo@ejemplo.com"
+              />
+            </div>
+            <div className="form-group">
+              <label>Contraseña</label>
+              <input
+                type="password"
+                value={nuevoMiembroGranja.password}
+                onChange={e => setNuevoMiembroGranja({ ...nuevoMiembroGranja, password: e.target.value })}
+                placeholder="Contraseña segura"
+              />
+            </div>
+            <div className="form-group">
+              <label>Permisos</label>
+              <div style={{display: 'flex', gap: '16px'}}>
+                {['bombas', 'alertas', 'pesajes'].map(permiso => (
+                  <label key={permiso} style={{display: 'flex', alignItems: 'center', gap: '4px'}}>
+                    <input
+                      type="checkbox"
+                      checked={nuevoMiembroGranja.permisos.includes(permiso)}
+                      onChange={e => {
+                        const permisos = e.target.checked
+                          ? [...nuevoMiembroGranja.permisos, permiso]
+                          : nuevoMiembroGranja.permisos.filter(p => p !== permiso)
+                        setNuevoMiembroGranja({ ...nuevoMiembroGranja, permisos })
+                      }}
+                    />
+                    {permiso.charAt(0).toUpperCase() + permiso.slice(1)}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <button className="btn-primary" onClick={agregarMiembroGranja}>
+              <IconMas />
+              Agregar miembro
+            </button>
+          </div>
+          <div className="modal-footer">
+            <button className="btn-secondary" onClick={() => setGranjaDetalle(null)}>Cerrar</button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Modal: confirmar eliminación de granja */}
+    {granjaAEliminar && (
+      <div className="modal-overlay" onClick={() => setGranjaAEliminar(null)}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Eliminar granja</h3>
+            <button className="btn-cerrar" onClick={() => setGranjaAEliminar(null)}>&times;</button>
+          </div>
+          <div className="modal-body">
+            <p>
+              Esta acción borra <strong>permanentemente</strong> la granja «{granjaAEliminar.nombre}»
+              y todos sus datos (usuarios, lotes, pesajes, costos, ventas, alertas, inventario). No se puede deshacer.
+            </p>
+            <div className="form-group">
+              <label>Escribe el nombre exacto de la granja para confirmar</label>
+              <input
+                type="text"
+                value={confirmarNombreGranja}
+                onChange={e => setConfirmarNombreGranja(e.target.value)}
+                placeholder={granjaAEliminar.nombre}
+              />
+            </div>
+          </div>
+          <div className="modal-footer">
+            <button className="btn-secondary" onClick={() => setGranjaAEliminar(null)}>Cancelar</button>
+            <button
+              className="btn-primary btn-danger"
+              disabled={confirmarNombreGranja !== granjaAEliminar.nombre}
+              onClick={eliminarGranjaConfirmada}
+            >
+              Eliminar definitivamente
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+)}
 
 {/* ════════════════════════════════════════════════════════════════ */}
 {/* PÁGINA: CÁMARAS */}

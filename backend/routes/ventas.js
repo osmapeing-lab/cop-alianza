@@ -17,6 +17,9 @@ const {
   obtenerEstadisticas,
   obtenerPrecios
 } = require('../controllers/ventaController');
+const { verificarToken } = require('../middleware/auth');
+
+router.use(verificarToken);
 
 // CRUD Ventas
 router.get('/', obtenerVentas);

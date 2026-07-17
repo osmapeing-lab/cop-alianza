@@ -4,7 +4,7 @@ const Lote = require('../models/lote');
 // Obtener todos los pesajes
 exports.getPesajes = async (req, res) => {
   try {
-    const pesajes = await Pesaje.find()
+    const pesajes = await Pesaje.find({ granja: req.user.granja_id })
       .populate('lote', 'nombre')
       .sort({ createdAt: -1 })
       .limit(100);
@@ -17,7 +17,7 @@ exports.getPesajes = async (req, res) => {
 // Obtener pesajes por lote
 exports.getPesajesPorLote = async (req, res) => {
   try {
-    const pesajes = await Pesaje.find({ lote: req.params.loteId })
+    const pesajes = await Pesaje.find({ lote: req.params.loteId, granja: req.user.granja_id })
       .sort({ createdAt: -1 });
     res.json(pesajes);
   } catch (error) {
@@ -28,10 +28,14 @@ exports.getPesajesPorLote = async (req, res) => {
 // Crear pesaje (la actualización del lote ahora es AUTOMÁTICA en el modelo)
 exports.createPesaje = async (req, res) => {
   try {
-    const pesaje = new Pesaje(req.body);
+    const lote = await Lote.findById(req.body.lote);
+    if (!lote || String(lote.granja) !== String(req.user.granja_id)) {
+      return res.status(404).json({ mensaje: 'Lote no encontrado' });
+    }
+    const pesaje = new Pesaje({ ...req.body, granja: req.user.granja_id });
     await pesaje.save();
     // ✅ El middleware del modelo ya actualiza el lote automáticamente
-    
+
     res.status(201).json(pesaje);
   } catch (error) {
     res.status(400).json({ mensaje: error.message });
@@ -42,13 +46,13 @@ exports.createPesaje = async (req, res) => {
 exports.deletePesaje = async (req, res) => {
   try {
     const pesaje = await Pesaje.findById(req.params.id);
-    if (!pesaje) {
+    if (!pesaje || String(pesaje.granja) !== String(req.user.granja_id)) {
       return res.status(404).json({ mensaje: 'Pesaje no encontrado' });
     }
-    
+
     // ✅ Usar deleteOne() para que se ejecute el middleware post('deleteOne')
     await pesaje.deleteOne();
-    
+
     res.json({ mensaje: 'Pesaje eliminado' });
   } catch (error) {
     res.status(500).json({ mensaje: error.message });
@@ -64,8 +68,14 @@ exports.insertarPesajesHistoricos = async (req, res) => {
       return res.status(400).json({ mensaje: 'lote_id, pesajes[] y fecha requeridos' });
     }
 
+    const lote = await Lote.findById(lote_id);
+    if (!lote || String(lote.granja) !== String(req.user.granja_id)) {
+      return res.status(404).json({ mensaje: 'Lote no encontrado' });
+    }
+
     const docs = pesajes.map(p => ({
       lote: lote_id,
+      granja: req.user.granja_id,
       peso: p.peso,
       cantidad_cerdos_pesados: p.cantidad_cerdos_pesados || 1,
       peso_promedio: p.peso / (p.cantidad_cerdos_pesados || 1),
@@ -95,6 +105,12 @@ exports.actualizarFechaPesaje = async (req, res) => {
   try {
     const { fecha } = req.body;
     if (!fecha) return res.status(400).json({ mensaje: 'fecha requerida' });
+
+    const pesaje = await Pesaje.findById(req.params.id);
+    if (!pesaje || String(pesaje.granja) !== String(req.user.granja_id)) {
+      return res.status(404).json({ mensaje: 'Pesaje no encontrado' });
+    }
+
     const fechaDate = new Date(fecha);
     // Usar updateOne con timestamps:false para poder sobreescribir createdAt
     await Pesaje.collection.updateOne(
@@ -110,7 +126,7 @@ exports.actualizarFechaPesaje = async (req, res) => {
 // Estadísticas de pesajes
 exports.getEstadisticasPesajes = async (req, res) => {
   try {
-    const pesajes = await Pesaje.find().sort({ createdAt: -1 });
+    const pesajes = await Pesaje.find({ granja: req.user.granja_id }).sort({ createdAt: -1 });
 
     if (pesajes.length === 0) {
       return res.json({

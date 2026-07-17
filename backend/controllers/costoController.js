@@ -16,9 +16,9 @@ const InventarioAlimento = require('../models/InventarioAlimento');
 exports.obtenerCostos = async (req, res) => {
   try {
     const { tipo_costo, categoria, mes, año, lote, limite = 100 } = req.query;
-    
-    let filtro = { estado: { $ne: 'anulado' } };
-    
+
+    let filtro = { estado: { $ne: 'anulado' }, granja: req.user.granja_id };
+
     if (tipo_costo) filtro.tipo_costo = tipo_costo;
     if (categoria) filtro.categoria = categoria;
     if (lote) filtro.lote = lote;
@@ -46,7 +46,7 @@ exports.obtenerCostos = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.registrarCosto = async (req, res) => {
   try {
-    const nuevoCosto = new Costo(req.body);
+    const nuevoCosto = new Costo({ ...req.body, granja: req.user.granja_id });
     await nuevoCosto.save();
     
     console.log(`[COSTO] Nuevo costo registrado: ${nuevoCosto.categoria} - $${nuevoCosto.total}`);
@@ -64,16 +64,19 @@ exports.registrarCosto = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.actualizarCosto = async (req, res) => {
   try {
+    const existente = await Costo.findById(req.params.id);
+    if (!existente || String(existente.granja) !== String(req.user.granja_id)) {
+      return res.status(404).json({ mensaje: 'Costo no encontrado' });
+    }
+
+    delete req.body.granja;
+
     const costo = await Costo.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     );
-    
-    if (!costo) {
-      return res.status(404).json({ mensaje: 'Costo no encontrado' });
-    }
-    
+
     res.json(costo);
   } catch (error) {
     res.status(500).json({ mensaje: 'Error', error: error.message });
@@ -86,11 +89,12 @@ exports.actualizarCosto = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.anularCosto = async (req, res) => {
   try {
-    const costo = await Costo.findByIdAndDelete(req.params.id);
-
-    if (!costo) {
+    const existente = await Costo.findById(req.params.id);
+    if (!existente || String(existente.granja) !== String(req.user.granja_id)) {
       return res.status(404).json({ mensaje: 'Costo no encontrado' });
     }
+
+    const costo = await Costo.findByIdAndDelete(req.params.id);
 
     // Si el costo pertenece a un lote, eliminar también el gasto semanal asociado
     if (costo.lote) {
@@ -146,7 +150,8 @@ exports.obtenerResumen = async (req, res) => {
     const filtroPeriodo = {
       'periodo.mes': mesActual,
       'periodo.año': añoActual,
-      estado: { $ne: 'anulado' }
+      estado: { $ne: 'anulado' },
+      granja: req.user.granja_id
     };
     
     // COSTOS por tipo
@@ -191,10 +196,11 @@ exports.obtenerResumen = async (req, res) => {
     const finMes = new Date(añoActual, mesActual, 0, 23, 59, 59);
     
     const totalIngresos = await Venta.aggregate([
-      { 
-        $match: { 
+      {
+        $match: {
           fecha_venta: { $gte: inicioMes, $lte: finMes },
-          activa: true
+          activa: true,
+          granja: req.user.granja_id
         }
       },
       {
@@ -259,25 +265,27 @@ exports.obtenerComparativo = async (req, res) => {
       
       // Costos del mes
       const costosMes = await Costo.aggregate([
-        { 
-          $match: { 
-            'periodo.mes': mes, 
+        {
+          $match: {
+            'periodo.mes': mes,
             'periodo.año': año,
-            estado: { $ne: 'anulado' }
+            estado: { $ne: 'anulado' },
+            granja: req.user.granja_id
           }
         },
         { $group: { _id: null, total: { $sum: '$total_con_iva' } } }
       ]);
-      
+
       // Ingresos del mes
       const inicioMes = new Date(año, mes - 1, 1);
       const finMes = new Date(año, mes, 0, 23, 59, 59);
-      
+
       const ingresosMes = await Venta.aggregate([
-        { 
-          $match: { 
+        {
+          $match: {
             fecha_venta: { $gte: inicioMes, $lte: finMes },
-            activa: true
+            activa: true,
+            granja: req.user.granja_id
           }
         },
         { $group: { _id: null, total: { $sum: '$total' } } }

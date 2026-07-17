@@ -25,7 +25,7 @@ const { verificarStockCriticoAlimento, resetearAlertaStockAlimento } = require('
 // ═══════════════════════════════════════════════════════════════════════
 exports.getAll = async (req, res) => {
   try {
-    const inventarios = await InventarioAlimento.find({ activo: true })
+    const inventarios = await InventarioAlimento.find({ activo: true, granja: req.user.granja_id })
       .sort({ nombre: 1 });
     res.json(inventarios);
   } catch (error) {
@@ -40,7 +40,7 @@ exports.getAll = async (req, res) => {
 exports.getById = async (req, res) => {
   try {
     const inventario = await InventarioAlimento.findById(req.params.id);
-    if (!inventario) {
+    if (!inventario || String(inventario.granja) !== String(req.user.granja_id)) {
       return res.status(404).json({ mensaje: 'Inventario no encontrado' });
     }
     res.json(inventario);
@@ -55,7 +55,7 @@ exports.getById = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.getResumen = async (req, res) => {
   try {
-    const resumen = await InventarioAlimento.getResumen();
+    const resumen = await InventarioAlimento.getResumen(req.user.granja_id);
     res.json(resumen);
   } catch (error) {
     res.status(500).json({ mensaje: error.message });
@@ -68,7 +68,7 @@ exports.getResumen = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.create = async (req, res) => {
   try {
-    const inventario = new InventarioAlimento(req.body);
+    const inventario = new InventarioAlimento({ ...req.body, granja: req.user.granja_id });
     await inventario.save();
     res.status(201).json(inventario);
   } catch (error) {
@@ -82,14 +82,12 @@ exports.create = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.update = async (req, res) => {
   try {
-    const inventario = await InventarioAlimento.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true }
-    );
-    if (!inventario) {
+    const existente = await InventarioAlimento.findById(req.params.id);
+    if (!existente || String(existente.granja) !== String(req.user.granja_id)) {
       return res.status(404).json({ mensaje: 'Inventario no encontrado' });
     }
+    const { granja, ...datos } = req.body;
+    const inventario = await InventarioAlimento.findByIdAndUpdate(req.params.id, datos, { new: true });
     res.json(inventario);
   } catch (error) {
     res.status(400).json({ mensaje: error.message });
@@ -102,14 +100,11 @@ exports.update = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.delete = async (req, res) => {
   try {
-    const inventario = await InventarioAlimento.findByIdAndUpdate(
-      req.params.id,
-      { activo: false },
-      { new: true }
-    );
-    if (!inventario) {
+    const existente = await InventarioAlimento.findById(req.params.id);
+    if (!existente || String(existente.granja) !== String(req.user.granja_id)) {
       return res.status(404).json({ mensaje: 'Inventario no encontrado' });
     }
+    await InventarioAlimento.findByIdAndUpdate(req.params.id, { activo: false });
     res.json({ mensaje: 'Inventario eliminado' });
   } catch (error) {
     res.status(500).json({ mensaje: error.message });
@@ -129,7 +124,7 @@ exports.registrarEntrada = async (req, res) => {
     }
 
     const inventario = await InventarioAlimento.findById(req.params.id);
-    if (!inventario) {
+    if (!inventario || String(inventario.granja) !== String(req.user.granja_id)) {
       return res.status(404).json({ mensaje: 'Inventario no encontrado' });
     }
 
@@ -158,7 +153,8 @@ exports.registrarEntrada = async (req, res) => {
         estado: 'registrado',
         metodo_pago: 'efectivo',
         inventario_ref: inventario._id,
-        bultos_ref: cantidad_bultos
+        bultos_ref: cantidad_bultos,
+        granja: req.user.granja_id
       });
       await costoCompra.save();
     } catch (costoErr) {
@@ -195,7 +191,7 @@ exports.registrarSalida = async (req, res) => {
     }
 
     const inventario = await InventarioAlimento.findById(req.params.id);
-    if (!inventario) {
+    if (!inventario || String(inventario.granja) !== String(req.user.granja_id)) {
       return res.status(404).json({ mensaje: 'Inventario no encontrado' });
     }
 
@@ -203,7 +199,8 @@ exports.registrarSalida = async (req, res) => {
     if (cantidad_bultos > inventario.cantidad_bultos) {
       const alerta = new Alert({
         tipo: 'critico',
-        mensaje: `🚫 Stock insuficiente de ${inventario.nombre}. Solicitado: ${cantidad_bultos} bultos, Disponible: ${inventario.cantidad_bultos}`
+        mensaje: `🚫 Stock insuficiente de ${inventario.nombre}. Solicitado: ${cantidad_bultos} bultos, Disponible: ${inventario.cantidad_bultos}`,
+        granja: req.user.granja_id
       });
       await alerta.save();
 
@@ -245,7 +242,8 @@ exports.registrarSalida = async (req, res) => {
         tipo: tipoAlerta,
         mensaje: `${emoji} Stock ${estado} de ${inventarioActualizado.nombre}. ` +
                  `Quedan ${inventarioActualizado.cantidad_bultos} bultos ` +
-                 `(mínimo: ${inventarioActualizado.stock_minimo_bultos})`
+                 `(mínimo: ${inventarioActualizado.stock_minimo_bultos})`,
+        granja: req.user.granja_id
       });
       await alerta.save();
 
@@ -280,7 +278,7 @@ exports.getMovimientos = async (req, res) => {
       .populate('movimientos.lote', 'nombre')
       .populate('movimientos.registrado_por', 'usuario');
 
-    if (!inventario) {
+    if (!inventario || String(inventario.granja) !== String(req.user.granja_id)) {
       return res.status(404).json({ mensaje: 'Inventario no encontrado' });
     }
 
@@ -300,7 +298,7 @@ exports.getMovimientos = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.getConsumoPorLote = async (req, res) => {
   try {
-    const inventarios = await InventarioAlimento.find({ activo: true });
+    const inventarios = await InventarioAlimento.find({ activo: true, granja: req.user.granja_id });
 
     const consumoPorLote = {};
 
@@ -343,7 +341,7 @@ exports.getConsumoPorLote = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.verificarStock = async (req, res) => {
   try {
-    const inventarios = await InventarioAlimento.find({ activo: true });
+    const inventarios = await InventarioAlimento.find({ activo: true, granja: req.user.granja_id });
     const alertas = [];
 
     inventarios.forEach(inv => {

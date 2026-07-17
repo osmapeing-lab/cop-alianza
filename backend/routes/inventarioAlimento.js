@@ -19,8 +19,10 @@ const {
   getConsumoPorLote,
   verificarStock
 } = require('../controllers/inventarioAlimentoController');
+const { verificarToken } = require('../middleware/auth');
 
-// Rutas públicas (para el sistema)
+router.use(verificarToken);
+
 // Obtener todos los inventarios
 router.get('/', getAll);
 

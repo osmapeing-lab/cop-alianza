@@ -1,32 +1,16 @@
 /*
  * ═══════════════════════════════════════════════════════════════════════
- * COO ALIANZAS - RUTAS DE ADMINISTRACIÓN DE GRANJAS (superadmin)
+ * COO ALIANZAS - RUTAS DE ANALÍTICA GLOBAL (panel de administración)
  * ═══════════════════════════════════════════════════════════════════════
  */
 
 const express = require('express');
 const router = express.Router();
-const {
-  getAllFarms,
-  getFarmDetail,
-  createFarm,
-  updateFarm,
-  updateFarmPlan,
-  toggleFarm,
-  deleteFarm,
-  crearUsuarioGranja
-} = require('../controllers/farmController');
+const { obtenerResumen } = require('../controllers/analyticsController');
 const { verificarToken, requireRole } = require('../middleware/auth');
 
 router.use(verificarToken, requireRole('superadmin'));
 
-router.get('/', getAllFarms);
-router.get('/:id', getFarmDetail);
-router.post('/', createFarm);
-router.post('/:id/usuarios', crearUsuarioGranja);
-router.put('/:id', updateFarm);
-router.put('/:id/plan', updateFarmPlan);
-router.put('/:id/toggle', toggleFarm);
-router.delete('/:id', deleteFarm);
+router.get('/resumen', obtenerResumen);
 
 module.exports = router;

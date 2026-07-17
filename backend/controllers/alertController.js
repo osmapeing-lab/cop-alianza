@@ -159,7 +159,7 @@ exports.alertaSensorDesconectado = async (sensor) => {
 
 exports.getAlertas = async (req, res) => {
   try {
-    const alertas = await Alert.find().sort({ fecha: -1 }).limit(50);
+    const alertas = await Alert.find({ granja: req.user.granja_id }).sort({ fecha: -1 }).limit(50);
     res.json(alertas);
   } catch (error) {
     res.status(500).json({ mensaje: error.message });
@@ -169,7 +169,7 @@ exports.getAlertas = async (req, res) => {
 exports.crearAlerta = async (req, res) => {
   try {
     const { tipo, mensaje } = req.body;
-    const alerta = new Alert({ tipo, mensaje, enviado_email: false });
+    const alerta = new Alert({ tipo, mensaje, enviado_email: false, granja: req.user.granja_id });
     await alerta.save();
     res.status(201).json(alerta);
   } catch (error) {

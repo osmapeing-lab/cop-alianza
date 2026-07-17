@@ -9,6 +9,10 @@ const {
   insertarPesajesHistoricos,
   actualizarFechaPesaje
 } = require('../controllers/pesajeController');
+const { verificarToken, requirePermiso } = require('../middleware/auth');
+
+router.use(verificarToken);
+router.use(requirePermiso('pesajes'));
 
 router.get('/', getPesajes);
 router.get('/estadisticas', getEstadisticasPesajes);

@@ -37,6 +37,8 @@ const inventarioAlimentoRoutes = require('./routes/inventarioAlimento');
 const fcmRoutes = require('./routes/fcm');
 const pushRoutes = require('./routes/push');
 const mercadoRoutes = require('./routes/mercado');
+const analyticsRoutes = require('./routes/analytics');
+const adminAnalyticsRoutes = require('./routes/adminAnalytics');
 
   // ═══════════════════════════════════════════════════════════════════════
   // INICIALIZAR EXPRESS Y WEBSOCKET
@@ -80,7 +82,7 @@ const mercadoRoutes = require('./routes/mercado');
   app.use('/api/sessions', sessionRoutes);
   app.use('/api/config', configRoutes);
   app.use('/api/water', waterRoutes);
-  app.use('/api/farms', farmRoutes);
+  app.use('/api/admin/farms', farmRoutes);
   app.use('/api/esp', espRoutes);
   app.use('/api/reporte', reporteRoutes);
   app.use('/api/idtolu', idtoluRoutes);
@@ -98,6 +100,8 @@ app.use('/api/inventario-alimento', inventarioAlimentoRoutes);
 app.use('/api/fcm', fcmRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/mercado', mercadoRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/admin/analytics', adminAnalyticsRoutes);
 
   // ═══════════════════════════════════════════════════════════════════════
   // RUTA RAÍZ (Información de la API)
@@ -120,7 +124,7 @@ app.use('/api/mercado', mercadoRoutes);
         bombas: '/api/motorbombs',
         
         // Gestión de granja
-        granjas: '/api/farms',
+        granjas: '/api/admin/farms',
         lotes: '/api/lotes',
         pesajes: '/api/pesajes',
         inventario: '/api/inventario',

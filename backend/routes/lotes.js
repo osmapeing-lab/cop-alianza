@@ -27,6 +27,9 @@ const {
   getGastosSemanales,
   eliminarGastoSemanal
 } = require('../controllers/gestionLotesController');
+const { verificarToken } = require('../middleware/auth');
+
+router.use(verificarToken);
 
 // ═══════════════════════════════════════════════════════════════════════
 // RUTAS CRUD LOTES

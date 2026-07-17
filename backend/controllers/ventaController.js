@@ -15,8 +15,8 @@ const Lote = require('../models/lote');
 exports.obtenerVentas = async (req, res) => {
   try {
     const { tipo_venta, estado_pago, desde, hasta, limite = 50 } = req.query;
-    
-    let filtro = { activa: true };
+
+    let filtro = { activa: true, granja: req.user.granja_id };
     
     if (tipo_venta) filtro.tipo_venta = tipo_venta;
     if (estado_pago) filtro.estado_pago = estado_pago;
@@ -48,11 +48,11 @@ exports.obtenerVentaPorId = async (req, res) => {
     const venta = await Venta.findById(req.params.id)
       .populate('lote', 'nombre cantidad_cerdos')
       .populate('registrado_por', 'usuario');
-    
-    if (!venta) {
+
+    if (!venta || String(venta.granja) !== String(req.user.granja_id)) {
       return res.status(404).json({ mensaje: 'Venta no encontrada' });
     }
-    
+
     res.json(venta);
   } catch (error) {
     res.status(500).json({ mensaje: 'Error', error: error.message });
@@ -65,18 +65,25 @@ exports.obtenerVentaPorId = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.registrarVenta = async (req, res) => {
   try {
-    const nuevaVenta = new Venta(req.body);
+    if (req.body.lote) {
+      const lote = await Lote.findById(req.body.lote);
+      if (!lote || String(lote.granja) !== String(req.user.granja_id)) {
+        return res.status(404).json({ mensaje: 'Lote no encontrado' });
+      }
+    }
+
+    const nuevaVenta = new Venta({ ...req.body, granja: req.user.granja_id });
     await nuevaVenta.save();
-    
+
     console.log(`[VENTA] Nueva venta registrada: ${nuevaVenta.numero_factura}`);
-    
+
     // Si hay lote asociado, actualizar cantidad de cerdos
     if (req.body.lote && req.body.cantidad) {
       await Lote.findByIdAndUpdate(req.body.lote, {
         $inc: { cantidad_cerdos: -req.body.cantidad }
       });
     }
-    
+
     res.status(201).json(nuevaVenta);
   } catch (error) {
     console.error('[VENTA] Error al registrar:', error);
@@ -90,16 +97,19 @@ exports.registrarVenta = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.actualizarVenta = async (req, res) => {
   try {
+    const existente = await Venta.findById(req.params.id);
+    if (!existente || String(existente.granja) !== String(req.user.granja_id)) {
+      return res.status(404).json({ mensaje: 'Venta no encontrada' });
+    }
+
+    delete req.body.granja;
+
     const venta = await Venta.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     );
-    
-    if (!venta) {
-      return res.status(404).json({ mensaje: 'Venta no encontrada' });
-    }
-    
+
     res.json(venta);
   } catch (error) {
     res.status(500).json({ mensaje: 'Error', error: error.message });
@@ -115,10 +125,10 @@ exports.registrarPago = async (req, res) => {
     const { monto, metodo, referencia, notas } = req.body;
     
     const venta = await Venta.findById(req.params.id);
-    if (!venta) {
+    if (!venta || String(venta.granja) !== String(req.user.granja_id)) {
       return res.status(404).json({ mensaje: 'Venta no encontrada' });
     }
-    
+
     // Agregar pago al historial
     venta.pagos.push({
       monto,
@@ -147,19 +157,20 @@ exports.registrarPago = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 exports.anularVenta = async (req, res) => {
   try {
+    const existente = await Venta.findById(req.params.id);
+    if (!existente || String(existente.granja) !== String(req.user.granja_id)) {
+      return res.status(404).json({ mensaje: 'Venta no encontrada' });
+    }
+
     const venta = await Venta.findByIdAndUpdate(
       req.params.id,
-      { 
+      {
         activa: false,
         estado_pago: 'cancelado'
       },
       { new: true }
     );
-    
-    if (!venta) {
-      return res.status(404).json({ mensaje: 'Venta no encontrada' });
-    }
-    
+
     // Restaurar cantidad de cerdos al lote
     if (venta.lote && venta.cantidad) {
       await Lote.findByIdAndUpdate(venta.lote, {
@@ -181,8 +192,8 @@ exports.obtenerEstadisticas = async (req, res) => {
   try {
     const { mes, año } = req.query;
     
-    let filtroFecha = { activa: true };
-    
+    let filtroFecha = { activa: true, granja: req.user.granja_id };
+
     if (mes && año) {
       const inicioMes = new Date(año, mes - 1, 1);
       const finMes = new Date(año, mes, 0, 23, 59, 59);
@@ -252,7 +263,7 @@ exports.obtenerPrecios = async (req, res) => {
   try {
     // Precios promedio de las últimas 10 ventas por tipo
     const precios = await Venta.aggregate([
-      { $match: { activa: true } },
+      { $match: { activa: true, granja: req.user.granja_id } },
       { $sort: { fecha_venta: -1 } },
       {
         $group: {

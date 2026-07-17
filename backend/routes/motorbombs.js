@@ -8,12 +8,20 @@ const {
   deleteMotorbomb,
   getMotorbombStatus
 } = require('../controllers/motorbombController');
+const { verificarToken, requirePermiso, requireAccesoCompleto } = require('../middleware/auth');
 
-router.get('/', getAllMotorbombs);
-router.get('/status', getMotorbombStatus);
-router.post('/', createMotorbomb);
-router.put('/:id/toggle', toggleMotorbomb);
-router.put('/:id', updateMotorbomb);
-router.delete('/:id', deleteMotorbomb);
+router.use(verificarToken);
+
+// Lectura y toggle: accesible a cuentas completas o con permiso 'bombas'
+router.get('/', requirePermiso('bombas'), getAllMotorbombs);
+router.get('/status', requirePermiso('bombas'), getMotorbombStatus);
+router.put('/:id/toggle', requirePermiso('bombas'), toggleMotorbomb);
+
+// Gestión del hardware (crear/editar/eliminar): solo cuentas sin restricción
+// de permisos (el dueño real de la granja) — nunca una cuenta restringida
+// como Carlos, aunque tenga permiso 'bombas' para operar.
+router.post('/', requireAccesoCompleto, createMotorbomb);
+router.put('/:id', requireAccesoCompleto, updateMotorbomb);
+router.delete('/:id', requireAccesoCompleto, deleteMotorbomb);
 
 module.exports = router;
