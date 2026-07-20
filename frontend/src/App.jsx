@@ -2243,7 +2243,9 @@ const verStreamCamara = (camara) => {
 
   const cargarBombas = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/motorbombs`)
+      const res = await axios.get(`${API_URL}/api/motorbombs`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
       setBombas(res.data)
     } catch (error) {
       console.error('Error cargando bombas:', error)
@@ -2252,7 +2254,9 @@ const verStreamCamara = (camara) => {
 
   const cargarAlertas = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/alerts`)
+      const res = await axios.get(`${API_URL}/api/alerts`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
       const data = res.data.slice(0, 10)
       // Detectar alertas nuevas vs las que ya teníamos → mostrar toast
       setAlertas(prev => {
