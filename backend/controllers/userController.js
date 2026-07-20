@@ -99,6 +99,11 @@ const LIMITE_DISPOSITIVOS_POR_PLAN = { corral: 1, granja: 3, alianza: 5, empresa
 const DEFAULT_LIMITE_CORPORATIVO = 20;
 
 function limiteDispositivos(user) {
+  // Un superadmin es una cuenta interna/de administración, no un cliente
+  // pagando un plan — no debe quedar atado al límite de dispositivos del
+  // plan que tenga asignado (a menudo 'corral' por defecto, límite de 1),
+  // o cada pestaña/dispositivo nuevo chocaría con "sesión activa".
+  if (user.rol === 'superadmin') return 999;
   if (user.limite_dispositivos_custom) return user.limite_dispositivos_custom;
   if (user.plan === 'corporativo') return DEFAULT_LIMITE_CORPORATIVO;
   return LIMITE_DISPOSITIVOS_POR_PLAN[user.plan] || 1;
