@@ -3268,10 +3268,10 @@ const cargarHistoricoPesos = async () => {
                   </div>
                 </div>
                 <div className="conflicto-acciones">
-                  <button className="btn-cerrar-sesion" onClick={() => handleLogin(null, true)}>
+                  <button type="button" className="btn-cerrar-sesion" onClick={() => handleLogin(null, true)}>
                     <LogOut size={16} /> Cerrar otra sesión e ingresar
                   </button>
-                  <button className="btn-cancelar" onClick={() => setConflictoSesion(null)}>
+                  <button type="button" className="btn-cancelar" onClick={() => setConflictoSesion(null)}>
                     Cancelar
                   </button>
                 </div>
