@@ -132,7 +132,52 @@ const loteSchema = new mongoose.Schema({
     default: 0,
     min: 0
   },
-  
+
+  // ═══════════════════════════════════════════════════════════════════
+  // VACUNAS — se registran a nivel de lote (los cerdos individuales no
+  // existen como registros propios en el sistema, se manejan siempre en
+  // grupo). Si se indica un costo, también genera un Costo (categoría
+  // 'vacunas') igual que un gasto semanal.
+  // ═══════════════════════════════════════════════════════════════════
+  vacunas: [{
+    vacuna: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    fecha: {
+      type: Date,
+      default: Date.now
+    },
+    dosis: {
+      type: String,
+      default: ''
+    },
+    // Para poder avisar cuándo toca el refuerzo/siguiente dosis.
+    proxima_fecha: {
+      type: Date,
+      default: null
+    },
+    notas: {
+      type: String,
+      default: ''
+    },
+    costo: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    registrado_por: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    costo_id: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Costo',
+      default: null
+    }
+  }],
+
   // ═══════════════════════════════════════════════════════════════════
   // RELACIONES
   // ═══════════════════════════════════════════════════════════════════

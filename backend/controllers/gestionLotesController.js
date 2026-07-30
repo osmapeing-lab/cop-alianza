@@ -393,6 +393,125 @@ exports.eliminarGastoSemanal = async (req, res) => {
   }
 };
 
+/*
+ * registrarVacuna
+ * POST /api/lotes/:id/vacuna
+ *
+ * Registra una vacuna aplicada al lote (grupo completo — no hay
+ * seguimiento individual por cerdo). Si viene `costo`, también crea su
+ * Costo (categoría 'vacunas') igual que un gasto semanal.
+ */
+exports.registrarVacuna = async (req, res) => {
+  try {
+    const { vacuna, fecha, dosis, proxima_fecha, notas, costo } = req.body;
+
+    if (!vacuna || !vacuna.trim()) {
+      return res.status(400).json({ mensaje: 'vacuna es requerida' });
+    }
+
+    const propio = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (propio.error) return res.status(propio.error).json({ mensaje: propio.mensaje });
+    const lote = propio.lote;
+
+    if (!lote.activo) {
+      return res.status(400).json({ mensaje: 'No se pueden registrar vacunas en un lote finalizado' });
+    }
+
+    const fechaAplicada = fecha ? new Date(fecha) : new Date();
+    const montoCosto = Number(costo) || 0;
+
+    lote.vacunas.push({
+      vacuna: vacuna.trim(),
+      fecha: fechaAplicada,
+      dosis: dosis || '',
+      proxima_fecha: proxima_fecha ? new Date(proxima_fecha) : null,
+      notas: notas || '',
+      costo: montoCosto,
+      registrado_por: req.user?._id
+    });
+    await lote.save();
+
+    const vacunaCreada = lote.vacunas[lote.vacunas.length - 1];
+
+    if (montoCosto > 0) {
+      const costoDoc = new Costo({
+        tipo_costo: 'directo',
+        categoria: 'vacunas',
+        descripcion: `${vacuna.trim()}${dosis ? ' — ' + dosis : ''} — ${lote.nombre}`,
+        cantidad: 1,
+        unidad: 'unidad',
+        precio_unitario: montoCosto,
+        total: montoCosto,
+        lote: req.params.id,
+        granja: req.user.granja_id,
+        fecha: fechaAplicada,
+        estado: 'registrado',
+        metodo_pago: 'efectivo'
+      });
+      await costoDoc.save();
+      vacunaCreada.costo_id = costoDoc._id;
+      await lote.save();
+    }
+
+    res.status(201).json({
+      mensaje: 'Vacuna registrada correctamente',
+      vacuna: vacunaCreada
+    });
+  } catch (error) {
+    console.error('[LOTES] Error registrando vacuna:', error);
+    res.status(400).json({ mensaje: error.message });
+  }
+};
+
+/*
+ * getVacunas
+ * GET /api/lotes/:id/vacunas
+ */
+exports.getVacunas = async (req, res) => {
+  try {
+    const propio = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (propio.error) return res.status(propio.error).json({ mensaje: propio.mensaje });
+
+    const lote = await Lote.findById(req.params.id)
+      .populate('vacunas.registrado_por', 'usuario');
+
+    const vacunas = [...lote.vacunas].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+    res.json({ vacunas });
+  } catch (error) {
+    res.status(500).json({ mensaje: error.message });
+  }
+};
+
+/*
+ * eliminarVacuna
+ * DELETE /api/lotes/:id/vacuna/:vacunaId
+ */
+exports.eliminarVacuna = async (req, res) => {
+  try {
+    const propio = await loteDeLaGranja(req.params.id, req.user.granja_id);
+    if (propio.error) return res.status(propio.error).json({ mensaje: propio.mensaje });
+    const lote = propio.lote;
+
+    const idx = lote.vacunas.findIndex(v => v._id.toString() === req.params.vacunaId);
+    if (idx === -1) {
+      return res.status(404).json({ mensaje: 'Vacuna no encontrada' });
+    }
+
+    const vacuna = lote.vacunas[idx];
+    if (vacuna.costo_id) {
+      await Costo.findByIdAndDelete(vacuna.costo_id);
+    }
+
+    lote.vacunas.splice(idx, 1);
+    await lote.save();
+
+    res.json({ mensaje: 'Vacuna eliminada' });
+  } catch (error) {
+    res.status(500).json({ mensaje: error.message });
+  }
+};
+
 // ═══════════════════════════════════════════════════════════════════════
 // ALIMENTACIÓN VINCULADA A INVENTARIO
 // POST /api/lotes/alimentacion-inventario

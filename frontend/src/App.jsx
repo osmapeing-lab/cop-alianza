@@ -1592,6 +1592,9 @@ const [gastosSemanales, setGastosSemanales] = useState([])
 const [totalGastosLote, setTotalGastosLote] = useState(0)
 const [mostrarFormGasto, setMostrarFormGasto] = useState(false)
 const [nuevoGasto, setNuevoGasto] = useState({ descripcion: '', monto: '', categoria: 'otro' })
+const [vacunasLote, setVacunasLote] = useState([])
+const [mostrarFormVacuna, setMostrarFormVacuna] = useState(false)
+const [nuevaVacuna, setNuevaVacuna] = useState({ vacuna: '', dosis: '', proxima_fecha: '', notas: '', costo: '' })
 
 // Estados para gráficas
 const [historicoTemperatura, setHistoricoTemperatura] = useState([])
@@ -1634,6 +1637,7 @@ const [historicoPesos, setHistoricoPesos] = useState([])
   const [granjaDetalleCorporativo, setGranjaDetalleCorporativo] = useState(null)
   const [granjasSeleccionadasCorporativo, setGranjasSeleccionadasCorporativo] = useState([])
   const [descargandoReporteCorporativo, setDescargandoReporteCorporativo] = useState(false)
+  const [ejecutandoConsumoAutomatico, setEjecutandoConsumoAutomatico] = useState(false)
   const [nuevoMiembroGranja, setNuevoMiembroGranja] = useState({ usuario: '', correo: '', password: '', permisos: [] })
 
 
@@ -2605,11 +2609,12 @@ const verDetalleLote = async (id) => {
     setLoteDetalle(res.data)
     setMostrarFormGasto(false)
 
-    // Cargar alimentación, gráfica y gastos semanales del lote
+    // Cargar alimentación, gráfica, gastos semanales y vacunas del lote
     await Promise.all([
       cargarAlimentacionLote(id),
       cargarGraficaEvolucion(id),
-      cargarGastosSemanales(id)
+      cargarGastosSemanales(id),
+      cargarVacunas(id)
     ])
   } catch (error) {
     alert('Error cargando detalle del lote: ' + (error.response?.data?.mensaje || error.message))
@@ -2764,6 +2769,57 @@ const eliminarGastoSemanal = async (loteId, gastoId) => {
     await cargarLotes()
   } catch (error) {
     alert('Error eliminando gasto: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// VACUNAS DEL LOTE (grupo completo — no hay seguimiento por cerdo)
+// ═══════════════════════════════════════════════════════════════════════
+
+const cargarVacunas = async (loteId) => {
+  try {
+    const res = await axios.get(`${API_URL}/api/lotes/${loteId}/vacunas`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setVacunasLote(res.data.vacunas || [])
+  } catch (error) {
+    console.error('Error cargando vacunas:', error)
+    setVacunasLote([])
+  }
+}
+
+const registrarVacuna = async (loteId) => {
+  if (!nuevaVacuna.vacuna.trim()) {
+    alert('El nombre de la vacuna es requerido')
+    return
+  }
+  try {
+    await axios.post(`${API_URL}/api/lotes/${loteId}/vacuna`, {
+      vacuna: nuevaVacuna.vacuna,
+      dosis: nuevaVacuna.dosis,
+      proxima_fecha: nuevaVacuna.proxima_fecha || null,
+      notas: nuevaVacuna.notas,
+      costo: nuevaVacuna.costo ? parseFloat(nuevaVacuna.costo) : 0
+    }, { headers: { Authorization: `Bearer ${token}` } })
+    setNuevaVacuna({ vacuna: '', dosis: '', proxima_fecha: '', notas: '', costo: '' })
+    setMostrarFormVacuna(false)
+    await cargarVacunas(loteId)
+    if (nuevaVacuna.costo) await cargarCostos()
+    alert('✓ Vacuna registrada')
+  } catch (error) {
+    alert('Error registrando vacuna: ' + (error.response?.data?.mensaje || error.message))
+  }
+}
+
+const eliminarVacuna = async (loteId, vacunaId) => {
+  if (!confirm('¿Eliminar este registro de vacuna?')) return
+  try {
+    await axios.delete(`${API_URL}/api/lotes/${loteId}/vacuna/${vacunaId}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    await cargarVacunas(loteId)
+  } catch (error) {
+    alert('Error eliminando vacuna: ' + (error.response?.data?.mensaje || error.message))
   }
 }
 
@@ -3080,6 +3136,25 @@ const eliminarBomba = async (id) => {
       setAnaliticaGlobal(res.data)
     } catch (error) {
       console.error('Error cargando analítica global:', error)
+    }
+  }
+
+  // Dispara a mano la tarea diaria de consumo de alimento (normalmente
+  // corre sola a las 6 AM) — pone al día lotes que llevan activos desde
+  // antes de que existiera esta tarea, sin esperar al cron.
+  const ejecutarConsumoAlimentoAutomatico = async () => {
+    setEjecutandoConsumoAutomatico(true)
+    try {
+      const res = await axios.post(`${API_URL}/api/admin/farms/ejecutar-consumo-alimento`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      alert(res.data.mensaje)
+      cargarLotes()
+      cargarGranjas()
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.mensaje || error.message))
+    } finally {
+      setEjecutandoConsumoAutomatico(false)
     }
   }
 
@@ -4112,23 +4187,6 @@ const cargarHistoricoPesos = async () => {
               </button>
             )}
           </nav>
-
-          {/* Mini gráfica financiera en sidebar */}
-          {user.plan !== 'corporativo' && comparativoCostos?.length > 0 && (
-            <div className="sidebar-mini-grafica">
-              <h4><BarChart3 size={14} /> Finanzas</h4>
-              <ResponsiveContainer width="100%" height={100}>
-                <BarChart data={comparativoCostos.slice(-4)}>
-                  <Bar dataKey="ingresos" fill="#22c55e" radius={[3,3,0,0]} />
-                  <Bar dataKey="costos" fill="#ef4444" radius={[3,3,0,0]} />
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="sidebar-mini-leyenda">
-                <span className="dot-verde"></span> Ingresos
-                <span className="dot-rojo"></span> Costos
-              </div>
-            </div>
-          )}
         </aside>
 
         {/* Contenido principal */}
@@ -4474,39 +4532,6 @@ const cargarHistoricoPesos = async () => {
       </div>
       )
     })()}
-
-    {/* Resumen Financiero - una sola gráfica limpia */}
-    {historicoContable.length > 0 && (
-      <div className="dashboard-section grafica-section grafica-full">
-        <h3><DollarSign size={20} /> Resumen Financiero</h3>
-        <div className="grafica-container">
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={historicoContable}>
-              <defs>
-                <linearGradient id="gradIngresos" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.35}/>
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.02}/>
-                </linearGradient>
-                <linearGradient id="gradGastos" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.25}/>
-                  <stop offset="95%" stopColor="#ef4444" stopOpacity={0.02}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="mes" tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" />
-              <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} stroke="#e2e8f0" tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} />
-              <Tooltip
-                contentStyle={{ backgroundColor: 'rgba(255,255,255,0.96)', border: 'none', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}
-                formatter={(value) => [formatearDinero(value), '']}
-              />
-              <Legend />
-              <Area type="monotone" dataKey="ingresos" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#gradIngresos)" name="Ingresos" dot={{ r: 3, fill: '#fff', stroke: '#10b981', strokeWidth: 2 }} activeDot={{ r: 6, fill: '#10b981', stroke: '#fff', strokeWidth: 2 }} />
-              <Area type="monotone" dataKey="gastos" stroke="#ef4444" strokeWidth={2.5} fillOpacity={1} fill="url(#gradGastos)" name="Gastos" dot={{ r: 3, fill: '#fff', stroke: '#ef4444', strokeWidth: 2 }} activeDot={{ r: 6, fill: '#ef4444', stroke: '#fff', strokeWidth: 2 }} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    )}
 
     {/* Lotes y Alertas */}
     <div className="dashboard-columns">
@@ -5425,6 +5450,90 @@ const cargarHistoricoPesos = async () => {
                     <td style={{color:'#ef4444'}}>{formatearDinero(totalGastosLote)}</td>
                     <td></td>
                   </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* ═══ VACUNAS DEL LOTE ═══ */}
+        <div className="dashboard-section" style={{marginBottom:'24px'}}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px'}}>
+            <h3><Activity size={20} /> Vacunas del Lote</h3>
+            <button className="btn-primary btn-sm" onClick={() => {
+              if (mostrarFormVacuna) setNuevaVacuna({ vacuna: '', dosis: '', proxima_fecha: '', notas: '', costo: '' })
+              setMostrarFormVacuna(!mostrarFormVacuna)
+            }}>
+              <Plus size={16} /> {mostrarFormVacuna ? 'Cancelar' : 'Registrar Vacuna'}
+            </button>
+          </div>
+
+          {mostrarFormVacuna && (
+            <div style={{background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'16px', marginBottom:'16px'}}>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>Vacuna</label>
+                  <input type="text" value={nuevaVacuna.vacuna} onChange={e => setNuevaVacuna({...nuevaVacuna, vacuna: e.target.value})} placeholder="Ej: Peste porcina, Parvovirus..." />
+                </div>
+                <div className="form-group">
+                  <label>Dosis (opcional)</label>
+                  <input type="text" value={nuevaVacuna.dosis} onChange={e => setNuevaVacuna({...nuevaVacuna, dosis: e.target.value})} placeholder="Ej: 2 ml" />
+                </div>
+                <div className="form-group">
+                  <label>Próxima dosis (opcional)</label>
+                  <input type="date" value={nuevaVacuna.proxima_fecha} onChange={e => setNuevaVacuna({...nuevaVacuna, proxima_fecha: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label>Costo (opcional)</label>
+                  <input type="number" value={nuevaVacuna.costo} onChange={e => setNuevaVacuna({...nuevaVacuna, costo: e.target.value})} placeholder="0" min="0" />
+                </div>
+              </div>
+              <div className="form-group" style={{marginBottom:'16px'}}>
+                <label>Notas (opcional)</label>
+                <input type="text" value={nuevaVacuna.notas} onChange={e => setNuevaVacuna({...nuevaVacuna, notas: e.target.value})} placeholder="Ej: Aplicada por el veterinario" />
+              </div>
+              <button className="btn-primary" onClick={() => registrarVacuna(loteDetalle._id)}>
+                Registrar Vacuna
+              </button>
+            </div>
+          )}
+
+          {vacunasLote.length === 0 ? (
+            <p className="sin-datos">No hay vacunas registradas para este lote</p>
+          ) : (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Vacuna</th>
+                    <th>Fecha</th>
+                    <th>Dosis</th>
+                    <th>Próxima dosis</th>
+                    <th>Costo</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vacunasLote.map(v => (
+                    <tr key={v._id}>
+                      <td><strong>{v.vacuna}</strong></td>
+                      <td>{new Date(v.fecha).toLocaleDateString('es-CO')}</td>
+                      <td>{v.dosis || '-'}</td>
+                      <td>
+                        {v.proxima_fecha ? (
+                          <span style={new Date(v.proxima_fecha) <= new Date() ? {color:'#dc2626', fontWeight:'600'} : {}}>
+                            {new Date(v.proxima_fecha).toLocaleDateString('es-CO')}
+                          </span>
+                        ) : '-'}
+                      </td>
+                      <td>{v.costo > 0 ? formatearDinero(v.costo) : '-'}</td>
+                      <td>
+                        <button className="btn-icon btn-danger" onClick={() => eliminarVacuna(loteDetalle._id, v._id)}>
+                          <Trash2 size={15} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -7673,6 +7782,9 @@ const cargarHistoricoPesos = async () => {
   <div className="page-admin">
     <div className="page-header">
       <h2><Shield size={24} style={{verticalAlign:'middle', marginRight:8}} />Administración de Granjas</h2>
+      <button className="btn-secondary" onClick={ejecutarConsumoAlimentoAutomatico} disabled={ejecutandoConsumoAutomatico}>
+        {ejecutandoConsumoAutomatico ? 'Poniendo al día...' : 'Poner al día consumo de alimento'}
+      </button>
     </div>
 
     <h3 className="section-subtitulo">Granjas registradas</h3>

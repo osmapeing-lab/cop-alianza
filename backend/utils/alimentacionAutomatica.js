@@ -71,26 +71,63 @@ function mapEtapaATipoAlimentacionLote(tipoInventario) {
   return 'otro';
 }
 
+// Kg + costo acumulado que un lote DEBERÍA llevar comido hasta hoy, según
+// la tabla de referencia — suma semana por semana (solo los días ya
+// vividos de la semana en curso), usando el precio por etapa configurado.
+async function calcularAcumuladoEsperado(edadDias, cantidadCerdos, precios, precioFallback) {
+  let kg = 0;
+  let costo = 0;
+  for (const fila of PLAN_ALIMENTACION_COMPLEMENTARIO) {
+    if (fila.dia_inicio > edadDias) break;
+    if (fila.consumo_dia_cerdo_kg == null) continue;
+    const diasVividosEnSemana = Math.min(fila.dia_fin, edadDias) - fila.dia_inicio + 1;
+    const kgSemana = fila.consumo_dia_cerdo_kg * cantidadCerdos * diasVividosEnSemana;
+    const match = precios.find(p => p.etapa === fila.etapa);
+    const precioEtapa = match ? match.precio_por_kg : precioFallback;
+    kg += kgSemana;
+    costo += kgSemana * precioEtapa;
+  }
+  return { kg, costo };
+}
+
 /**
- * Registra el consumo de alimento de HOY para cada lote activo, según la
- * tabla de referencia escalada por cantidad de cerdos. Pensada para
- * llamarse una vez al día (ver server.js) — no es idempotente por sí sola
- * dentro del mismo día (quien la llama debe evitar llamarla dos veces el
- * mismo día, igual que el resto de tareas en notificationManager).
+ * "Pone al día" el consumo de alimento de cada lote activo: calcula cuánto
+ * debería llevar comido hasta HOY según la tabla de referencia y registra
+ * solo la diferencia contra lo que ya tiene acumulado
+ * (`lote.alimento_total_kg`/`costo_alimento_total`). Al ser una diferencia
+ * contra el estado actual (no "el consumo de hoy" a secas), es
+ * auto-sanadora: si el cron no corrió un día, si el servidor estuvo caído,
+ * o si es la primera vez que corre para un lote que ya llevaba semanas
+ * activo, el faltante completo se pone al día de una sola vez. Pensada
+ * para llamarse una vez al día (ver server.js), pero es seguro llamarla
+ * más veces — si ya está al día no genera un nuevo registro.
  */
 async function registrarConsumoDiarioAutomatico() {
   const lotes = await Lote.find({ activo: true });
+  const config = await Config.findOne();
+  const precios = config?.precios_alimento_por_etapa || [];
+  const precioFallback = config?.precio_alimento_kg || 0;
   let registrados = 0;
 
   for (const lote of lotes) {
     try {
-      const etapaInfo = getEtapaAlimentacion(lote.edad_dias);
-      if (!etapaInfo || etapaInfo.consumo_dia_cerdo_kg == null) continue;
+      const edadDias = lote.edad_dias;
+      if (edadDias == null || edadDias < 0) continue;
 
-      const kgHoy = etapaInfo.consumo_dia_cerdo_kg * (lote.cantidad_cerdos || 0);
-      if (kgHoy <= 0) continue;
+      const { kg: kgEsperado, costo: costoEsperado } = await calcularAcumuladoEsperado(
+        edadDias,
+        lote.cantidad_cerdos || 0,
+        precios,
+        precioFallback
+      );
 
-      const tipoInv = mapEtapaATipoInventario(etapaInfo.etapa);
+      const kgFaltante = kgEsperado - (lote.alimento_total_kg || 0);
+      // Menos de 50 g de diferencia no vale la pena registrarlo — evita
+      // crear un registro nuevo cada vez que corre por redondeos mínimos.
+      if (kgFaltante <= 0.05) continue;
+
+      const etapaActual = getEtapaAlimentacion(edadDias);
+      const tipoInv = etapaActual ? mapEtapaATipoInventario(etapaActual.etapa) : null;
       const inventario = tipoInv
         ? await InventarioAlimento.findOne({
             granja: lote.granja,
@@ -106,13 +143,13 @@ async function registrarConsumoDiarioAutomatico() {
 
       if (inventario) {
         const pesoPorBulto = inventario.peso_por_bulto_kg || 40;
-        const bultosNecesarios = kgHoy / pesoPorBulto;
+        const bultosNecesarios = kgFaltante / pesoPorBulto;
         if (bultosNecesarios <= inventario.cantidad_bultos) {
           precio_kg = inventario.precio_bulto > 0 ? inventario.precio_bulto / pesoPorBulto : 0;
           await inventario.registrarSalida(
             bultosNecesarios,
             lote._id,
-            `Consumo automático diario — ${etapaInfo.etapa} (${lote.cantidad_cerdos} cerdos)`,
+            `Consumo automático — ${etapaActual?.etapa || ''} (${lote.cantidad_cerdos} cerdos)`,
             null
           );
           inventario_ref = inventario._id;
@@ -121,20 +158,19 @@ async function registrarConsumoDiarioAutomatico() {
       }
 
       if (!inventario_ref) {
-        // Sin bultos suficientes en inventario — usa el precio por etapa
-        // que configuró el admin (o el general de respaldo).
-        const config = await Config.findOne();
-        const precios = config?.precios_alimento_por_etapa || [];
-        const match = precios.find(p => p.etapa === etapaInfo.etapa);
-        precio_kg = match ? match.precio_por_kg : (config?.precio_alimento_kg || 0);
+        // Sin bultos suficientes en inventario — usa el costo esperado
+        // (ya calculado con el precio por etapa correcto de cada semana),
+        // convertido a un precio/kg promedio para este registro.
+        precio_kg = kgFaltante > 0 ? (costoEsperado - (lote.costo_alimento_total || 0)) / kgFaltante : 0;
+        if (precio_kg < 0) precio_kg = precioFallback;
       }
 
       const registro = new AlimentacionLote({
         lote: lote._id,
         tipo_alimento: mapEtapaATipoAlimentacionLote(tipoInv),
-        cantidad_kg: kgHoy,
+        cantidad_kg: kgFaltante,
         precio_kg,
-        notas: `Consumo automático diario — ${etapaInfo.etapa} (${lote.cantidad_cerdos} cerdos)`,
+        notas: `Consumo automático — al día ${edadDias} (${lote.cantidad_cerdos} cerdos)`,
         inventario_ref: inventario_ref || undefined,
         bultos_consumidos,
         automatico: true
@@ -146,7 +182,7 @@ async function registrarConsumoDiarioAutomatico() {
     }
   }
 
-  console.log(`[ALIMENTACION-AUTO] Consumo diario registrado para ${registrados}/${lotes.length} lotes activos.`);
+  console.log(`[ALIMENTACION-AUTO] Consumo puesto al día para ${registrados}/${lotes.length} lotes activos.`);
   return registrados;
 }
 

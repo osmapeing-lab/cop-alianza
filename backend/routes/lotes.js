@@ -25,7 +25,10 @@ const {
   getGraficaEvolucion,
   registrarGastoSemanal,
   getGastosSemanales,
-  eliminarGastoSemanal
+  eliminarGastoSemanal,
+  registrarVacuna,
+  getVacunas,
+  eliminarVacuna
 } = require('../controllers/gestionLotesController');
 const { verificarToken } = require('../middleware/auth');
 
@@ -65,5 +68,12 @@ router.get('/:id/grafica/evolucion', getGraficaEvolucion);
 router.post('/:id/gasto-semanal', registrarGastoSemanal);
 router.get('/:id/gastos-semanales', getGastosSemanales);
 router.delete('/:id/gasto-semanal/:gastoId', eliminarGastoSemanal);
+
+// ═══════════════════════════════════════════════════════════════════════
+// RUTAS VACUNAS
+// ═══════════════════════════════════════════════════════════════════════
+router.post('/:id/vacuna', registrarVacuna);
+router.get('/:id/vacunas', getVacunas);
+router.delete('/:id/vacuna/:vacunaId', eliminarVacuna);
 
 module.exports = router;
