@@ -94,6 +94,15 @@ const alimentacionLoteSchema = new mongoose.Schema({
     default: false
   },
 
+  // Generado por la tarea diaria (ver utils/alimentacionAutomatica.js) en
+  // vez de registrado a mano por el usuario — para poder distinguirlos en
+  // el historial ("Consumo automático diario" en las notas ya lo indica,
+  // este campo es para poder filtrar/consultar por código).
+  automatico: {
+    type: Boolean,
+    default: false
+  },
+
   // ═══════════════════════════════════════════════════════════════════
   // NOTAS
   // ═══════════════════════════════════════════════════════════════════

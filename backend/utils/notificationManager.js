@@ -617,6 +617,14 @@ async function setResumenAguaEnviado(fecha) {
   await setEstado('resumen_agua_enviado', fecha);
 }
 
+async function getAlimentacionDiariaEjecutada() {
+  return await getEstado('alimentacion_diaria_ejecutada');
+}
+
+async function setAlimentacionDiariaEjecutada(fecha) {
+  await setEstado('alimentacion_diaria_ejecutada', fecha);
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // EXPORTS
 // ═══════════════════════════════════════════════════════════════════════
@@ -635,5 +643,7 @@ module.exports = {
   getTareaDiariaEjecutada,
   setTareaDiariaEjecutada,
   getResumenAguaEnviado,
-  setResumenAguaEnviado
+  setResumenAguaEnviado,
+  getAlimentacionDiariaEjecutada,
+  setAlimentacionDiariaEjecutada
 };

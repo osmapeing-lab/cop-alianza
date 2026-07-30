@@ -5778,6 +5778,26 @@ const cargarHistoricoPesos = async () => {
                   <span>Total Gastos</span>
                   <strong style={{color:'#dc2626', fontSize:'15px'}}>{formatearDinero((lote.total_gastos || 0) + (lote.costo_alimento_total || 0))}</strong>
                 </div>
+                {(() => {
+                  const edadDias = lote.edad_dias || 0
+                  const cantidadCerdos = lote.cantidad_cerdos || 0
+                  const etapaActual = getEtapaAlimentacion(edadDias)
+                  const pesoEsperadoKg = etapaActual?.peso_esperado_kg || 0
+                  const valorVentaEstimado = cantidadCerdos * pesoEsperadoKg * (config.precio_venta_kg || 0)
+                  const costoAlimento = costoAlimentoEstimado({
+                    hastaDia: edadDias,
+                    cantidadCerdos,
+                    precioPorEtapa: Object.fromEntries((config.precios_alimento_por_etapa || []).map(f => [f.etapa, f.precio_por_kg])),
+                    precioFallback: config.precio_alimento_kg || 0
+                  })
+                  const ganancia = valorVentaEstimado - costoAlimento - (lote.total_gastos || 0)
+                  return (
+                    <div className="lote-dato" style={{gridColumn:'1 / -1', background: ganancia >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius:'8px', padding:'6px 10px'}}>
+                      <span>Ganancia Estimada</span>
+                      <strong style={{color: ganancia >= 0 ? '#16a34a' : '#dc2626', fontSize:'15px'}}>{formatearDinero(ganancia)}</strong>
+                    </div>
+                  )
+                })()}
               </div>
               <div className="lote-actions">
                 <button className="btn-ver-detalle" onClick={() => verDetalleLote(lote._id)}>

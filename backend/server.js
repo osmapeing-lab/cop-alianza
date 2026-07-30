@@ -208,8 +208,11 @@ app.use('/api/admin/analytics', adminAnalyticsRoutes);
     getTareaDiariaEjecutada,
     setTareaDiariaEjecutada,
     getResumenAguaEnviado,
-    setResumenAguaEnviado
+    setResumenAguaEnviado,
+    getAlimentacionDiariaEjecutada,
+    setAlimentacionDiariaEjecutada
   } = require('./utils/notificationManager');
+  const { registrarConsumoDiarioAutomatico } = require('./utils/alimentacionAutomatica');
 
   // Limpiar sesiones expiradas cada 5 minutos
   setInterval(async () => {
@@ -238,6 +241,19 @@ app.use('/api/admin/analytics', adminAnalyticsRoutes);
       const ahora = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
       const hoy = ahora.toDateString();
       const hora = ahora.getHours();
+
+      // Consumo de alimento automático: una vez al día a las 6 AM — el
+      // costo de cada lote se va acumulando día a día según la tabla de
+      // alimentación (no solo al final del lote). Ver
+      // utils/alimentacionAutomatica.js.
+      const alimentacionDiariaEjecutada = await getAlimentacionDiariaEjecutada();
+      if (hora >= 6 && hora < 7 && alimentacionDiariaEjecutada !== hoy) {
+        await setAlimentacionDiariaEjecutada(hoy);
+        console.log('[CRON] Registrando consumo de alimento automático diario...');
+        await registrarConsumoDiarioAutomatico().catch(e =>
+          console.error('[CRON] Error en consumo automático:', e.message)
+        );
+      }
 
       // Tareas de salud: ejecutar una vez al día a las 7 AM
       const tareaDiariaEjecutada = await getTareaDiariaEjecutada();
