@@ -1099,6 +1099,49 @@ table select:disabled {
   cursor: not-allowed;
 }
 
+/* Recuadro para cada lista de la analítica de admin (Pantallas más
+   usadas, Funciones más usadas, Granjas cerca de su límite) — antes solo
+   se veía "encuadrado" el estado vacío (por el estilo de .sin-datos),
+   dejando las listas con datos sueltas sin ningún contenedor. */
+.analitica-lista-card {
+  background: var(--white);
+  border: 1px solid var(--gray-100);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 16px 20px;
+}
+
+.analitica-lista-card h4 {
+  margin: 0 0 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--gray-600);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.analitica-lista-card ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.analitica-lista-card li {
+  padding: 6px 0;
+  font-size: 0.9rem;
+  color: var(--gray-700);
+  border-bottom: 1px solid var(--gray-50);
+}
+
+.analitica-lista-card li:last-child {
+  border-bottom: none;
+}
+
+.analitica-lista-card li.sin-datos {
+  border: none;
+  padding: 16px 0;
+}
+
 /* Título de subsección dentro de una página (ej. "Granjas registradas",
    "Cuentas de datos") — un acento de color a la izquierda le da algo de
    jerarquía visual sin necesitar una tarjeta completa. */

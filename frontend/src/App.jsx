@@ -7789,7 +7789,7 @@ const cargarHistoricoPesos = async () => {
         </div>
 
         <div style={{display:'flex', gap:'24px', flexWrap:'wrap'}}>
-          <div style={{flex:'1 1 260px'}}>
+          <div className="analitica-lista-card" style={{flex:'1 1 260px'}}>
             <h4>Pantallas más usadas</h4>
             <ul>
               {analiticaGlobal.pantallas_mas_usadas.length === 0 ? (
@@ -7801,7 +7801,7 @@ const cargarHistoricoPesos = async () => {
               )}
             </ul>
           </div>
-          <div style={{flex:'1 1 260px'}}>
+          <div className="analitica-lista-card" style={{flex:'1 1 260px'}}>
             <h4>Funciones más usadas</h4>
             <ul>
               {analiticaGlobal.funciones_mas_usadas.length === 0 ? (
@@ -7813,7 +7813,7 @@ const cargarHistoricoPesos = async () => {
               )}
             </ul>
           </div>
-          <div style={{flex:'1 1 260px'}}>
+          <div className="analitica-lista-card" style={{flex:'1 1 260px'}}>
             <h4>Granjas más cerca del límite de su plan</h4>
             <ul>
               {analiticaGlobal.ranking_limites_plan.length === 0 ? (
