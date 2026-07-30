@@ -4398,6 +4398,36 @@ const cargarHistoricoPesos = async () => {
                 </AreaChart>
               </ResponsiveContainer>
             </div>
+            {/* Tabla del plan de alimentación complementaria (referencia de la */}
+            {/* granja) — fila actual del lote resaltada. */}
+            <div style={{ overflowX: 'auto', marginTop: 10 }}>
+              <table style={{ width: '100%', fontSize: 11, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ textAlign: 'left', color: '#64748b' }}>
+                    <th style={{ padding: '4px 6px' }}>Sem.</th>
+                    <th style={{ padding: '4px 6px' }}>Etapa</th>
+                    <th style={{ padding: '4px 6px' }}>Consumo/cerdo</th>
+                    <th style={{ padding: '4px 6px' }}>Consumo lote/día</th>
+                    <th style={{ padding: '4px 6px' }}>Peso esperado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {PLAN_ALIMENTACION_COMPLEMENTARIO.map(fila => {
+                    const esActual = edadLoteActual >= fila.dia_inicio && edadLoteActual <= fila.dia_fin
+                    const consumoLote = consumoDiarioLoteKg(fila, lote.cantidad_cerdos || 0)
+                    return (
+                      <tr key={fila.semana} style={esActual ? { backgroundColor: `${color}22`, fontWeight: 700 } : {}}>
+                        <td style={{ padding: '3px 6px' }}>{fila.semana}</td>
+                        <td style={{ padding: '3px 6px' }}>{fila.etapa}</td>
+                        <td style={{ padding: '3px 6px' }}>{fila.consumo_dia_cerdo_kg != null ? `${fila.consumo_dia_cerdo_kg} kg` : '—'}</td>
+                        <td style={{ padding: '3px 6px' }}>{consumoLote != null ? `${consumoLote.toFixed(2)} kg` : '—'}</td>
+                        <td style={{ padding: '3px 6px' }}>{fila.peso_esperado_kg} kg</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )
       })}
