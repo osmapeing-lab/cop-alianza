@@ -18,6 +18,19 @@
 let admin = null;
 let initialized = false;
 
+// Normaliza la clave privada tal como viene de la variable de entorno —
+// admin.credential.cert() NO valida el formato de inmediato (el error solo
+// aparece después, al firmar el primer JWT para autenticar un envío real),
+// así que un formato mal resuelto aquí se ve como "funciona" hasta que se
+// manda la primera notificación. Casos comunes al pegar la clave en un
+// panel de hosting: literal "\n" en vez de salto de línea real, saltos
+// "\r\n" de Windows, o comillas envolventes de más.
+function normalizarClavePrivada(raw) {
+  let key = raw.trim();
+  if (key.startsWith('"') && key.endsWith('"')) key = key.slice(1, -1);
+  return key.replace(/\\n/g, '\n').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+}
+
 function initFirebase() {
   if (initialized) return true;
   if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
@@ -25,13 +38,18 @@ function initFirebase() {
   }
   try {
     admin = require('firebase-admin');
+    const privateKey = normalizarClavePrivada(process.env.FIREBASE_PRIVATE_KEY);
+    if (!privateKey.includes('-----BEGIN PRIVATE KEY-----') || !privateKey.includes('-----END PRIVATE KEY-----')) {
+      console.error('[FCM] FIREBASE_PRIVATE_KEY no tiene el formato PEM esperado (revisa la variable de entorno en Render).');
+      return false;
+    }
     // Evitar inicializar más de una vez si hay hot-reload
     if (admin.apps.length === 0) {
       admin.initializeApp({
         credential: admin.credential.cert({
           projectId:   process.env.FIREBASE_PROJECT_ID,
           clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey:  process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
+          privateKey
         })
       });
     }
