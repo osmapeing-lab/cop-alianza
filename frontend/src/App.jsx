@@ -7620,7 +7620,7 @@ const cargarHistoricoPesos = async () => {
       <h2><Shield size={24} style={{verticalAlign:'middle', marginRight:8}} />Administración de Granjas</h2>
     </div>
 
-    <h3 style={{margin: '0 0 12px', fontSize: '15px', color: '#374151'}}>Granjas registradas</h3>
+    <h3 className="section-subtitulo">Granjas registradas</h3>
     <div className="table-container">
       <table>
         <thead>
@@ -7692,13 +7692,13 @@ const cargarHistoricoPesos = async () => {
     </div>
 
     {/* Cuentas Corporativo — comprador de datos, sin granja propia */}
-    <div className="table-container" style={{marginTop: '32px'}}>
-      <div className="page-header" style={{marginBottom: '12px'}}>
-        <h3 style={{margin: 0}}>Cuentas de datos (Corporativo)</h3>
-        <button className="btn-primary" onClick={() => setMostrarModalCorporativo(true)}>
-          <Plus size={16} /> Nueva cuenta
-        </button>
-      </div>
+    <div style={{marginTop: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
+      <h3 className="section-subtitulo" style={{margin: 0}}>Cuentas de datos (Corporativo)</h3>
+      <button className="btn-primary" onClick={() => setMostrarModalCorporativo(true)}>
+        <Plus size={16} /> Nueva cuenta
+      </button>
+    </div>
+    <div style={{marginTop: '12px'}} className="table-container">
       <table>
         <thead>
           <tr>
@@ -7772,7 +7772,7 @@ const cargarHistoricoPesos = async () => {
     {/* Analítica global de uso */}
     {analiticaGlobal && (
       <div className="admin-analitica" style={{marginTop: '32px'}}>
-        <h3>Analítica de uso (últimos {analiticaGlobal.periodo_dias} días)</h3>
+        <h3 className="section-subtitulo">Analítica de uso (últimos {analiticaGlobal.periodo_dias} días)</h3>
         <div className="stats-grid" style={{display:'flex', gap:'16px', flexWrap:'wrap', margin:'12px 0'}}>
           <div className="stat-card">
             <span className="stat-label">Granjas activas</span>

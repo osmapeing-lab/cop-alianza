@@ -1048,8 +1048,6 @@ table th {
   color: var(--gray-600);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  position: sticky;
-  top: 0;
 }
 
 table td {
@@ -1075,6 +1073,42 @@ table td.sin-datos {
   text-align: center;
   padding: 40px;
   color: var(--gray-400);
+}
+
+/* Select dentro de una tabla (ej. selector de plan en Administración) —
+   sin esto usaba el estilo plano por defecto del navegador. */
+table select {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--gray-200);
+  background: var(--white);
+  color: var(--gray-700);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+table select:hover:not(:disabled) {
+  border-color: var(--primary);
+}
+
+table select:disabled {
+  background: var(--gray-50);
+  color: var(--gray-400);
+  cursor: not-allowed;
+}
+
+/* Título de subsección dentro de una página (ej. "Granjas registradas",
+   "Cuentas de datos") — un acento de color a la izquierda le da algo de
+   jerarquía visual sin necesitar una tarjeta completa. */
+.section-subtitulo {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gray-700);
+  padding-left: 10px;
+  border-left: 3px solid var(--primary);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
