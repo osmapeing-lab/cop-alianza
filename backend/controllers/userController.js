@@ -540,6 +540,17 @@ exports.actualizarPlan = async (req, res) => {
       return res.status(400).json({ mensaje: `Plan inválido. Debe ser: ${PLANES_VALIDOS.join(', ')}` });
     }
 
+    // Empresas y Corporativo son de venta asistida — se asignan únicamente
+    // desde el panel de superadmin (ver farmController.actualizarPlanGranja),
+    // nunca por autoservicio desde este endpoint (que procesa compras de
+    // Google Play iniciadas por el propio cliente).
+    if (plan === 'empresas' || plan === 'corporativo') {
+      return res.status(403).json({
+        mensaje: `El plan ${plan === 'empresas' ? 'Empresas' : 'Corporativo'} no está disponible por autoservicio — contacta a ventas.`,
+        codigo: 'PLAN_VENTA_ASISTIDA'
+      });
+    }
+
     if (googlePlayConfigurado()) {
       const valido = await verificarCompra({ productId, purchaseToken });
       if (!valido) {
@@ -594,6 +605,57 @@ exports.actualizarLimiteDispositivos = async (req, res) => {
     });
   } catch (error) {
     console.error('Error en actualizarLimiteDispositivos:', error);
+    res.status(500).json({ mensaje: error.message });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// CREAR CUENTA CORPORATIVO (comprador de datos, sin granja propia)
+// POST /api/users/corporativo — solo superadmin. A diferencia de `register`
+// y `farmController.crearUsuarioGranja`, esta cuenta NO crea ni se asocia a
+// ninguna `Farm` — es una relación comercial aparte (venta de datos
+// agregados de todas las granjas), no una granja más. Ver
+// `routes/corporativo.js` para el acceso de solo lectura cross-granja que
+// esta cuenta obtiene.
+// ═══════════════════════════════════════════════════════════════════════
+exports.crearCuentaCorporativa = async (req, res) => {
+  try {
+    if (req.user.rol !== 'superadmin') {
+      return res.status(403).json({ mensaje: 'No tienes permiso para crear esta cuenta.' });
+    }
+
+    const { usuario, correo, password } = req.body;
+    if (!usuario || !correo || !password) {
+      return res.status(400).json({ mensaje: 'usuario, correo y password son requeridos' });
+    }
+
+    const existe = await User.findOne({ $or: [{ usuario }, { correo }] });
+    if (existe) {
+      return res.status(400).json({ mensaje: 'Usuario o correo ya existe' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const nuevaCuenta = new User({
+      usuario,
+      correo,
+      password: hashedPassword,
+      rol: 'cliente',
+      plan: 'corporativo'
+      // Sin granja_id a propósito — ver comentario arriba.
+    });
+    await nuevaCuenta.save();
+
+    res.status(201).json({
+      mensaje: 'Cuenta Corporativo creada exitosamente',
+      usuario: {
+        id: nuevaCuenta._id,
+        usuario: nuevaCuenta.usuario,
+        correo: nuevaCuenta.correo,
+        plan: nuevaCuenta.plan
+      }
+    });
+  } catch (error) {
+    console.error('Error en crearCuentaCorporativa:', error);
     res.status(500).json({ mensaje: error.message });
   }
 };

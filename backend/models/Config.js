@@ -38,7 +38,28 @@ const configSchema = new mongoose.Schema({
   },
   precio_alimento_kg: {
     type: Number,
-    default: 2500
+    default: 2500,
+    description: 'Precio por kg de alimento — respaldo cuando una etapa no tiene precio propio en precios_alimento_por_etapa'
+  },
+  precios_alimento_por_etapa: {
+    type: [{
+      etapa: {
+        type: String,
+        required: true,
+        enum: [
+          'Calostro y leche materna', 'Leche materna', 'Preiniciador + leche', 'Preiniciador',
+          'Iniciador', 'Levante', 'Engorde', 'Finalización'
+        ]
+      },
+      precio_por_kg: {
+        type: Number,
+        required: true,
+        min: 0
+      },
+      _id: false
+    }],
+    default: [],
+    description: 'Precio de alimento por kg configurado por el admin, según etapa de crecimiento (plan de alimentación complementaria)'
   },
   precio_venta_kg: {
     type: Number,

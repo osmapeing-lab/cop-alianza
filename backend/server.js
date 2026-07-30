@@ -22,6 +22,7 @@
   const configRoutes = require('./routes/config');
   const waterRoutes = require('./routes/water');
   const farmRoutes = require('./routes/farms');
+  const corporativoRoutes = require('./routes/corporativo');
   const espRoutes = require('./routes/esp');
   const reporteRoutes = require('./routes/reporte');
   const idtoluRoutes = require('./routes/idtolu');
@@ -83,6 +84,7 @@ const adminAnalyticsRoutes = require('./routes/adminAnalytics');
   app.use('/api/config', configRoutes);
   app.use('/api/water', waterRoutes);
   app.use('/api/admin/farms', farmRoutes);
+  app.use('/api/corporativo', corporativoRoutes);
   app.use('/api/esp', espRoutes);
   app.use('/api/reporte', reporteRoutes);
   app.use('/api/idtolu', idtoluRoutes);

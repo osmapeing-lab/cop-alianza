@@ -98,7 +98,10 @@ exports.updateFarm = async (req, res) => {
 exports.updateFarmPlan = async (req, res) => {
   try {
     const { plan } = req.body;
-    const planesValidos = ['corral', 'granja', 'alianza', 'empresas', 'corporativo'];
+    // 'corporativo' ya no es un nivel de granja — es una cuenta aparte sin
+    // granja propia (ver userController.crearCuentaCorporativa), así que no
+    // puede asignarse a los usuarios de una granja existente.
+    const planesValidos = ['corral', 'granja', 'alianza', 'empresas'];
     if (!planesValidos.includes(plan)) {
       return res.status(400).json({ mensaje: 'Plan inválido' });
     }

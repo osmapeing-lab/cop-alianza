@@ -19,7 +19,8 @@ const {
   forgotPassword,
   resetPassword,
   actualizarPlan,
-  actualizarLimiteDispositivos
+  actualizarLimiteDispositivos,
+  crearCuentaCorporativa
 } = require('../controllers/userController');
 
 const { verificarToken } = require('../middleware/auth');
@@ -59,6 +60,9 @@ router.put('/me/plan', verificarToken, actualizarPlan);
 
 // Configurar límite de dispositivos de cualquier cuenta (solo superadmin)
 router.put('/:id/limite-dispositivos', verificarToken, actualizarLimiteDispositivos);
+
+// Crear cuenta Corporativo (comprador de datos, sin granja propia — solo superadmin)
+router.post('/corporativo', verificarToken, crearCuentaCorporativa);
 
 // Activar / desactivar usuario
 router.put('/:id/toggle', verificarToken, toggleUser);

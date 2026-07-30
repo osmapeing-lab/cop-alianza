@@ -222,6 +222,72 @@ const PLAN_ALIMENTACION = [
 const getPlanSemana = (edadDias) =>
   PLAN_ALIMENTACION.find(s => edadDias >= s.dia_inicio && edadDias <= s.dia_fin) || null
 
+// ═══════════════════════════════════════════════════════════════════════
+// PLAN DE ALIMENTACIÓN COMPLEMENTARIA POR ETAPA (tabla de referencia de la
+// granja, Lote 3 / 6 cerdos) — 22 semanas desde el nacimiento. Es la
+// fuente para el cálculo automático de ración esperada y costo estimado
+// de alimento por lote (según su cantidad de cerdos), independiente de
+// PLAN_ALIMENTACION/TABLA_FINCA (que siguen usándose solo para la curva de
+// Peso Real vs Meta Plan del detalle de lote).
+// ═══════════════════════════════════════════════════════════════════════
+const ETAPAS_ALIMENTACION = [
+  'Calostro y leche materna', 'Leche materna', 'Preiniciador + leche', 'Preiniciador',
+  'Iniciador', 'Levante', 'Engorde', 'Finalización'
+]
+
+const PLAN_ALIMENTACION_COMPLEMENTARIO = [
+  { semana: 1,  dia_inicio: 0,   dia_fin: 6,   etapa: 'Calostro y leche materna', consumo_dia_cerdo_kg: null,  peso_esperado_kg: 2.5 },
+  { semana: 2,  dia_inicio: 7,   dia_fin: 13,  etapa: 'Leche materna',            consumo_dia_cerdo_kg: null,  peso_esperado_kg: 4.0 },
+  { semana: 3,  dia_inicio: 14,  dia_fin: 20,  etapa: 'Preiniciador + leche',     consumo_dia_cerdo_kg: 0.075, peso_esperado_kg: 5.5 },
+  { semana: 4,  dia_inicio: 21,  dia_fin: 27,  etapa: 'Preiniciador + leche',     consumo_dia_cerdo_kg: 0.125, peso_esperado_kg: 7.0 },
+  { semana: 5,  dia_inicio: 28,  dia_fin: 34,  etapa: 'Preiniciador + leche',     consumo_dia_cerdo_kg: 0.200, peso_esperado_kg: 8.5 },
+  { semana: 6,  dia_inicio: 35,  dia_fin: 41,  etapa: 'Preiniciador',             consumo_dia_cerdo_kg: 0.325, peso_esperado_kg: 10.0 },
+  { semana: 7,  dia_inicio: 42,  dia_fin: 48,  etapa: 'Preiniciador',             consumo_dia_cerdo_kg: 0.500, peso_esperado_kg: 12.5 },
+  { semana: 8,  dia_inicio: 49,  dia_fin: 55,  etapa: 'Iniciador',                consumo_dia_cerdo_kg: 0.700, peso_esperado_kg: 15.5 },
+  { semana: 9,  dia_inicio: 56,  dia_fin: 62,  etapa: 'Iniciador',                consumo_dia_cerdo_kg: 0.900, peso_esperado_kg: 19.0 },
+  { semana: 10, dia_inicio: 63,  dia_fin: 69,  etapa: 'Iniciador',                consumo_dia_cerdo_kg: 1.100, peso_esperado_kg: 23.0 },
+  { semana: 11, dia_inicio: 70,  dia_fin: 76,  etapa: 'Levante',                  consumo_dia_cerdo_kg: 1.350, peso_esperado_kg: 27.5 },
+  { semana: 12, dia_inicio: 77,  dia_fin: 83,  etapa: 'Levante',                  consumo_dia_cerdo_kg: 1.600, peso_esperado_kg: 33.0 },
+  { semana: 13, dia_inicio: 84,  dia_fin: 90,  etapa: 'Levante',                  consumo_dia_cerdo_kg: 1.800, peso_esperado_kg: 39.0 },
+  { semana: 14, dia_inicio: 91,  dia_fin: 97,  etapa: 'Levante',                  consumo_dia_cerdo_kg: 2.000, peso_esperado_kg: 45.5 },
+  { semana: 15, dia_inicio: 98,  dia_fin: 104, etapa: 'Levante',                  consumo_dia_cerdo_kg: 2.200, peso_esperado_kg: 52.0 },
+  { semana: 16, dia_inicio: 105, dia_fin: 111, etapa: 'Levante',                  consumo_dia_cerdo_kg: 2.400, peso_esperado_kg: 59.8 },
+  { semana: 17, dia_inicio: 112, dia_fin: 118, etapa: 'Engorde',                  consumo_dia_cerdo_kg: 2.650, peso_esperado_kg: 67.0 },
+  { semana: 18, dia_inicio: 119, dia_fin: 125, etapa: 'Engorde',                  consumo_dia_cerdo_kg: 2.900, peso_esperado_kg: 75.0 },
+  { semana: 19, dia_inicio: 126, dia_fin: 132, etapa: 'Engorde',                  consumo_dia_cerdo_kg: 3.100, peso_esperado_kg: 84.0 },
+  { semana: 20, dia_inicio: 133, dia_fin: 139, etapa: 'Engorde',                  consumo_dia_cerdo_kg: 3.200, peso_esperado_kg: 93.0 },
+  { semana: 21, dia_inicio: 140, dia_fin: 146, etapa: 'Finalización',             consumo_dia_cerdo_kg: 3.300, peso_esperado_kg: 102.0 },
+  { semana: 22, dia_inicio: 147, dia_fin: 153, etapa: 'Finalización',             consumo_dia_cerdo_kg: 3.400, peso_esperado_kg: 110.0 },
+]
+
+// Fila del plan complementario según la edad en días del lote. `null` si el
+// lote ya superó la semana 22 (día 153).
+const getEtapaAlimentacion = (edadDias) =>
+  PLAN_ALIMENTACION_COMPLEMENTARIO.find(s => edadDias >= s.dia_inicio && edadDias <= s.dia_fin) || null
+
+// Consumo diario del lote completo (kg), escalado por cantidadCerdos. `null`
+// en semanas de solo calostro/leche materna (sin consumo de alimento de
+// finca atribuible).
+const consumoDiarioLoteKg = (etapa, cantidadCerdos) =>
+  etapa.consumo_dia_cerdo_kg == null ? null : etapa.consumo_dia_cerdo_kg * cantidadCerdos
+
+// Costo de alimento estimado para un lote desde el día 0 hasta `hastaDia`
+// (inclusive), usando el precio por etapa configurado por el admin
+// (precioPorEtapa: { etapa: precio_por_kg }) con precioFallback como
+// respaldo para cualquier etapa sin precio propio. Es una proyección — no
+// reemplaza el costo real registrado por alimentación efectiva.
+const costoAlimentoEstimado = ({ hastaDia, cantidadCerdos, precioPorEtapa, precioFallback }) => {
+  let total = 0
+  for (const fila of PLAN_ALIMENTACION_COMPLEMENTARIO) {
+    if (fila.dia_inicio > hastaDia) break
+    const diasEnSemanaTranscurridos = Math.min(Math.max(Math.min(fila.dia_fin, hastaDia) - fila.dia_inicio + 1, 0), 7)
+    const consumoDiaLote = consumoDiarioLoteKg(fila, cantidadCerdos) || 0
+    const precio = (precioPorEtapa && precioPorEtapa[fila.etapa] != null) ? precioPorEtapa[fila.etapa] : precioFallback
+    total += consumoDiaLote * diasEnSemanaTranscurridos * precio
+  }
+  return total
+}
+
 // Determina la edad de entrada efectiva de un lote.
 // Solo lotes con edad_dias_manual explícito (comprados) usan ese valor.
 // Todos los demás (nacidos en granja) empiezan desde Sem 1 / Día 0.
@@ -1385,7 +1451,19 @@ const PantallaMantenimiento = () => (
   const [captchaToken, setCaptchaToken] = useState(null)
   const [recordarSesion, setRecordarSesion] = useState(false)
   const captchaRef = useRef(null)
-  
+
+  // Estados de registro público (auto-servicio, POST /api/users/register —
+  // mismo endpoint que usa la app móvil; siempre crea rol 'cliente' y plan
+  // 'corral', su propia granja nueva y vacía)
+  const [modoAuth, setModoAuth] = useState('login') // 'login' | 'registro'
+  const [regUsuario, setRegUsuario] = useState('')
+  const [regCorreo, setRegCorreo] = useState('')
+  const [regPassword, setRegPassword] = useState('')
+  const [regConfirmar, setRegConfirmar] = useState('')
+  const [regAceptaTerminos, setRegAceptaTerminos] = useState(false)
+  const [errorRegistro, setErrorRegistro] = useState('')
+  const [registrando, setRegistrando] = useState(false)
+
   // Estados de navegación
   const [pagina, setPagina] = useState('dashboard')
   const [menuAbierto, setMenuAbierto] = useState(window.innerWidth > 1024)
@@ -1450,14 +1528,21 @@ const [pesajeLive, setPesajeLive] = useState({ lote: '', cantidad: 1, notas: '' 
   const [config, setConfig] = useState({
     precio_agua_litro: 5,
     precio_alimento_kg: 2500,
+    precios_alimento_por_etapa: [],
     precio_venta_kg: 8000,
     umbral_temp_max: 37,
     umbral_temp_critico: 40
   })
-  //Estado camaras 
+  //Estado camaras
   // Estados de cámaras
 const [camaras, setCamaras] = useState([])
 const [grabaciones, setGrabaciones] = useState([])
+
+// Estado de mercado porcícola (nivel 'completo'/'preview' según el plan —
+// ver GET /api/mercado/porcino)
+const [mercado, setMercado] = useState(null)
+const [mercadoCargando, setMercadoCargando] = useState(false)
+const [productoMercado, setProductoMercado] = useState(null)
 
 // Estados de ventas
 const [ventas, setVentas] = useState([])
@@ -1537,6 +1622,16 @@ const [historicoPesos, setHistoricoPesos] = useState([])
   const [granjaDetalle, setGranjaDetalle] = useState(null)
   const [granjaAEliminar, setGranjaAEliminar] = useState(null)
   const [confirmarNombreGranja, setConfirmarNombreGranja] = useState('')
+
+  // Estados de cuentas Corporativo (comprador de datos, sin granja propia —
+  // creadas por superadmin vía POST /api/users/corporativo)
+  const [mostrarModalCorporativo, setMostrarModalCorporativo] = useState(false)
+  const [nuevaCuentaCorporativa, setNuevaCuentaCorporativa] = useState({ usuario: '', correo: '', password: '' })
+
+  // Estados de la vista de datos cross-granja que ve la propia cuenta
+  // Corporativo (GET /api/corporativo/granjas, solo lectura)
+  const [granjasCorporativo, setGranjasCorporativo] = useState([])
+  const [granjaDetalleCorporativo, setGranjaDetalleCorporativo] = useState(null)
   const [nuevoMiembroGranja, setNuevoMiembroGranja] = useState({ usuario: '', correo: '', password: '', permisos: [] })
 
 
@@ -1636,8 +1731,16 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
     }
   }, [])
 
-  // Cargar datos cuando hay usuario
+  // Cargar datos cuando hay usuario — una cuenta Corporativo no tiene
+  // granja propia, así que no tiene sentido pedir los datos operativos de
+  // granja (todos filtrados por granja_id, que para esta cuenta es null):
+  // en su lugar carga el panel de datos cross-granja de solo lectura.
   useEffect(() => {
+    if (user?.plan === 'corporativo') {
+      setPagina('datos')
+      cargarGranjasCorporativo()
+      return
+    }
     if (user) {
       cargarDatos()
       const interval = setInterval(cargarDatos, 30000)
@@ -1831,6 +1934,47 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
     }
   }
 
+  const handleRegister = async (e) => {
+    e.preventDefault()
+    setErrorRegistro('')
+    if (!regAceptaTerminos) {
+      setErrorRegistro('Debes aceptar los Términos y Condiciones para continuar.')
+      return
+    }
+    if (!regCorreo.includes('@')) {
+      setErrorRegistro('Correo inválido.')
+      return
+    }
+    if (regPassword.length < 6) {
+      setErrorRegistro('La contraseña debe tener al menos 6 caracteres.')
+      return
+    }
+    if (regPassword !== regConfirmar) {
+      setErrorRegistro('Las contraseñas no coinciden.')
+      return
+    }
+    setRegistrando(true)
+    try {
+      await axios.post(`${API_URL}/api/users/register`, {
+        usuario: regUsuario.trim(),
+        correo: regCorreo.trim(),
+        password: regPassword
+      })
+      setModoAuth('login')
+      setUsuario(regUsuario.trim())
+      setRegUsuario('')
+      setRegCorreo('')
+      setRegPassword('')
+      setRegConfirmar('')
+      setRegAceptaTerminos(false)
+      alert('Cuenta creada. Ya puedes iniciar sesión.')
+    } catch (error) {
+      setErrorRegistro(error.response?.data?.mensaje || 'Error al crear la cuenta')
+    } finally {
+      setRegistrando(false)
+    }
+  }
+
   const handleLogout = async () => {
     try {
       await axios.post(`${API_URL}/api/sessions/logout`, {}, {
@@ -1972,6 +2116,23 @@ const cargarCostos = async () => {
     setComparativoCostos(compRes.data)
   } catch (error) {
     console.error('Error cargando costos:', error)
+  }
+}
+
+// GET /api/mercado/porcino — nivel 'completo' (plan Corporativo) trae el
+// histórico real; nivel 'preview' (plan Corral) solo la tendencia. El
+// resto de planes recibe 403 PLAN_INSUFICIENTE (no se muestra el nav item).
+const cargarMercado = async () => {
+  setMercadoCargando(true)
+  try {
+    const res = await axios.get(`${API_URL}/api/mercado/porcino`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    setMercado(res.data)
+  } catch (error) {
+    setMercado({ nivel: 'bloqueado', mensaje: error.response?.data?.mensaje || 'No se pudo cargar el mercado.' })
+  } finally {
+    setMercadoCargando(false)
   }
 }
 
@@ -2931,6 +3092,43 @@ const eliminarBomba = async (id) => {
     }
   }
 
+  // Crear cuenta Corporativo (comprador de datos, sin granja propia)
+  const crearCuentaCorporativa = async () => {
+    try {
+      await axios.post(`${API_URL}/api/users/corporativo`, nuevaCuentaCorporativa, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setMostrarModalCorporativo(false)
+      setNuevaCuentaCorporativa({ usuario: '', correo: '', password: '' })
+      cargarUsuarios()
+    } catch (error) {
+      alert('Error creando cuenta Corporativo: ' + (error.response?.data?.mensaje || error.message))
+    }
+  }
+
+  // ─── Vista de datos cross-granja (propia cuenta Corporativo) ───
+  const cargarGranjasCorporativo = async () => {
+    try {
+      const res = await axios.get(`${API_URL}/api/corporativo/granjas`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setGranjasCorporativo(res.data)
+    } catch (error) {
+      console.error('Error cargando granjas (corporativo):', error)
+    }
+  }
+
+  const verDetalleGranjaCorporativo = async (id) => {
+    try {
+      const res = await axios.get(`${API_URL}/api/corporativo/granjas/${id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      setGranjaDetalleCorporativo(res.data)
+    } catch (error) {
+      alert('Error: ' + (error.response?.data?.mensaje || error.message))
+    }
+  }
+
   const toggleGranja = async (id) => {
     try {
       await axios.put(`${API_URL}/api/admin/farms/${id}/toggle`, {}, {
@@ -3254,6 +3452,7 @@ const cargarHistoricoPesos = async () => {
             <h1>Sistema de Automatizacion IOT</h1>
           </div>
           
+          {modoAuth === 'login' && (
           <form onSubmit={handleLogin} style={{padding: '30px 45px'}}>
             {errorLogin && <div className="error-msg">{errorLogin}</div>}
 
@@ -3334,7 +3533,88 @@ const cargarHistoricoPesos = async () => {
             </button>
             </>)}
           </form>
-          
+          )}
+
+          {modoAuth === 'registro' && (
+          <form onSubmit={handleRegister} style={{padding: '30px 45px'}}>
+            {errorRegistro && <div className="error-msg">{errorRegistro}</div>}
+
+            <div className="input-group">
+              <label>Usuario</label>
+              <input
+                type="text"
+                value={regUsuario}
+                onChange={(e) => setRegUsuario(e.target.value)}
+                placeholder="Elige un usuario"
+                required
+              />
+            </div>
+
+            <div className="input-group">
+              <label>Correo</label>
+              <input
+                type="email"
+                value={regCorreo}
+                onChange={(e) => setRegCorreo(e.target.value)}
+                placeholder="tu@correo.com"
+                required
+              />
+            </div>
+
+            <div className="input-group">
+              <label>Contraseña</label>
+              <input
+                type="password"
+                value={regPassword}
+                onChange={(e) => setRegPassword(e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+                required
+              />
+            </div>
+
+            <div className="input-group">
+              <label>Confirmar contraseña</label>
+              <input
+                type="password"
+                value={regConfirmar}
+                onChange={(e) => setRegConfirmar(e.target.value)}
+                placeholder="Repite la contraseña"
+                required
+              />
+            </div>
+
+            <label style={{display:'flex', alignItems:'center', gap:'8px', fontSize:'13px', color:'#64748b', cursor:'pointer', margin:'4px 0 12px'}}>
+              <input type="checkbox" checked={regAceptaTerminos} onChange={e => setRegAceptaTerminos(e.target.checked)}
+                style={{width:'16px', height:'16px', accentColor:'#16a34a', cursor:'pointer'}} />
+              Acepto los Términos y Condiciones
+            </label>
+
+            <button type="submit" className="btn-login" disabled={registrando}>
+              {registrando ? 'Creando cuenta...' : 'Crear cuenta'}
+            </button>
+          </form>
+          )}
+
+          <div style={{textAlign: 'center', padding: '0 45px 20px'}}>
+            {modoAuth === 'login' ? (
+              <button
+                type="button"
+                onClick={() => { setModoAuth('registro'); setErrorLogin(''); setConflictoSesion(null) }}
+                style={{background:'none', border:'none', color:'#16a34a', cursor:'pointer', fontSize:'13px', textDecoration:'underline'}}
+              >
+                ¿No tienes cuenta? Crea una
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setModoAuth('login'); setErrorRegistro('') }}
+                style={{background:'none', border:'none', color:'#16a34a', cursor:'pointer', fontSize:'13px', textDecoration:'underline'}}
+              >
+                ¿Ya tienes cuenta? Inicia sesión
+              </button>
+            )}
+          </div>
+
           <div className="login-footer">
             <p>Granja Porcina - Lorica, Córdoba</p>
           </div>
@@ -3657,30 +3937,41 @@ const cargarHistoricoPesos = async () => {
         {/* Sidebar */}
         <aside className={`sidebar ${menuAbierto ? 'abierto' : 'colapsado'}`}>
           <nav>
-            <button 
+            {user.plan === 'corporativo' && (
+              <button
+                className={`nav-item ${pagina === 'datos' ? 'activo' : ''}`}
+                onClick={() => { setPagina('datos'); setMenuAbierto(false); cargarGranjasCorporativo() }}
+              >
+                <BarChart3 size={20} />
+                <span>Datos</span>
+              </button>
+            )}
+
+            {user.plan !== 'corporativo' && (<>
+            <button
               className={`nav-item ${pagina === 'dashboard' ? 'activo' : ''}`}
               onClick={() => { setPagina('dashboard'); setMenuAbierto(false) }}
             >
               <IconGrafica />
               <span>Dashboard</span>
             </button>
-            
-            <button 
+
+            <button
               className={`nav-item ${pagina === 'lotes' ? 'activo' : ''}`}
               onClick={() => { setPagina('lotes'); setMenuAbierto(false) }}
             >
               <IconLote />
               <span>Lotes</span>
             </button>
-            
-            <button 
+
+            <button
               className={`nav-item ${pagina === 'pesajes' ? 'activo' : ''}`}
               onClick={() => { setPagina('pesajes'); setMenuAbierto(false) }}
             >
               <IconPeso />
               <span>Pesajes</span>
             </button>
-            
+
             <button
               className={`nav-item ${pagina === 'finanzas' ? 'activo' : ''}`}
               onClick={() => { setPagina('finanzas'); setMenuAbierto(false) }}
@@ -3688,16 +3979,16 @@ const cargarHistoricoPesos = async () => {
               <IconDinero />
               <span>Finanzas</span>
             </button>
-            
-            <button 
+
+            <button
               className={`nav-item ${pagina === 'bombas' ? 'activo' : ''}`}
               onClick={() => { setPagina('bombas'); setMenuAbierto(false) }}
             >
               <IconBomba />
               <span>Bombas</span>
             </button>
-            
-            <button 
+
+            <button
               className={`nav-item ${pagina === 'alertas' ? 'activo' : ''}`}
               onClick={() => { setPagina('alertas'); setMenuAbierto(false) }}
             >
@@ -3714,15 +4005,36 @@ const cargarHistoricoPesos = async () => {
   <IconInventario />
   <span>Inventario</span>
 </button>
-            <button 
+            <button
               className={`nav-item ${pagina === 'reportes' ? 'activo' : ''}`}
               onClick={() => { setPagina('reportes'); setMenuAbierto(false) }}
             >
               <IconReporte />
               <span>Reportes</span>
             </button>
-            
-            {(user.rol === 'superadmin' || user.rol === 'ingeniero') && (
+            </>)}
+
+            {(user.plan === 'corral' || user.plan === 'corporativo') && (
+              <button
+                className={`nav-item ${pagina === 'mercado' ? 'activo' : ''}`}
+                onClick={() => { setPagina('mercado'); setMenuAbierto(false); cargarMercado() }}
+              >
+                <TrendingUp size={20} />
+                <span>Mercado</span>
+              </button>
+            )}
+
+            {user.plan !== 'corporativo' && (
+              <button
+                className={`nav-item ${pagina === 'planes' ? 'activo' : ''}`}
+                onClick={() => { setPagina('planes'); setMenuAbierto(false) }}
+              >
+                <PiggyBank size={20} />
+                <span>Planes y precios</span>
+              </button>
+            )}
+
+            {user.plan !== 'corporativo' && (user.rol === 'superadmin' || user.rol === 'ingeniero') && (
               <button
                 className={`nav-item ${pagina === 'usuarios' ? 'activo' : ''}`}
                 onClick={() => { setPagina('usuarios'); setMenuAbierto(false) }}
@@ -3750,17 +4062,19 @@ const cargarHistoricoPesos = async () => {
               <span>Manual</span>
             </button>
 
-            <button
-              className={`nav-item ${pagina === 'config' ? 'activo' : ''}`}
-              onClick={() => { setPagina('config'); setMenuAbierto(false) }}
-            >
-              <IconConfig />
-              <span>Configuración</span>
-            </button>
+            {user.plan !== 'corporativo' && (
+              <button
+                className={`nav-item ${pagina === 'config' ? 'activo' : ''}`}
+                onClick={() => { setPagina('config'); setMenuAbierto(false) }}
+              >
+                <IconConfig />
+                <span>Configuración</span>
+              </button>
+            )}
           </nav>
-          
+
           {/* Mini gráfica financiera en sidebar */}
-          {comparativoCostos?.length > 0 && (
+          {user.plan !== 'corporativo' && comparativoCostos?.length > 0 && (
             <div className="sidebar-mini-grafica">
               <h4><BarChart3 size={14} /> Finanzas</h4>
               <ResponsiveContainer width="100%" height={100}>
@@ -4468,6 +4782,32 @@ const cargarHistoricoPesos = async () => {
                   </div>
                 </div>
               </>
+            )
+          })()}
+          {(() => {
+            const edadDias = loteDetalle.edad_dias || 0
+            const cantidadCerdos = loteDetalle.cantidad_cerdos || 1
+            const etapaActual = getEtapaAlimentacion(edadDias)
+            const pesoEsperadoKg = etapaActual?.peso_esperado_kg || 0
+            const valorVentaEstimado = cantidadCerdos * pesoEsperadoKg * (config.precio_venta_kg || 0)
+            const costoAlimento = costoAlimentoEstimado({
+              hastaDia: edadDias,
+              cantidadCerdos,
+              precioPorEtapa: Object.fromEntries((config.precios_alimento_por_etapa || []).map(f => [f.etapa, f.precio_por_kg])),
+              precioFallback: config.precio_alimento_kg || 0
+            })
+            const otrosCostos = loteDetalle.total_gastos || 0
+            const ganancia = valorVentaEstimado - costoAlimento - otrosCostos
+            return (
+              <div className="lote-stat-card destacado">
+                <DollarSign size={24} />
+                <div className="stat-info">
+                  <span className="stat-valor" style={{color: ganancia >= 0 ? '#16a34a' : '#ef4444'}}>
+                    ${Math.round(ganancia).toLocaleString('es-CO')}
+                  </span>
+                  <span className="stat-label">Ganancia Estimada</span>
+                </div>
+              </div>
             )
           })()}
         </div>
@@ -7279,7 +7619,6 @@ const cargarHistoricoPesos = async () => {
                     <option value="granja">Granja</option>
                     <option value="alianza">Alianza</option>
                     <option value="empresas">Empresas</option>
-                    <option value="corporativo">Corporativo</option>
                   </select>
                 </td>
                 <td>
@@ -7315,6 +7654,84 @@ const cargarHistoricoPesos = async () => {
         </tbody>
       </table>
     </div>
+
+    {/* Cuentas Corporativo — comprador de datos, sin granja propia */}
+    <div className="table-container" style={{marginTop: '32px'}}>
+      <div className="page-header" style={{marginBottom: '12px'}}>
+        <h3 style={{margin: 0}}>Cuentas de datos (Corporativo)</h3>
+        <button className="btn-primary" onClick={() => setMostrarModalCorporativo(true)}>
+          <Plus size={16} /> Nueva cuenta
+        </button>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Correo</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {usuarios.filter(u => u.plan === 'corporativo').length === 0 ? (
+            <tr>
+              <td colSpan="3" className="sin-datos">No hay cuentas Corporativo todavía</td>
+            </tr>
+          ) : (
+            usuarios.filter(u => u.plan === 'corporativo').map(u => (
+              <tr key={u._id}>
+                <td><strong>{u.usuario}</strong></td>
+                <td>{u.correo}</td>
+                <td>
+                  <span className={`estado-badge ${u.activo ? 'activo' : 'inactivo'}`}>
+                    {u.activo ? 'Activa' : 'Desactivada'}
+                  </span>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
+
+    {mostrarModalCorporativo && (
+      <div className="modal-overlay" onClick={() => setMostrarModalCorporativo(false)}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <h3>Nueva cuenta Corporativo</h3>
+          <p style={{fontSize: '13px', color: '#64748b'}}>
+            Cuenta sin granja propia — solo lectura de datos de todas las granjas de la plataforma
+            (para venta de datos a terceros). El mercado porcícola completo también queda disponible.
+          </p>
+          <div className="form-group">
+            <label>Usuario</label>
+            <input
+              type="text"
+              value={nuevaCuentaCorporativa.usuario}
+              onChange={e => setNuevaCuentaCorporativa({ ...nuevaCuentaCorporativa, usuario: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label>Correo</label>
+            <input
+              type="email"
+              value={nuevaCuentaCorporativa.correo}
+              onChange={e => setNuevaCuentaCorporativa({ ...nuevaCuentaCorporativa, correo: e.target.value })}
+            />
+          </div>
+          <div className="form-group">
+            <label>Contraseña</label>
+            <input
+              type="password"
+              value={nuevaCuentaCorporativa.password}
+              onChange={e => setNuevaCuentaCorporativa({ ...nuevaCuentaCorporativa, password: e.target.value })}
+            />
+          </div>
+          <div className="modal-actions">
+            <button className="btn-secondary" onClick={() => setMostrarModalCorporativo(false)}>Cancelar</button>
+            <button className="btn-primary" onClick={crearCuentaCorporativa}>Crear cuenta</button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* Analítica global de uso */}
     {analiticaGlobal && (
@@ -8238,6 +8655,39 @@ const cargarHistoricoPesos = async () => {
                   </div>
                 </div>
 
+                {/* Precio de alimento por etapa */}
+                <div className="config-section">
+                  <h3>Precio de alimento por etapa</h3>
+                  <small>
+                    Se usa para calcular automáticamente el costo estimado de alimento de cada lote,
+                    según su etapa de crecimiento actual. Si una etapa se deja vacía, se usa el
+                    "Precio Alimento (por kg)" general como respaldo.
+                  </small>
+                  <div className="config-grid">
+                    {ETAPAS_ALIMENTACION.map(etapa => {
+                      const fila = (config.precios_alimento_por_etapa || []).find(f => f.etapa === etapa)
+                      return (
+                        <div className="form-group" key={etapa}>
+                          <label>{etapa}</label>
+                          <input
+                            type="number"
+                            value={fila ? fila.precio_por_kg : ''}
+                            placeholder={`General: ${config.precio_alimento_kg}`}
+                            onChange={e => {
+                              const actuales = config.precios_alimento_por_etapa || []
+                              const sinEsta = actuales.filter(f => f.etapa !== etapa)
+                              const nuevas = e.target.value === ''
+                                ? sinEsta
+                                : [...sinEsta, { etapa, precio_por_kg: numVal(e.target.value, true) }]
+                              setConfig({ ...config, precios_alimento_por_etapa: nuevas })
+                            }}
+                          />
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+
                 {/* Umbrales */}
                 <div className="config-section">
                   <h3>Umbrales de Temperatura</h3>
@@ -8295,6 +8745,255 @@ const cargarHistoricoPesos = async () => {
                     Guardar Configuración
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {/* PÁGINA: DATOS (cuenta Corporativo — comprador de datos, solo */}
+          {/* lectura de todas las granjas de la plataforma) */}
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {pagina === 'datos' && (
+            <div className="page-admin">
+              <div className="page-header">
+                <h2><BarChart3 size={24} style={{verticalAlign:'middle', marginRight:8}} />Datos de todas las granjas</h2>
+              </div>
+
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Granja</th>
+                      <th>Dueño</th>
+                      <th>Plan</th>
+                      <th>Estado</th>
+                      <th>Lotes</th>
+                      <th>Ventas</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {granjasCorporativo.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" className="sin-datos">No hay granjas registradas todavía</td>
+                      </tr>
+                    ) : (
+                      granjasCorporativo.map(g => (
+                        <tr key={g._id}>
+                          <td><strong>{g.nombre}</strong></td>
+                          <td>{g.owner ? `${g.owner.usuario} (${g.owner.correo})` : 'Sin usuario'}</td>
+                          <td style={{textTransform:'capitalize'}}>{g.owner?.plan || '—'}</td>
+                          <td>
+                            <span className={`estado-badge ${g.activo ? 'activo' : 'inactivo'}`}>
+                              {g.activo ? 'Activa' : 'Desactivada'}
+                            </span>
+                          </td>
+                          <td>{g.lotes}</td>
+                          <td>{g.ventas}</td>
+                          <td>
+                            <button className="btn-icon" onClick={() => verDetalleGranjaCorporativo(g._id)} title="Ver detalle">
+                              <Eye size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {granjaDetalleCorporativo && (
+                <div className="modal-overlay" onClick={() => setGranjaDetalleCorporativo(null)}>
+                  <div className="modal" onClick={e => e.stopPropagation()}>
+                    <h3>{granjaDetalleCorporativo.farm.nombre}</h3>
+                    <p style={{fontSize:'13px', color:'#64748b'}}>
+                      {granjaDetalleCorporativo.farm.ubicacion || 'Sin ubicación registrada'}
+                    </p>
+                    <div className="config-grid">
+                      {Object.entries(granjaDetalleCorporativo.conteos).map(([clave, valor]) => (
+                        <div className="lote-stat-card" key={clave}>
+                          <div className="stat-info">
+                            <span className="stat-valor">{valor}</span>
+                            <span className="stat-label" style={{textTransform:'capitalize'}}>{clave}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <h4 style={{marginTop:'16px'}}>Usuarios</h4>
+                    <ul>
+                      {granjaDetalleCorporativo.usuarios.map(u => (
+                        <li key={u._id}>{u.usuario} ({u.correo}) — {u.rol}</li>
+                      ))}
+                    </ul>
+                    <div className="modal-actions">
+                      <button className="btn-secondary" onClick={() => setGranjaDetalleCorporativo(null)}>Cerrar</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {/* PÁGINA: MERCADO PORCÍCOLA */}
+          {/* Nivel 'completo' (plan Corporativo): histórico real DANE/SIPSA. */}
+          {/* Nivel 'preview' (plan Corral): solo tendencia, con CTA de venta */}
+          {/* asistida para mejorar de plan (mismo gancho que en la app). */}
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {pagina === 'mercado' && (
+            <div className="page-config">
+              <div className="page-header">
+                <h2>Mercado Porcícola</h2>
+              </div>
+
+              {mercadoCargando && <p>Cargando…</p>}
+
+              {!mercadoCargando && mercado?.nivel === 'bloqueado' && (
+                <div className="config-section">
+                  <p>{mercado.mensaje || 'Los informes de mercado porcícola son exclusivos del plan Corral (vista previa) y las cuentas de datos Corporativo.'}</p>
+                </div>
+              )}
+
+              {!mercadoCargando && mercado?.nivel === 'preview' && (
+                <div className="config-section">
+                  <h3>Precios exactos disponibles con nuestro servicio de datos</h3>
+                  <p>{mercado.mensaje}</p>
+                  <a
+                    className="btn-primary"
+                    style={{display:'inline-block', textDecoration:'none', marginBottom:'16px'}}
+                    href={`mailto:ventas@coalianzas.com?subject=${encodeURIComponent('Datos agregados (Corporativo) - COO Alianzas')}`}
+                  >
+                    Contactar ventas
+                  </a>
+                  <h4>Tendencia reciente</h4>
+                  <div className="config-grid">
+                    {(mercado.tendencias || []).map(t => (
+                      <div className="lote-stat-card" key={t.producto}>
+                        {t.tendencia === 'subiendo' ? <TrendingUp size={24} color="#16a34a" /> : t.tendencia === 'bajando' ? <TrendingDown size={24} color="#ef4444" /> : <Activity size={24} />}
+                        <div className="stat-info">
+                          <span className="stat-valor" style={{textTransform:'capitalize'}}>{t.tendencia}</span>
+                          <span className="stat-label">{t.producto}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {!mercadoCargando && mercado?.nivel === 'completo' && (() => {
+                const historial = mercado.historial || []
+                const productos = [...new Set(historial.map(p => p.producto))].sort()
+                const seleccionado = productoMercado && productos.includes(productoMercado)
+                  ? productoMercado
+                  : (productos.includes('Carne de cerdo en canal') ? 'Carne de cerdo en canal' : productos[0])
+                const serie = historial
+                  .filter(p => p.producto === seleccionado)
+                  .sort((a, b) => new Date(a.periodoInicio) - new Date(b.periodoInicio))
+                const ultimo = serie[serie.length - 1]
+                return (
+                  <div className="config-section">
+                    <div className="form-group">
+                      <label>Corte / producto</label>
+                      <select value={seleccionado || ''} onChange={e => setProductoMercado(e.target.value)}>
+                        {productos.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    {ultimo && (
+                      <div className="lote-stat-card destacado" style={{marginTop:'12px', marginBottom:'16px'}}>
+                        <DollarSign size={24} />
+                        <div className="stat-info">
+                          <span className="stat-valor">${Math.round(ultimo.promedioKg).toLocaleString('es-CO')}/kg</span>
+                          <span className="stat-label">Semana del {new Date(ultimo.periodoInicio).toLocaleDateString()} · {ultimo.fuente}</span>
+                        </div>
+                      </div>
+                    )}
+                    {serie.length > 0 && (
+                      <ResponsiveContainer width="100%" height={280}>
+                        <LineChart data={serie.map(p => ({ ...p, semana: new Date(p.periodoInicio).toLocaleDateString() }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="semana" />
+                          <YAxis />
+                          <Tooltip />
+                          <Line type="monotone" dataKey="promedioKg" stroke="#3b82f6" dot={false} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                )
+              })()}
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {/* PÁGINA: PLANES Y PRECIOS (tabla comparativa, venta asistida para */}
+          {/* Empresas — mismo contenido que la app móvil). Corporativo NO */}
+          {/* aparece aquí — ya no es un nivel de granja, es una cuenta de */}
+          {/* datos aparte (ver pagina 'datos' y userController.crearCuenta- */}
+          {/* Corporativa, creada solo por superadmin). */}
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {pagina === 'planes' && (
+            <div className="page-config">
+              <div className="page-header">
+                <h2>Planes y precios</h2>
+              </div>
+              <div className="config-sections">
+                {[
+                  { nombre: 'Plan Corral', actual: user.plan === 'corral', caracteristicas: [
+                    'Alertas básicas', 'Plan de alimentación diario', '1 dispositivo', 'Con anuncios'
+                  ], contactar: false },
+                  { nombre: 'Plan Granja', actual: user.plan === 'granja', caracteristicas: [
+                    'Todo lo del Plan Corral, sin anuncios', 'Inventario de alimento (historial completo)',
+                    'Gráficas y estadísticas de producción', 'Alertas personalizadas', 'Exportar reportes (PDF/Excel)',
+                    'Gestión de varios lotes/corrales', '3 dispositivos simultáneos', 'Notificaciones push prioritarias'
+                  ], contactar: false },
+                  { nombre: 'Plan Alianza', actual: user.plan === 'alianza', caracteristicas: [
+                    'Todo lo del Plan Granja', 'Acceso completo a todos los módulos', 'Reportes avanzados / análisis (BI)',
+                    'Múltiples sensores y ubicaciones', 'Alertas ilimitadas', 'Usuarios secundarios (operarios, veterinarios, admins)',
+                    'Copias de seguridad automáticas', '5 dispositivos simultáneos',
+                    'Incluye instalación de 2 sensores (temperatura + flujo de agua)', 'Soporte prioritario'
+                  ], contactar: false },
+                  { nombre: 'Plan Empresas', actual: user.plan === 'empresas', caracteristicas: [
+                    'Todo lo del Plan Alianza', 'Múltiples granjas/sedes bajo una misma cuenta',
+                    '10 dispositivos simultáneos (ampliable)',
+                    'Instalación de sensores cotizada según número de granjas — contáctanos',
+                    'Condiciones e integración a la medida', 'Atención comercial dedicada'
+                  ], contactar: true },
+                ].map(plan => (
+                  <div className="config-section" key={plan.nombre} style={plan.actual ? {border: '2px solid #3b82f6'} : {}}>
+                    <h3>{plan.nombre} {plan.actual && <span style={{fontSize:'12px', color:'#3b82f6'}}>· Tu plan actual</span>}</h3>
+                    <ul>
+                      {plan.caracteristicas.map(c => <li key={c}>{c}</li>)}
+                    </ul>
+                    {plan.contactar && (
+                      <a
+                        className="btn-primary"
+                        style={{display:'inline-block', textDecoration:'none'}}
+                        href={`mailto:ventas@coalianzas.com?subject=${encodeURIComponent(plan.nombre + ' - COO Alianzas')}`}
+                      >
+                        Contactar ventas
+                      </a>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Nota aparte: Corporativo ya no es un nivel de granja — es una */}
+              {/* cuenta de datos comerciales (venta de datos agregados de todas */}
+              {/* las granjas), no algo que una granja "compre" o mejore hacia. */}
+              <div className="config-section" style={{marginTop: '16px'}}>
+                <h3>¿Buscas datos agregados del sector porcícola?</h3>
+                <p style={{fontSize:'13px', color:'#64748b'}}>
+                  Ofrecemos acceso comercial de solo lectura a los datos de todas las granjas de la
+                  plataforma (para empresas de alimento, compradores, investigadores, etc.) — no aplica
+                  como mejora de plan de una granja existente.
+                </p>
+                <a
+                  className="btn-primary"
+                  style={{display:'inline-block', textDecoration:'none'}}
+                  href={`mailto:ventas@coalianzas.com?subject=${encodeURIComponent('Datos agregados (Corporativo) - COO Alianzas')}`}
+                >
+                  Contactar ventas
+                </a>
               </div>
             </div>
           )}

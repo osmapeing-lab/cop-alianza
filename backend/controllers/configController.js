@@ -1,6 +1,11 @@
 const Config = require('../models/Config');
 const Motorbomb = require('../models/Motorbomb');
 
+const ETAPAS_ALIMENTACION_VALIDAS = [
+  'Calostro y leche materna', 'Leche materna', 'Preiniciador + leche', 'Preiniciador',
+  'Iniciador', 'Levante', 'Engorde', 'Finalización'
+];
+
 exports.getConfig = async (req, res) => {
   try {
     let config = await Config.findOne();
@@ -15,7 +20,24 @@ exports.getConfig = async (req, res) => {
 
 exports.updateConfig = async (req, res) => {
   try {
-    const config = await Config.findOneAndUpdate({}, req.body, { new: true, upsert: true });
+    if (req.body.precios_alimento_por_etapa !== undefined) {
+      const lista = req.body.precios_alimento_por_etapa;
+      if (!Array.isArray(lista)) {
+        return res.status(400).json({ mensaje: 'precios_alimento_por_etapa debe ser una lista de {etapa, precio_por_kg}.' });
+      }
+      for (const fila of lista) {
+        if (!ETAPAS_ALIMENTACION_VALIDAS.includes(fila.etapa)) {
+          return res.status(400).json({
+            mensaje: `Etapa inválida: "${fila.etapa}". Debe ser una de: ${ETAPAS_ALIMENTACION_VALIDAS.join(', ')}`
+          });
+        }
+        if (typeof fila.precio_por_kg !== 'number' || fila.precio_por_kg < 0) {
+          return res.status(400).json({ mensaje: `Precio inválido para la etapa "${fila.etapa}".` });
+        }
+      }
+    }
+
+    const config = await Config.findOneAndUpdate({}, req.body, { new: true, upsert: true, runValidators: true });
     res.json(config);
   } catch (error) {
     res.status(400).json({ mensaje: error.message });
