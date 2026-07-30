@@ -3141,12 +3141,17 @@ const eliminarBomba = async (id) => {
   }
 
   const cambiarPlanGranja = async (id, plan) => {
+    // Actualización optimista: refleja el cambio en la tabla al instante en
+    // vez de esperar el viaje de ida y vuelta al servidor (PUT + recargar
+    // GET /api/admin/farms) — si falla, se revierte abajo.
+    const planAnterior = granjas.find(g => g._id === id)?.owner?.plan
+    setGranjas(prev => prev.map(g => (g._id === id && g.owner) ? { ...g, owner: { ...g.owner, plan } } : g))
     try {
       await axios.put(`${API_URL}/api/admin/farms/${id}/plan`, { plan }, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      cargarGranjas()
     } catch (error) {
+      setGranjas(prev => prev.map(g => (g._id === id && g.owner) ? { ...g, owner: { ...g.owner, plan: planAnterior } } : g))
       alert('Error: ' + (error.response?.data?.mensaje || error.message))
     }
   }
@@ -7615,6 +7620,7 @@ const cargarHistoricoPesos = async () => {
       <h2><Shield size={24} style={{verticalAlign:'middle', marginRight:8}} />Administración de Granjas</h2>
     </div>
 
+    <h3 style={{margin: '0 0 12px', fontSize: '15px', color: '#374151'}}>Granjas registradas</h3>
     <div className="table-container">
       <table>
         <thead>
