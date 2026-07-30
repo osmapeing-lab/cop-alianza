@@ -8,6 +8,7 @@
  */
 
 const bcrypt = require('bcryptjs');
+const ExcelJS = require('exceljs');
 const Farm = require('../models/Farm');
 const User = require('../models/User');
 const Lote = require('../models/lote');
@@ -67,6 +68,82 @@ exports.getFarmDetail = async (req, res) => {
 
     res.json({ farm, usuarios, conteos: { lotes, pesajes, costos, ventas, alertas, inventario } });
   } catch (error) {
+    res.status(500).json({ mensaje: error.message });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// REPORTE EXCEL DE GRANJAS SELECCIONADAS
+// GET /api/corporativo/reporte?ids=id1,id2,...  (también accesible desde
+// /api/admin/farms/reporte para superadmin)
+// Usado por la cuenta Corporativo (comprador de datos) para descargar un
+// resumen de las granjas que seleccione en el panel de Datos — mismos
+// conteos que ya muestra getFarmDetail, una fila por granja.
+// ═══════════════════════════════════════════════════════════════════════
+exports.descargarReporteGranjas = async (req, res) => {
+  try {
+    const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(Boolean);
+    const filtro = ids.length > 0 ? { _id: { $in: ids } } : {};
+    const farms = await Farm.find(filtro).sort({ nombre: 1 }).lean();
+
+    const filas = await Promise.all(farms.map(async (farm) => {
+      const [owner, lotes, pesajes, costos, ventas, alertas, inventario] = await Promise.all([
+        User.findOne({ granja_id: farm._id }).select('usuario correo plan'),
+        Lote.countDocuments({ granja: farm._id }),
+        Pesaje.countDocuments({ granja: farm._id }),
+        Costo.countDocuments({ granja: farm._id }),
+        Venta.countDocuments({ granja: farm._id }),
+        Alert.countDocuments({ granja: farm._id }),
+        InventarioAlimento.countDocuments({ granja: farm._id })
+      ]);
+      return { farm, owner, lotes, pesajes, costos, ventas, alertas, inventario };
+    }));
+
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'COO Alianzas';
+    workbook.created = new Date();
+
+    const sheet = workbook.addWorksheet('Granjas');
+    sheet.columns = [
+      { header: 'Granja', key: 'nombre', width: 28 },
+      { header: 'Ubicación', key: 'ubicacion', width: 24 },
+      { header: 'Dueño', key: 'duenoUsuario', width: 20 },
+      { header: 'Correo', key: 'duenoCorreo', width: 28 },
+      { header: 'Plan', key: 'plan', width: 14 },
+      { header: 'Estado', key: 'estado', width: 12 },
+      { header: 'Lotes', key: 'lotes', width: 10 },
+      { header: 'Pesajes', key: 'pesajes', width: 10 },
+      { header: 'Costos', key: 'costos', width: 10 },
+      { header: 'Ventas', key: 'ventas', width: 10 },
+      { header: 'Alertas', key: 'alertas', width: 10 },
+      { header: 'Inventario', key: 'inventario', width: 12 }
+    ];
+    sheet.getRow(1).font = { bold: true };
+
+    for (const f of filas) {
+      sheet.addRow({
+        nombre: f.farm.nombre,
+        ubicacion: f.farm.ubicacion || '',
+        duenoUsuario: f.owner?.usuario || 'Sin usuario',
+        duenoCorreo: f.owner?.correo || '',
+        plan: f.owner?.plan || '',
+        estado: f.farm.activo ? 'Activa' : 'Desactivada',
+        lotes: f.lotes,
+        pesajes: f.pesajes,
+        costos: f.costos,
+        ventas: f.ventas,
+        alertas: f.alertas,
+        inventario: f.inventario
+      });
+    }
+
+    const fecha = new Date().toISOString().split('T')[0];
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=Reporte_Granjas_${fecha}.xlsx`);
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (error) {
+    console.error('Error en descargarReporteGranjas:', error);
     res.status(500).json({ mensaje: error.message });
   }
 };

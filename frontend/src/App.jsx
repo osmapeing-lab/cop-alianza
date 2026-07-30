@@ -1632,6 +1632,8 @@ const [historicoPesos, setHistoricoPesos] = useState([])
   // Corporativo (GET /api/corporativo/granjas, solo lectura)
   const [granjasCorporativo, setGranjasCorporativo] = useState([])
   const [granjaDetalleCorporativo, setGranjaDetalleCorporativo] = useState(null)
+  const [granjasSeleccionadasCorporativo, setGranjasSeleccionadasCorporativo] = useState([])
+  const [descargandoReporteCorporativo, setDescargandoReporteCorporativo] = useState(false)
   const [nuevoMiembroGranja, setNuevoMiembroGranja] = useState({ usuario: '', correo: '', password: '', permisos: [] })
 
 
@@ -3126,6 +3128,39 @@ const eliminarBomba = async (id) => {
       setGranjaDetalleCorporativo(res.data)
     } catch (error) {
       alert('Error: ' + (error.response?.data?.mensaje || error.message))
+    }
+  }
+
+  const toggleSeleccionGranjaCorporativo = (id) => {
+    setGranjasSeleccionadasCorporativo(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    )
+  }
+
+  // Descarga un reporte Excel de las granjas marcadas (o de todas si no hay
+  // ninguna marcada) — GET /api/corporativo/reporte, reutiliza el mismo
+  // patrón de descarga que ya usa el Reporte General (blob + link).
+  const descargarReporteGranjasCorporativo = async () => {
+    setDescargandoReporteCorporativo(true)
+    try {
+      const ids = granjasSeleccionadasCorporativo.join(',')
+      const res = await axios.get(`${API_URL}/api/corporativo/reporte?ids=${ids}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob',
+        timeout: 120000
+      })
+      const blobUrl = window.URL.createObjectURL(new Blob([res.data]))
+      const link = document.createElement('a')
+      link.href = blobUrl
+      const fecha = new Date().toISOString().split('T')[0]
+      link.setAttribute('download', `Reporte_Granjas_${fecha}.xlsx`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+    } catch (error) {
+      alert('Error descargando el reporte: ' + (error.response?.data?.mensaje || error.message))
+    } finally {
+      setDescargandoReporteCorporativo(false)
     }
   }
 
@@ -8793,12 +8828,29 @@ const cargarHistoricoPesos = async () => {
             <div className="page-admin">
               <div className="page-header">
                 <h2><BarChart3 size={24} style={{verticalAlign:'middle', marginRight:8}} />Datos de todas las granjas</h2>
+                <button
+                  className="btn-primary"
+                  onClick={descargarReporteGranjasCorporativo}
+                  disabled={descargandoReporteCorporativo}
+                  title={granjasSeleccionadasCorporativo.length === 0 ? 'Descarga el reporte de todas las granjas' : `Descarga el reporte de ${granjasSeleccionadasCorporativo.length} granja(s) seleccionada(s)`}
+                >
+                  {descargandoReporteCorporativo
+                    ? 'Descargando...'
+                    : `Descargar reporte${granjasSeleccionadasCorporativo.length > 0 ? ` (${granjasSeleccionadasCorporativo.length})` : ' (todas)'}`}
+                </button>
               </div>
 
               <div className="table-container">
                 <table>
                   <thead>
                     <tr>
+                      <th>
+                        <input
+                          type="checkbox"
+                          checked={granjasCorporativo.length > 0 && granjasSeleccionadasCorporativo.length === granjasCorporativo.length}
+                          onChange={e => setGranjasSeleccionadasCorporativo(e.target.checked ? granjasCorporativo.map(g => g._id) : [])}
+                        />
+                      </th>
                       <th>Granja</th>
                       <th>Dueño</th>
                       <th>Plan</th>
@@ -8811,11 +8863,18 @@ const cargarHistoricoPesos = async () => {
                   <tbody>
                     {granjasCorporativo.length === 0 ? (
                       <tr>
-                        <td colSpan="7" className="sin-datos">No hay granjas registradas todavía</td>
+                        <td colSpan="8" className="sin-datos">No hay granjas registradas todavía</td>
                       </tr>
                     ) : (
                       granjasCorporativo.map(g => (
                         <tr key={g._id}>
+                          <td>
+                            <input
+                              type="checkbox"
+                              checked={granjasSeleccionadasCorporativo.includes(g._id)}
+                              onChange={() => toggleSeleccionGranjaCorporativo(g._id)}
+                            />
+                          </td>
                           <td><strong>{g.nombre}</strong></td>
                           <td>{g.owner ? `${g.owner.usuario} (${g.owner.correo})` : 'Sin usuario'}</td>
                           <td style={{textTransform:'capitalize'}}>{g.owner?.plan || '—'}</td>
