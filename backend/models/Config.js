@@ -51,6 +51,21 @@ const configSchema = new mongoose.Schema({
           'Iniciador', 'Levante', 'Engorde', 'Finalización'
         ]
       },
+      // El admin captura precio del bulto + cuánto pesa (como ya hace con
+      // el inventario real) — precio_por_kg se deriva de esos dos y es lo
+      // único que usa el cálculo de costo estimado (alimentacionAutomatica.js,
+      // costoAlimentoEstimado en la web y la app). Se guardan los tres para
+      // poder re-mostrar el bulto/peso al reabrir el formulario.
+      precio_bulto: {
+        type: Number,
+        default: null,
+        min: 0
+      },
+      peso_bulto_kg: {
+        type: Number,
+        default: null,
+        min: 0
+      },
       precio_por_kg: {
         type: Number,
         required: true,

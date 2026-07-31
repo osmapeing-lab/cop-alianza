@@ -8858,33 +8858,64 @@ const cargarHistoricoPesos = async () => {
                   </div>
                 </div>
 
-                {/* Precio de alimento por etapa */}
+                {/* Precio de alimento por etapa — se captura precio del
+                    bulto + cuánto pesa (igual que en Inventario), y el
+                    precio por kg que realmente usa el cálculo se deriva
+                    solo, sin que el admin tenga que hacer la cuenta. */}
                 <div className="config-section">
                   <h3>Precio de alimento por etapa</h3>
                   <small>
-                    Se usa para calcular automáticamente el costo estimado de alimento de cada lote,
+                    Coloca el precio del bulto y cuánto pesa para cada etapa — el precio por kg se
+                    calcula solo y es lo que se usa para el costo estimado de alimento de cada lote,
                     según su etapa de crecimiento actual. Si una etapa se deja vacía, se usa el
                     "Precio Alimento (por kg)" general como respaldo.
                   </small>
                   <div className="config-grid">
                     {ETAPAS_ALIMENTACION.map(etapa => {
                       const fila = (config.precios_alimento_por_etapa || []).find(f => f.etapa === etapa)
+                      const actualizarFila = (cambios) => {
+                        const actuales = config.precios_alimento_por_etapa || []
+                        const sinEsta = actuales.filter(f => f.etapa !== etapa)
+                        const nuevaFila = { ...(fila || {}), ...cambios }
+                        const precioBulto = numVal(nuevaFila.precio_bulto, true)
+                        const pesoBulto = numVal(nuevaFila.peso_bulto_kg, true)
+                        // Sin bulto+peso todavía → no guardar la fila (cae al
+                        // precio general de respaldo, igual que antes).
+                        if (!precioBulto || !pesoBulto) {
+                          setConfig({ ...config, precios_alimento_por_etapa: sinEsta })
+                          return
+                        }
+                        setConfig({
+                          ...config,
+                          precios_alimento_por_etapa: [...sinEsta, {
+                            etapa,
+                            precio_bulto: precioBulto,
+                            peso_bulto_kg: pesoBulto,
+                            precio_por_kg: Math.round((precioBulto / pesoBulto) * 100) / 100
+                          }]
+                        })
+                      }
                       return (
                         <div className="form-group" key={etapa}>
                           <label>{etapa}</label>
-                          <input
-                            type="number"
-                            value={fila ? fila.precio_por_kg : ''}
-                            placeholder={`General: ${config.precio_alimento_kg}`}
-                            onChange={e => {
-                              const actuales = config.precios_alimento_por_etapa || []
-                              const sinEsta = actuales.filter(f => f.etapa !== etapa)
-                              const nuevas = e.target.value === ''
-                                ? sinEsta
-                                : [...sinEsta, { etapa, precio_por_kg: numVal(e.target.value, true) }]
-                              setConfig({ ...config, precios_alimento_por_etapa: nuevas })
-                            }}
-                          />
+                          <div style={{display:'flex', gap:'6px'}}>
+                            <input
+                              type="number"
+                              value={fila?.precio_bulto ?? ''}
+                              placeholder="Precio bulto"
+                              onChange={e => actualizarFila({ precio_bulto: e.target.value })}
+                            />
+                            <input
+                              type="number"
+                              value={fila?.peso_bulto_kg ?? ''}
+                              placeholder="Kg/bulto"
+                              style={{maxWidth:'90px'}}
+                              onChange={e => actualizarFila({ peso_bulto_kg: e.target.value })}
+                            />
+                          </div>
+                          <small style={{color:'#64748b'}}>
+                            {fila?.precio_por_kg ? `= $${fila.precio_por_kg.toLocaleString('es-CO')}/kg` : `Usa el general ($${config.precio_alimento_kg}/kg)`}
+                          </small>
                         </div>
                       )
                     })}
