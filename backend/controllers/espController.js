@@ -43,6 +43,7 @@
  * ═══════════════════════════════════════════════════════════════════════
  */
 
+const mongoose = require('mongoose');
 const Reading = require('../models/Reading');
 const Alert = require('../models/Alert');
 const Motorbomb = require('../models/Motorbomb');
@@ -50,9 +51,52 @@ const Pesaje = require('../models/pesaje');
 const Lote = require('../models/lote');
 const WaterConsumption = require('../models/WaterConsumption');
 const Config = require('../models/Config');
+const Dispositivo = require('../models/Dispositivo');
 const { evaluarTemperatura, notificarBomba } = require('../utils/notificationManager');
 const { enviarWhatsApp } = require('../utils/whatsappService');
 const { enviarPushATodos } = require('../utils/pushService');
+
+// ═══════════════════════════════════════════════════════════════════════
+// A QUÉ GRANJA PERTENECE CADA ESP32
+// ═══════════════════════════════════════════════════════════════════════
+// El hardware no manda un token (no hay sesión de usuario en un sensor),
+// así que en vez de eso identifica la granja por su `sensor_id` contra el
+// registro `Dispositivo`. Todo el hardware físico instalado hasta ahora es
+// de Granja Porcina COO-Alianzas y nunca mandó un `sensor_id` propio (usa
+// los defaults fijos del firmware) — por eso esos defaults quedan como
+// respaldo aquí para no perder datos de un sensor que aún no se registró
+// explícitamente. Un ESP32 nuevo en otra granja (Alianza/Empresas con
+// sensores cotizados) debe registrarse en `Dispositivo` con un `sensor_id`
+// propio para esa granja.
+const GRANJA_PRINCIPAL_ID = '696413ec1dff9fe7d6baea75'; // Granja Porcina COO-Alianzas
+const GRANJA_LEGACY_POR_SENSOR = {
+  esp_porqueriza: GRANJA_PRINCIPAL_ID,
+  esp_flujo: GRANJA_PRINCIPAL_ID,
+  bascula: GRANJA_PRINCIPAL_ID
+};
+
+const _dispositivoCache = new Map(); // sensor_id -> { granja, expira }
+const DISPOSITIVO_CACHE_MS = 5 * 60 * 1000;
+
+async function resolverGranjaDispositivo(sensorId) {
+  if (!sensorId) return GRANJA_PRINCIPAL_ID;
+  const cacheado = _dispositivoCache.get(sensorId);
+  if (cacheado && cacheado.expira > Date.now()) return cacheado.granja;
+
+  const dispositivo = await Dispositivo.findOne({ sensor_id: sensorId, activo: true }).select('granja');
+  const granja = dispositivo ? dispositivo.granja.toString() : (GRANJA_LEGACY_POR_SENSOR[sensorId] || GRANJA_PRINCIPAL_ID);
+  _dispositivoCache.set(sensorId, { granja, expira: Date.now() + DISPOSITIVO_CACHE_MS });
+  return granja;
+}
+
+function emitirAGranja(req, granjaId, evento, payload) {
+  if (!req.io) return;
+  if (granjaId) {
+    req.io.to(`granja_${granjaId}`).emit(evento, payload);
+  } else {
+    req.io.emit(evento, payload);
+  }
+}
 
 // Cooldown en memoria para evitar spam de Alert records en BD por temperatura
 // El ESP puede enviar datos cada 30s; sin throttle genera cientos de registros/hora
@@ -65,6 +109,7 @@ const ALERT_CD_NORMAL  = 30 * 60 * 1000; // 30 min entre alertas normales en BD
 // ═══════════════════════════════════════════════════════════════════════
 
 let ultimosDatosPorqueriza = {
+  granja: null,
   temperatura: null,
   humedad: null,
   sensor_id: null,
@@ -73,6 +118,7 @@ let ultimosDatosPorqueriza = {
 };
 
 let ultimosDatosFlujo = {
+  granja: null,
   caudal: 0,
   volumen_total: 0,
   volumen_diario: 0,
@@ -100,9 +146,11 @@ async function inicializarDatosFlujo(intento = 1) {
 
     const consumoHoy = await WaterConsumption.findOne({
       fecha: { $gte: hoy, $lt: mananaInit },
-      tipo: 'diario'
+      tipo: 'diario',
+      granja_id: GRANJA_PRINCIPAL_ID
     });
 
+    ultimosDatosFlujo.granja = GRANJA_PRINCIPAL_ID;
     ultimosDatosFlujo.fecha_inicio_dia = new Date(); // UTC real — esNuevoDia usa toLocaleDateString para comparar
 
     if (consumoHoy) {
@@ -176,7 +224,7 @@ let cicloBomba = {
 const BOMBA_DURACION_MS = 45 * 1000;      // 45 segundos encendida
 const BOMBA_COOLDOWN_MS = 30 * 60 * 1000; // 30 minutos entre activaciones
 
-async function activarCicloBomba() {
+async function activarCicloBomba(granja) {
   if (cicloBomba.enCiclo) {
     console.log('[BOMBA] Ciclo ya activo, ignorando');
     return;
@@ -192,11 +240,12 @@ async function activarCicloBomba() {
   cicloBomba.enCiclo = true;
   cicloBomba.ultimaActivacion = ahora;
 
-  await Motorbomb.updateOne({ codigo_bomba: 'MB002' }, { estado: false, fecha_cambio: Date.now() });
+  await Motorbomb.updateOne({ codigo_bomba: 'MB002', granja }, { estado: false, fecha_cambio: Date.now() });
   console.log('[BOMBA] Ciclo iniciado - Bomba Riego (MB002) ON por 45 segundos');
 
   const hora = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota', hour: '2-digit', minute: '2-digit', hour12: true });
   const alerta = new Alert({
+    granja,
     tipo: 'info',
     mensaje: `Bomba de riego activada automáticamente por temperatura crítica (45s) a las ${hora}`
   });
@@ -209,7 +258,7 @@ async function activarCicloBomba() {
 
   cicloBomba.timeoutApagado = setTimeout(async () => {
     try {
-      await Motorbomb.updateOne({ codigo_bomba: 'MB002' }, { estado: true, fecha_cambio: Date.now() });
+      await Motorbomb.updateOne({ codigo_bomba: 'MB002', granja }, { estado: true, fecha_cambio: Date.now() });
       cicloBomba.enCiclo = false;
       console.log('[BOMBA] Ciclo completado - Bomba Riego (MB002) OFF. Cooldown 30 min');
     } catch (err) {
@@ -220,6 +269,7 @@ async function activarCicloBomba() {
 }
 
 let pesoEnTiempoReal = {
+  granja: null,
   peso: 0,
   unidad: 'kg',
   estable: false,
@@ -249,32 +299,36 @@ function esNuevoDia(fechaAnterior) {
 exports.recibirRiego = async (req, res) => {
   try {
     const { sensor_id, temperatura, humedad, rssi } = req.body;
-    
+    const sensorIdEfectivo = sensor_id || 'esp_porqueriza';
+    const granja = await resolverGranjaDispositivo(sensorIdEfectivo);
+
     console.log('========================================');
     console.log('[ESP32] Datos temperatura recibidos');
-    console.log('  Sensor:', sensor_id);
+    console.log('  Sensor:', sensor_id, '→ granja:', granja);
     console.log('  Temp:', temperatura, 'C');
     console.log('  Hum:', humedad, '%');
     console.log('  RSSI:', rssi, 'dBm');
     console.log('========================================');
-    
-    const config = await Config.findOne() || { umbral_temp_max: 37, umbral_temp_critico: 40 };
-    
+
+    const config = await Config.findOne({ granja_id: granja }) || { umbral_temp_max: 37, umbral_temp_critico: 40 };
+
     const lecturas = [];
-    
+
     if (temperatura !== undefined) {
       lecturas.push({
-        sensor: sensor_id || 'esp_porqueriza',
+        granja,
+        sensor: sensorIdEfectivo,
         tipo: 'temp_porqueriza',
         valor: temperatura,
         unidad: 'C'
       });
-      
+
       if (temperatura >= config.umbral_temp_critico) {
         const now = Date.now();
         if (now - _alertCooldown.critico > ALERT_CD_CRITICO) {
           _alertCooldown.critico = now;
           const alerta = new Alert({
+            granja,
             tipo: 'critico',
             mensaje: `CRITICO: Temperatura ${temperatura}°C - Riesgo de estrés térmico`,
             valor: temperatura
@@ -283,13 +337,14 @@ exports.recibirRiego = async (req, res) => {
           enviarPushATodos({ title: '🔴 CRÍTICO — Temperatura', body: `${temperatura}°C - Riesgo de estrés térmico`, tag: 'temp_critico' }).catch(() => {});
         }
         if (config.bomba_automatica) {
-          await activarCicloBomba();
+          await activarCicloBomba(granja);
         }
       } else if (temperatura >= config.umbral_temp_max) {
         const now = Date.now();
         if (now - _alertCooldown.alerta > ALERT_CD_NORMAL) {
           _alertCooldown.alerta = now;
           const alerta = new Alert({
+            granja,
             tipo: 'alerta',
             mensaje: `ALERTA: Temperatura ${temperatura}°C - Por encima del umbral`,
             valor: temperatura
@@ -303,43 +358,43 @@ exports.recibirRiego = async (req, res) => {
         console.error('[NOTIF] Error WhatsApp temp:', e.message)
       );
     }
-    
+
     if (humedad !== undefined) {
       lecturas.push({
-        sensor: sensor_id || 'esp_porqueriza',
+        granja,
+        sensor: sensorIdEfectivo,
         tipo: 'humedad_porqueriza',
         valor: humedad,
         unidad: '%'
       });
     }
-    
+
     if (lecturas.length > 0) {
       await Reading.insertMany(lecturas);
     }
-    
+
     ultimosDatosPorqueriza = {
+      granja,
       temperatura,
       humedad,
-      sensor_id,
+      sensor_id: sensorIdEfectivo,
       fecha: new Date(),
       conectado: true
     };
-    
-    if (req.io) {
-      req.io.emit('lectura_actualizada', {
-        temperatura,
-        humedad,
-        sensor_id,
-        timestamp: new Date()
-      });
-    }
-    
-    res.status(201).json({ 
+
+    emitirAGranja(req, granja, 'lectura_actualizada', {
+      temperatura,
+      humedad,
+      sensor_id: sensorIdEfectivo,
+      timestamp: new Date()
+    });
+
+    res.status(201).json({
       mensaje: 'Datos registrados',
       temperatura,
       humedad
     });
-    
+
   } catch (error) {
     console.error('[ESP32] Error:', error);
     res.status(400).json({ mensaje: error.message });
@@ -353,19 +408,27 @@ exports.recibirRiego = async (req, res) => {
 
 exports.obtenerDatosPorqueriza = async (req, res) => {
   try {
-    const ultimaTemp = await Reading.findOne({ tipo: 'temp_porqueriza' })
+    const granjaId = req.user?.granja_id ? String(req.user.granja_id) : null;
+    if (!granjaId) {
+      return res.json({ temperatura: null, humedad: null, fecha: null, conectado: false });
+    }
+
+    const ultimaTemp = await Reading.findOne({ tipo: 'temp_porqueriza', granja: granjaId })
       .sort({ createdAt: -1 });
-    
-    const ultimaHum = await Reading.findOne({ tipo: 'humedad_porqueriza' })
+
+    const ultimaHum = await Reading.findOne({ tipo: 'humedad_porqueriza', granja: granjaId })
       .sort({ createdAt: -1 });
-    
-    const conectado = ultimosDatosPorqueriza.fecha && 
+
+    // El caché en memoria solo aplica si es la misma granja del hardware
+    // que lo llenó — si no, el respaldo son los últimos valores en BD.
+    const cacheEsDeEstaGranja = ultimosDatosPorqueriza.granja === granjaId;
+    const conectado = cacheEsDeEstaGranja && ultimosDatosPorqueriza.fecha &&
       (new Date() - ultimosDatosPorqueriza.fecha) < 120000;
-    
+
     res.json({
-      temperatura: ultimaTemp?.valor || ultimosDatosPorqueriza.temperatura,
-      humedad: ultimaHum?.valor || ultimosDatosPorqueriza.humedad,
-      fecha: ultimaTemp?.createdAt || ultimosDatosPorqueriza.fecha,
+      temperatura: ultimaTemp?.valor ?? (cacheEsDeEstaGranja ? ultimosDatosPorqueriza.temperatura : null),
+      humedad: ultimaHum?.valor ?? (cacheEsDeEstaGranja ? ultimosDatosPorqueriza.humedad : null),
+      fecha: ultimaTemp?.createdAt ?? (cacheEsDeEstaGranja ? ultimosDatosPorqueriza.fecha : null),
       conectado
     });
   } catch (error) {
@@ -380,20 +443,25 @@ exports.obtenerDatosPorqueriza = async (req, res) => {
 
 exports.obtenerHistoricoTemperatura = async (req, res) => {
   try {
+    if (!req.user?.granja_id) return res.json([]);
+    const granjaId = String(req.user.granja_id);
+
     const horas = parseInt(req.query.horas) || 24;
     const fechaLimite = new Date();
     fechaLimite.setHours(fechaLimite.getHours() - horas);
-    
+
     const temperaturas = await Reading.find({
       tipo: 'temp_porqueriza',
+      granja: granjaId,
       createdAt: { $gte: fechaLimite }
     })
     .sort({ createdAt: 1 })
     .select('valor createdAt')
     .lean();
-    
+
     const humedades = await Reading.find({
       tipo: 'humedad_porqueriza',
+      granja: granjaId,
       createdAt: { $gte: fechaLimite }
     })
     .sort({ createdAt: 1 })
@@ -427,24 +495,38 @@ exports.recibirFlujo = async (req, res) => {
     }
 
     const { sensor_id, caudal_l_min, volumen_l, rssi } = req.body;
+    const sensorIdEfectivo = sensor_id || 'esp_flujo';
+    const granja = await resolverGranjaDispositivo(sensorIdEfectivo);
     const caudal = parseFloat(caudal_l_min) || 0;
     const volumen = parseFloat(volumen_l) || 0;
-    
+
     console.log('========================================');
     console.log('[ESP32] Datos flujo de agua recibidos');
-    console.log('  Sensor:', sensor_id);
+    console.log('  Sensor:', sensor_id, '→ granja:', granja);
     console.log('  Caudal:', caudal, 'L/min');
     console.log('  Volumen ESP:', volumen, 'L');
     console.log('========================================');
-    
+
+    // El caché en memoria (offset/sesión) solo modela UNA granja a la vez —
+    // si empieza a llegar flujo de una granja distinta a la que ya estaba
+    // en memoria, se trata como un reinicio de sesión para no mezclar
+    // volúmenes de dos granjas distintas en el mismo acumulado.
+    const esGranjaDistinta = ultimosDatosFlujo.granja !== null && ultimosDatosFlujo.granja !== granja;
+    if (esGranjaDistinta) {
+      ultimosDatosFlujo.volumen_inicio_sesion = null;
+      ultimosDatosFlujo.volumen_offset = 0;
+      ultimosDatosFlujo.volumen_diario = 0;
+      console.log('[FLUJO] Cambio de granja detectado en memoria — reiniciando sesión de caché');
+    }
+
     // 2. Calcular volumen diario usando modelo offset + sesión
     let volumenDiarioCalculado = 0;
-    const prevVolumenTotal = ultimosDatosFlujo.volumen_total || 0;
+    const prevVolumenTotal = esGranjaDistinta ? 0 : (ultimosDatosFlujo.volumen_total || 0);
 
     // ⚠️ CRÍTICO: evaluar esNuevoDia ANTES de modificar fecha_inicio_dia
     // Si se evalúa después, la protección anti-caída (paso 3) dispara incorrectamente
     // y preserva el volumen de ayer como si fuera de hoy.
-    const esDiaNuevo = esNuevoDia(ultimosDatosFlujo.fecha_inicio_dia);
+    const esDiaNuevo = esGranjaDistinta || esNuevoDia(ultimosDatosFlujo.fecha_inicio_dia);
 
     if (esDiaNuevo) {
       // Nuevo día: reset completo
@@ -492,10 +574,10 @@ exports.recibirFlujo = async (req, res) => {
     // 4. GUARDAR EN BD Y OBTENER DOCUMENTO ACTUALIZADO
     const manana = new Date(hoy.getTime() + 86400000);
     const resultadoBD = await WaterConsumption.findOneAndUpdate(
-      { fecha: { $gte: hoy, $lt: manana }, tipo: 'diario' },
+      { fecha: { $gte: hoy, $lt: manana }, tipo: 'diario', granja_id: granja },
       {
         $max: { litros: volumenDiarioCalculado },
-        $setOnInsert: { fecha: hoy, tipo: 'diario' }
+        $setOnInsert: { fecha: hoy, tipo: 'diario', granja_id: granja }
       },
       {
         upsert: true,
@@ -519,7 +601,8 @@ exports.recibirFlujo = async (req, res) => {
     
     if (minutosPasados >= 5 || caudal > 0) {
       const lectura = new Reading({
-        sensor: sensor_id || 'esp_flujo',
+        granja,
+        sensor: sensorIdEfectivo,
         tipo: 'flujo_agua',
         valor: volumenRealEnBD,  // ⚡ Usar valor confirmado por BD
         unidad: 'L',
@@ -531,50 +614,50 @@ exports.recibirFlujo = async (req, res) => {
       await lectura.save();
       ultimosDatosFlujo.ultima_lectura_guardada = ahora;
     }
-    
+
     // ════════════════════════════════════════════════════════════════════
     // ⚡ ACTUALIZAR MEMORIA CON VALOR VERIFICADO POR MONGODB
     // ════════════════════════════════════════════════════════════════════
-    
+
     ultimosDatosFlujo = {
       ...ultimosDatosFlujo,
+      granja,
       caudal: caudal,
       volumen_total: volumen,
       volumen_diario: volumenRealEnBD,  // ⚡ Valor confirmado por MongoDB
-      sensor_id,
+      sensor_id: sensorIdEfectivo,
       fecha: ahora,
       conectado: true
     };
-    
+
     // ════════════════════════════════════════════════════════════════════
     // ⚡ EMITIR SOCKET SOLO CON VALOR VERIFICADO
     // ════════════════════════════════════════════════════════════════════
-    
-    if (req.io) {
-      req.io.emit('lectura_actualizada', {
-        caudal_l_min: caudal,
-        volumen_diario: volumenRealEnBD,
-        timestamp: ahora
-      });
 
-      req.io.emit('flujo_actualizado', {
-        caudal: caudal,
-        volumen_total: volumen,
-        volumen_diario: volumenRealEnBD,
-        timestamp: ahora
-      });
-    }
+    emitirAGranja(req, granja, 'lectura_actualizada', {
+      caudal_l_min: caudal,
+      volumen_diario: volumenRealEnBD,
+      timestamp: ahora
+    });
+
+    emitirAGranja(req, granja, 'flujo_actualizado', {
+      caudal: caudal,
+      volumen_total: volumen,
+      volumen_diario: volumenRealEnBD,
+      timestamp: ahora
+    });
 
     // ════════════════════════════════════════════════════════════════════
     // AUTO-APAGADO MB001 AL ALCANZAR EL LÍMITE DIARIO DE AGUA
     // ════════════════════════════════════════════════════════════════════
     try {
-      const configActual = await Config.findOne();
+      const configActual = await Config.findOne({ granja_id: granja });
       const limiteAgua = configActual?.limite_consumo_bomba_1 ?? 600;
 
       if (volumenRealEnBD >= limiteAgua) {
         // 1. Auto-apagar MB001 si está encendida
         const mb001 = await Motorbomb.findOne({
+          granja,
           $or: [{ codigo_bomba: 'MB001' }, { nombre: /bomba 1/i }]
         });
 
@@ -584,22 +667,21 @@ exports.recibirFlujo = async (req, res) => {
           await mb001.save();
 
           const alertaBomba = new Alert({
+            granja,
             tipo: 'alerta',
             mensaje: `Bomba 1 apagada automáticamente: límite diario de ${limiteAgua}L alcanzado (${volumenRealEnBD.toFixed(1)}L)`
           });
           await alertaBomba.save();
           enviarPushATodos({ title: '💧 Límite de agua alcanzado', body: `Bomba 1 apagada — ${volumenRealEnBD.toFixed(1)}L / ${limiteAgua}L`, tag: 'agua_limite' }).catch(() => {});
 
-          if (req.io) {
-            req.io.emit('bomba_actualizada', {
-              bomba_id:  mb001._id,
-              codigo:    mb001.codigo_bomba,
-              estado:    mb001.estado,
-              nombre:    mb001.nombre,
-              timestamp: Date.now()
-            });
-            req.io.emit('nueva_alerta', alertaBomba);
-          }
+          emitirAGranja(req, granja, 'bomba_actualizada', {
+            bomba_id:  mb001._id,
+            codigo:    mb001.codigo_bomba,
+            estado:    mb001.estado,
+            nombre:    mb001.nombre,
+            timestamp: Date.now()
+          });
+          emitirAGranja(req, granja, 'nueva_alerta', alertaBomba);
 
           notificarBomba(mb001).catch(e => console.error('[AUTO-OFF] Notif bomba:', e.message));
           console.log(`[AUTO-OFF] MB001 apagada por límite de ${limiteAgua}L (${volumenRealEnBD.toFixed(1)}L)`);
@@ -610,18 +692,20 @@ exports.recibirFlujo = async (req, res) => {
         const ahoraCol2 = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
         const inicioDia = new Date(Date.UTC(ahoraCol2.getFullYear(), ahoraCol2.getMonth(), ahoraCol2.getDate()));
         const yaAlertado = await Alert.findOne({
+          granja,
           mensaje: { $regex: /consumo.*agua.*alto|agua.*alto/i },
           createdAt: { $gte: inicioDia }
         });
 
         if (!yaAlertado) {
           const alertaAlta = new Alert({
+            granja,
             tipo: 'advertencia',
             mensaje: `⚠️ Consumo de agua alto: ${volumenRealEnBD.toFixed(1)}L hoy (límite configurado: ${limiteAgua}L)`
           });
           await alertaAlta.save();
           enviarPushATodos({ title: '⚠️ Consumo de agua alto', body: `${volumenRealEnBD.toFixed(1)}L hoy (límite: ${limiteAgua}L)`, tag: 'agua_alto' }).catch(() => {});
-          if (req.io) req.io.emit('nueva_alerta', alertaAlta);
+          emitirAGranja(req, granja, 'nueva_alerta', alertaAlta);
           console.log(`[AGUA] Alerta consumo alto: ${volumenRealEnBD.toFixed(1)}L`);
         }
       }
@@ -647,35 +731,44 @@ exports.recibirFlujo = async (req, res) => {
 
 exports.obtenerDatosFlujo = async (req, res) => {
   try {
+    const granjaId = req.user?.granja_id ? String(req.user.granja_id) : null;
+    if (!granjaId) {
+      return res.json({ caudal: 0, volumen_total: 0, volumen_diario: 0, fecha: null, conectado: false });
+    }
+
     // Esperar inicialización
     if (flujoInitPromise) {
       await flujoInitPromise;
       flujoInitPromise = null;
     }
 
-    const ultimaLectura = await Reading.findOne({ tipo: 'flujo_agua' })
+    const ultimaLectura = await Reading.findOne({ tipo: 'flujo_agua', granja: granjaId })
       .sort({ createdAt: -1 });
-    
+
     const ahoraCol = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
     const hoy = new Date(Date.UTC(ahoraCol.getFullYear(), ahoraCol.getMonth(), ahoraCol.getDate()));
     const mananaGet = new Date(hoy.getTime() + 86400000);
 
     const consumoHoy = await WaterConsumption.findOne({
       fecha: { $gte: hoy, $lt: mananaGet },
-      tipo: 'diario'
+      tipo: 'diario',
+      granja_id: granjaId
     });
-    
-    const conectado = ultimosDatosFlujo.fecha && 
+
+    // El caché en memoria solo aplica si es la misma granja del hardware
+    // que lo llenó.
+    const cacheEsDeEstaGranja = ultimosDatosFlujo.granja === granjaId;
+    const conectado = cacheEsDeEstaGranja && ultimosDatosFlujo.fecha &&
       (new Date() - ultimosDatosFlujo.fecha) < 120000;
-    
+
     // ⚡ PRIORIZAR BD SOBRE MEMORIA
     res.json({
-      caudal: ultimosDatosFlujo.caudal || 0,
-      volumen_total: ultimosDatosFlujo.volumen_total || 0,
+      caudal: cacheEsDeEstaGranja ? (ultimosDatosFlujo.caudal || 0) : 0,
+      volumen_total: cacheEsDeEstaGranja ? (ultimosDatosFlujo.volumen_total || 0) : 0,
       volumen_diario: consumoHoy !== null && consumoHoy !== undefined
         ? consumoHoy.litros
-        : (ultimosDatosFlujo.volumen_diario || 0),
-      fecha: ultimaLectura?.createdAt || ultimosDatosFlujo.fecha,
+        : (cacheEsDeEstaGranja ? (ultimosDatosFlujo.volumen_diario || 0) : 0),
+      fecha: ultimaLectura?.createdAt ?? (cacheEsDeEstaGranja ? ultimosDatosFlujo.fecha : null),
       conectado
     });
   } catch (error) {
@@ -690,6 +783,9 @@ exports.obtenerDatosFlujo = async (req, res) => {
 
 exports.corregirConsumo = async (req, res) => {
   try {
+    if (!req.user?.granja_id) return res.status(403).json({ mensaje: 'Sin granja asociada' });
+    const granjaId = String(req.user.granja_id);
+
     const { litros, fecha } = req.body;
     if (litros === undefined || litros < 0) {
       return res.status(400).json({ mensaje: 'Litros requerido y >= 0' });
@@ -707,16 +803,16 @@ exports.corregirConsumo = async (req, res) => {
     const nextDay = new Date(targetDate.getTime() + 24 * 60 * 60 * 1000);
 
     const result = await WaterConsumption.findOneAndUpdate(
-      { fecha: { $gte: targetDate, $lt: nextDay }, tipo: 'diario' },
-      { $set: { litros, fecha: targetDate } },
+      { fecha: { $gte: targetDate, $lt: nextDay }, tipo: 'diario', granja_id: granjaId },
+      { $set: { litros, fecha: targetDate, granja_id: granjaId } },
       { upsert: true, new: true }
     );
 
-    // Si es corrección de hoy, actualizar cache
+    // Si es corrección de hoy Y de la granja que ya está en memoria, actualizar cache
     const ahoraCol = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
     const hoy = new Date(Date.UTC(ahoraCol.getFullYear(), ahoraCol.getMonth(), ahoraCol.getDate()));
-    
-    if (targetDate.getTime() === hoy.getTime()) {
+
+    if (targetDate.getTime() === hoy.getTime() && ultimosDatosFlujo.granja === granjaId) {
       ultimosDatosFlujo.volumen_diario = litros;
       ultimosDatosFlujo.volumen_offset = litros;
       ultimosDatosFlujo.fecha_inicio_dia = new Date(); // UTC real
@@ -738,23 +834,28 @@ exports.corregirConsumo = async (req, res) => {
 
 exports.obtenerHistoricoAgua = async (req, res) => {
   try {
+    if (!req.user?.granja_id) return res.json([]);
+    const granjaId = String(req.user.granja_id);
+
     const dias = parseInt(req.query.dias) || 7;
     const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
     const fechaLimite = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate() - dias));
-    
+
     const consumos = await WaterConsumption.find({
       fecha: { $gte: fechaLimite },
-      tipo: 'diario'
+      tipo: 'diario',
+      granja_id: granjaId
     })
     .sort({ fecha: 1 })
     .select('fecha litros')
     .lean();
-    
+
     if (consumos.length === 0) {
       const lecturas = await Reading.aggregate([
         {
           $match: {
             tipo: 'volumen_diario',
+            granja: new mongoose.Types.ObjectId(granjaId),
             createdAt: { $gte: fechaLimite }
           }
         },
@@ -799,42 +900,43 @@ exports.obtenerHistoricoAgua = async (req, res) => {
 exports.recibirPesoLive = async (req, res) => {
   try {
     const { sensor_id, peso, unidad } = req.body;
-    
+    const sensorIdEfectivo = sensor_id || 'bascula';
+    const granja = await resolverGranjaDispositivo(sensorIdEfectivo);
+
     const pesoNumerico = parseFloat(peso) || 0;
-    
+
     pesoEnTiempoReal.historial.push(pesoNumerico);
     if (pesoEnTiempoReal.historial.length > 10) {
       pesoEnTiempoReal.historial.shift();
     }
-    
+
     let estable = false;
     if (pesoEnTiempoReal.historial.length >= 5) {
       const min = Math.min(...pesoEnTiempoReal.historial);
       const max = Math.max(...pesoEnTiempoReal.historial);
       estable = (max - min) < 1.0;
     }
-    
+
     pesoEnTiempoReal = {
+      granja,
       peso: pesoNumerico,
       unidad: unidad || 'kg',
       estable,
-      sensor_id: sensor_id || 'bascula',
+      sensor_id: sensorIdEfectivo,
       fecha: new Date(),
       conectado: true,
       historial: pesoEnTiempoReal.historial
     };
-    
-    if (req.io) {
-      req.io.emit('peso_live', {
-        peso: pesoNumerico,
-        unidad: unidad || 'kg',
-        estable,
-        timestamp: Date.now()
-      });
-    }
-    
+
+    emitirAGranja(req, granja, 'peso_live', {
+      peso: pesoNumerico,
+      unidad: unidad || 'kg',
+      estable,
+      timestamp: Date.now()
+    });
+
     res.status(200).json({ ok: true });
-    
+
   } catch (error) {
     console.error('[ESP32] Error peso live:', error);
     res.status(400).json({ mensaje: error.message });
@@ -847,15 +949,17 @@ exports.recibirPesoLive = async (req, res) => {
 // ═══════════════════════════════════════════════════════════════════════
 
 exports.obtenerPesoActual = (req, res) => {
-  const conectado = pesoEnTiempoReal.fecha && 
+  const granjaId = req.user?.granja_id ? String(req.user.granja_id) : null;
+  const cacheEsDeEstaGranja = granjaId && pesoEnTiempoReal.granja === granjaId;
+  const conectado = cacheEsDeEstaGranja && pesoEnTiempoReal.fecha &&
     (new Date() - pesoEnTiempoReal.fecha) < 5000;
-  
+
   res.json({
-    peso: pesoEnTiempoReal.peso,
-    unidad: pesoEnTiempoReal.unidad,
-    estable: pesoEnTiempoReal.estable,
+    peso: cacheEsDeEstaGranja ? pesoEnTiempoReal.peso : 0,
+    unidad: cacheEsDeEstaGranja ? pesoEnTiempoReal.unidad : 'kg',
+    estable: cacheEsDeEstaGranja ? pesoEnTiempoReal.estable : false,
     conectado,
-    fecha: pesoEnTiempoReal.fecha
+    fecha: cacheEsDeEstaGranja ? pesoEnTiempoReal.fecha : null
   });
 };
 
@@ -896,53 +1000,59 @@ exports.recibirPeso = async (req, res) => {
       return exports.recibirPesoLive(req, res);
     }
 
+    // Con token: acción autenticada desde la web/app (ver verificarTokenOpcional
+    // en routes/esp.js) — la granja es la del usuario, no la del sensor.
+    if (!req.user?.granja_id) return res.status(403).json({ mensaje: 'Sin granja asociada' });
+    const granja = String(req.user.granja_id);
+    const sensorIdEfectivo = sensor_id || 'bascula';
+
     console.log('[ESP32] Peso para GUARDAR:', peso, unidad || 'kg');
-    
+
     let loteAsociado = null;
     if (lote_id) {
-      loteAsociado = await Lote.findById(lote_id);
+      loteAsociado = await Lote.findOne({ _id: lote_id, granja });
     } else {
-      loteAsociado = await Lote.findOne({ activo: true }).sort({ createdAt: -1 });
+      loteAsociado = await Lote.findOne({ activo: true, granja }).sort({ createdAt: -1 });
     }
-    
+
     const pesaje = new Pesaje({
+      granja,
       lote: loteAsociado ? loteAsociado._id : null,
       peso: parseFloat(peso),
       unidad: unidad || 'kg',
-      sensor_id: sensor_id || 'bascula',
+      sensor_id: sensorIdEfectivo,
       cantidad_cerdos_pesados: cantidad_cerdos || 1,
       notas: notas || ''
     });
     await pesaje.save();
-    
+
     if (loteAsociado) {
       console.log('[ESP32] Peso guardado y asociado a lote:', loteAsociado.nombre);
     }
-    
+
     const lectura = new Reading({
-      sensor: sensor_id || 'bascula',
+      granja,
+      sensor: sensorIdEfectivo,
       tipo: 'peso',
       valor: peso,
       unidad: unidad || 'kg'
     });
     await lectura.save();
-    
-    if (req.io) {
-      req.io.emit('nuevo_peso', { 
-        peso, 
-        unidad: unidad || 'kg',
-        lote: loteAsociado ? loteAsociado.nombre : null,
-        pesaje_id: pesaje._id
-      });
-    }
-    
-    res.status(201).json({ 
-      mensaje: 'Peso guardado correctamente', 
+
+    emitirAGranja(req, granja, 'nuevo_peso', {
+      peso,
+      unidad: unidad || 'kg',
+      lote: loteAsociado ? loteAsociado.nombre : null,
+      pesaje_id: pesaje._id
+    });
+
+    res.status(201).json({
+      mensaje: 'Peso guardado correctamente',
       peso,
       pesaje_id: pesaje._id,
       lote: loteAsociado ? loteAsociado.nombre : 'Sin lote activo'
     });
-    
+
   } catch (error) {
     console.error('[ESP32] Error guardando peso:', error);
     res.status(400).json({ mensaje: error.message });
@@ -956,8 +1066,9 @@ exports.recibirPeso = async (req, res) => {
 
 exports.obtenerHistorialPeso = async (req, res) => {
   try {
+    if (!req.user?.granja_id) return res.json([]);
     const limite = parseInt(req.query.limite) || 20;
-    const pesajes = await Pesaje.find()
+    const pesajes = await Pesaje.find({ granja: req.user.granja_id })
       .populate('lote', 'nombre')
       .sort({ createdAt: -1 })
       .limit(limite);
@@ -974,7 +1085,8 @@ exports.obtenerHistorialPeso = async (req, res) => {
 
 exports.obtenerEstadoBombas = async (req, res) => {
   try {
-    const bombas = await Motorbomb.find();
+    if (!req.user?.granja_id) return res.json([]);
+    const bombas = await Motorbomb.find({ granja: req.user.granja_id });
     res.json(bombas);
   } catch (error) {
     res.status(500).json({ mensaje: error.message });

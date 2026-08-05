@@ -89,6 +89,34 @@ const verificarToken = async (req, res, next) => {
   }
 };
 
+// Variante de verificarToken para rutas que reciben tanto peticiones de un
+// ESP32 (sin token — hardware no tiene sesión de usuario) como de un
+// usuario autenticado (web/app). Si hay un Bearer token válido, adjunta
+// `req.user` igual que verificarToken; si no hay token (o es inválido),
+// deja pasar la petición sin `req.user` en vez de rechazarla — el
+// controlador decide cómo resolver la granja en ese caso (ver
+// espController.resolverGranjaDispositivo).
+const verificarTokenOpcional = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
+  if (!token) return next();
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const usuarioDb = await User.findById(decoded.id).select('granja_id plan permisos');
+    if (usuarioDb) {
+      req.user = decoded;
+      req.user.granja_id = usuarioDb.granja_id;
+      req.user.plan = usuarioDb.plan;
+      req.user.permisos = usuarioDb.permisos || [];
+    }
+  } catch (error) {
+    // Token inválido/expirado en esta ruta dual no es un error — sigue
+    // como si viniera del ESP32 sin autenticar.
+  }
+  next();
+};
+
 // Middleware genérico de rol — uso: requireRole('superadmin'), o varios roles:
 // requireRole('superadmin', 'jefa'). Debe ir siempre después de verificarToken.
 const requireRole = (...roles) => (req, res, next) => {
@@ -138,4 +166,4 @@ const requireAccesoCompleto = (req, res, next) => {
   next();
 };
 
-module.exports = { verificarToken, requireRole, requirePermiso, requireAccesoCompleto };
+module.exports = { verificarToken, verificarTokenOpcional, requireRole, requirePermiso, requireAccesoCompleto };

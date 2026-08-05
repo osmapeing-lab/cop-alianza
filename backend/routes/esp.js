@@ -23,35 +23,39 @@ const {
   obtenerEstadoBombas,
   heartbeat
 } = require('../controllers/espController');
+const { verificarToken, verificarTokenOpcional } = require('../middleware/auth');
 
 // ═══════════════════════════════════════════════════════════════════════
 // TEMPERATURA Y HUMEDAD
 // ═══════════════════════════════════════════════════════════════════════
+// POST /riego lo manda el ESP32 directo (sin sesión de usuario) — la
+// granja se resuelve por sensor_id dentro del controlador. Los GET los
+// consume la web/app autenticada y se filtran por su granja.
 router.post('/riego', recibirRiego);
-router.get('/porqueriza', obtenerDatosPorqueriza);
-router.get('/porqueriza/historico', obtenerHistoricoTemperatura);
+router.get('/porqueriza', verificarToken, obtenerDatosPorqueriza);
+router.get('/porqueriza/historico', verificarToken, obtenerHistoricoTemperatura);
 
 // ═══════════════════════════════════════════════════════════════════════
 // FLUJO DE AGUA
 // ═══════════════════════════════════════════════════════════════════════
 router.post('/flujo', recibirFlujo);
-router.get('/flujo', obtenerDatosFlujo);
-router.put('/flujo/corregir', corregirConsumo);
-router.get('/flujo/historico', obtenerHistoricoAgua);
+router.get('/flujo', verificarToken, obtenerDatosFlujo);
+router.put('/flujo/corregir', verificarToken, corregirConsumo);
+router.get('/flujo/historico', verificarToken, obtenerHistoricoAgua);
 
 // ═══════════════════════════════════════════════════════════════════════
 // BÁSCULA - PESO EN TIEMPO REAL
 // ═══════════════════════════════════════════════════════════════════════
 router.post('/peso/live', recibirPesoLive);   // ✅ ESP envía cada 500ms (NO guarda)
-router.get('/peso/actual', obtenerPesoActual); // ✅ Frontend consulta peso actual
+router.get('/peso/actual', verificarToken, obtenerPesoActual); // ✅ Frontend consulta peso actual
 router.post('/peso/tarar', tararBascula);      // ✅ Tarar/resetear báscula
-router.post('/peso', recibirPeso);             // Guardar pesaje en BD
-router.get('/pesos', obtenerHistorialPeso);
+router.post('/peso', verificarTokenOpcional, recibirPeso); // ESP32 (sin token) o guardado manual autenticado
+router.get('/pesos', verificarToken, obtenerHistorialPeso);
 
 // ═══════════════════════════════════════════════════════════════════════
 // BOMBAS
 // ═══════════════════════════════════════════════════════════════════════
-router.get('/bombas', obtenerEstadoBombas);
+router.get('/bombas', verificarToken, obtenerEstadoBombas);
 
 // ═══════════════════════════════════════════════════════════════════════
 // HEARTBEAT

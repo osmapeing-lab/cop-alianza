@@ -1,6 +1,14 @@
 const mongoose = require('mongoose');
 
 const readingSchema = new mongoose.Schema({
+  // Granja dueña de esta lectura — aísla los datos entre distintas granjas
+  // (ver espController.resolverGranjaDispositivo). `null` en lecturas
+  // históricas previas a este campo.
+  granja: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Farm',
+    index: true
+  },
   sensor: {
     type: String,
     required: true

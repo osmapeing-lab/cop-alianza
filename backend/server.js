@@ -10,6 +10,8 @@
   // IMPORTAR MODELOS (para limpiar sesiones)
   // ═══════════════════════════════════════════════════════════════════════
   const Session = require('./models/Session');
+  const jwt = require('jsonwebtoken');
+  const User = require('./models/User');
 
   // ═══════════════════════════════════════════════════════════════════════
   // IMPORTAR RUTAS
@@ -47,9 +49,31 @@ const adminAnalyticsRoutes = require('./routes/adminAnalytics');
   const app = express();
   const server = http.createServer(app);
   const io = new Server(server, {
-    cors: { 
+    cors: {
       origin: '*',
       methods: ['GET', 'POST', 'PUT', 'DELETE']
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // AUTENTICAR CONEXIONES DE SOCKET.IO — cada cliente solo debe recibir en
+  // tiempo real los datos de sensores (temperatura/agua/peso/bombas) de SU
+  // PROPIA granja. Sin esto, cualquier cuenta ve en vivo los datos del
+  // hardware de otra granja aunque la carga inicial (REST) ya esté filtrada
+  // (ver espController.emitirAGranja). El ESP32 no manda token — se conecta
+  // igual, pero anónimo (no se une a ninguna sala de granja).
+  // ═══════════════════════════════════════════════════════════════════════
+  io.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token;
+      if (!token) return next();
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const usuario = await User.findById(decoded.id).select('granja_id');
+      socket.granjaId = usuario?.granja_id ? usuario.granja_id.toString() : null;
+      next();
+    } catch (error) {
+      // Token inválido/expirado — conecta igual pero sin sala de granja.
+      next();
     }
   });
 
@@ -285,8 +309,13 @@ app.use('/api/admin/analytics', adminAnalyticsRoutes);
   // WEBSOCKET
   // ═══════════════════════════════════════════════════════════════════════
   io.on('connection', (socket) => {
-    console.log('🔌 Cliente conectado:', socket.id);
-    
+    if (socket.granjaId) {
+      socket.join(`granja_${socket.granjaId}`);
+      console.log('🔌 Cliente conectado:', socket.id, '→ granja', socket.granjaId);
+    } else {
+      console.log('🔌 Cliente conectado:', socket.id, '(sin granja)');
+    }
+
     // Evento: Toggle de bomba
     socket.on('toggle_bomba', (data) => {
       console.log('💧 Bomba actualizada:', data);

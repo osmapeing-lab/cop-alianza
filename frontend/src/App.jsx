@@ -20,7 +20,10 @@ import {
 // ═══════════════════════════════════════════════════════════════════════
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://cop-alianza-backend.onrender.com'
-const socket = io(API_URL)
+// autoConnect:false — se conecta recién cuando hay token (ver useEffect de
+// "WebSocket: autenticación" más abajo), para que el servidor pueda unir
+// el socket a la sala de SU granja y no reciba en vivo el sensor de otra.
+const socket = io(API_URL, { autoConnect: false })
 
 // reCAPTCHA v2 - Reemplazar con tu clave real de google.com/recaptcha
 const RECAPTCHA_SITE_KEY = import.meta.env.VITE_RECAPTCHA_SITE_KEY || '6Ldn320sAAAAANB8zwnmeM-lxQ7CVAYJUAemLdV0'
@@ -1815,6 +1818,18 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
     if (pesajes.length > 0) cargarHistoricoPesos()
   }, [pesajes])
 
+  // WebSocket: autenticación — el servidor decide a qué sala de granja
+  // unir el socket según este token (ver server.js io.use). Sin esto el
+  // socket queda anónimo y no recibe ningún evento de sensores en vivo.
+  useEffect(() => {
+    if (token) {
+      socket.auth = { token }
+      socket.connect()
+    } else {
+      socket.disconnect()
+    }
+  }, [token])
+
 // WebSocket
   useEffect(() => {
     // 1. Escuchar actualizaciones generales (Sensores de Porqueriza y Agua)
@@ -2381,7 +2396,9 @@ const verStreamCamara = (camara) => {
 
   const cargarPorqueriza = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/esp/porqueriza`)
+      const res = await axios.get(`${API_URL}/api/esp/porqueriza`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
       setPorqueriza({
         temp: res.data.temperatura,
         humedad: res.data.humedad,
@@ -2394,7 +2411,9 @@ const verStreamCamara = (camara) => {
 
   const cargarFlujo = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/esp/flujo`)
+      const res = await axios.get(`${API_URL}/api/esp/flujo`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
       setFlujo({
         caudal: res.data.caudal || 0,
         volumen_diario: res.data.volumen_diario || 0,
@@ -4133,16 +4152,6 @@ const cargarHistoricoPesos = async () => {
               >
                 <TrendingUp size={20} />
                 <span>Mercado</span>
-              </button>
-            )}
-
-            {user.plan !== 'corporativo' && (
-              <button
-                className={`nav-item ${pagina === 'planes' ? 'activo' : ''}`}
-                onClick={() => { setPagina('planes'); setMenuAbierto(false) }}
-              >
-                <PiggyBank size={20} />
-                <span>Planes y precios</span>
               </button>
             )}
 
@@ -9186,72 +9195,6 @@ const cargarHistoricoPesos = async () => {
           {/* datos aparte (ver pagina 'datos' y userController.crearCuenta- */}
           {/* Corporativa, creada solo por superadmin). */}
           {/* ════════════════════════════════════════════════════════════════ */}
-          {pagina === 'planes' && (
-            <div className="page-config">
-              <div className="page-header">
-                <h2>Planes y precios</h2>
-              </div>
-              <div className="config-sections">
-                {[
-                  { nombre: 'Plan Corral', actual: user.plan === 'corral', caracteristicas: [
-                    'Alertas básicas', 'Plan de alimentación diario', '1 dispositivo', 'Con anuncios'
-                  ], contactar: false },
-                  { nombre: 'Plan Granja', actual: user.plan === 'granja', caracteristicas: [
-                    'Todo lo del Plan Corral, sin anuncios', 'Inventario de alimento (historial completo)',
-                    'Gráficas y estadísticas de producción', 'Alertas personalizadas', 'Exportar reportes (PDF/Excel)',
-                    'Gestión de varios lotes/corrales', '3 dispositivos simultáneos', 'Notificaciones push prioritarias'
-                  ], contactar: false },
-                  { nombre: 'Plan Alianza', actual: user.plan === 'alianza', caracteristicas: [
-                    'Todo lo del Plan Granja', 'Acceso completo a todos los módulos', 'Reportes avanzados / análisis (BI)',
-                    'Múltiples sensores y ubicaciones', 'Alertas ilimitadas', 'Usuarios secundarios (operarios, veterinarios, admins)',
-                    'Copias de seguridad automáticas', '5 dispositivos simultáneos',
-                    'Incluye instalación de 2 sensores (temperatura + flujo de agua)', 'Soporte prioritario'
-                  ], contactar: false },
-                  { nombre: 'Plan Empresas', actual: user.plan === 'empresas', caracteristicas: [
-                    'Todo lo del Plan Alianza', 'Múltiples granjas/sedes bajo una misma cuenta',
-                    '10 dispositivos simultáneos (ampliable)',
-                    'Instalación de sensores cotizada según número de granjas — contáctanos',
-                    'Condiciones e integración a la medida', 'Atención comercial dedicada'
-                  ], contactar: true },
-                ].map(plan => (
-                  <div className="config-section" key={plan.nombre} style={plan.actual ? {border: '2px solid #3b82f6'} : {}}>
-                    <h3>{plan.nombre} {plan.actual && <span style={{fontSize:'12px', color:'#3b82f6'}}>· Tu plan actual</span>}</h3>
-                    <ul>
-                      {plan.caracteristicas.map(c => <li key={c}>{c}</li>)}
-                    </ul>
-                    {plan.contactar && (
-                      <a
-                        className="btn-primary"
-                        style={{display:'inline-block', textDecoration:'none'}}
-                        href={`mailto:ventas@coalianzas.com?subject=${encodeURIComponent(plan.nombre + ' - COO Alianzas')}`}
-                      >
-                        Contactar ventas
-                      </a>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Nota aparte: Corporativo ya no es un nivel de granja — es una */}
-              {/* cuenta de datos comerciales (venta de datos agregados de todas */}
-              {/* las granjas), no algo que una granja "compre" o mejore hacia. */}
-              <div className="config-section" style={{marginTop: '16px'}}>
-                <h3>¿Buscas datos agregados del sector porcícola?</h3>
-                <p style={{fontSize:'13px', color:'#64748b'}}>
-                  Ofrecemos acceso comercial de solo lectura a los datos de todas las granjas de la
-                  plataforma (para empresas de alimento, compradores, investigadores, etc.) — no aplica
-                  como mejora de plan de una granja existente.
-                </p>
-                <a
-                  className="btn-primary"
-                  style={{display:'inline-block', textDecoration:'none'}}
-                  href={`mailto:ventas@coalianzas.com?subject=${encodeURIComponent('Datos agregados (Corporativo) - COO Alianzas')}`}
-                >
-                  Contactar ventas
-                </a>
-              </div>
-            </div>
-          )}
         </main>
       </div>
     </div>
