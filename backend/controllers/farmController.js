@@ -24,6 +24,7 @@ const AlimentacionLote = require('../models/AlimentacionLote');
 const Config = require('../models/Config');
 const WaterConsumption = require('../models/WaterConsumption');
 const Session = require('../models/Session');
+const { enviarEmail } = require('../utils/emailService');
 
 const PERMISOS_VALIDOS = ['bombas', 'alertas', 'pesajes'];
 
@@ -37,12 +38,16 @@ exports.getAllFarms = async (req, res) => {
     const farms = await Farm.find().sort({ createdAt: -1 }).lean();
 
     const conDatos = await Promise.all(farms.map(async (farm) => {
-      const [owner, lotes, ventas] = await Promise.all([
+      const [owner, lotes, pesajes, costos, ventas, alertas, inventario] = await Promise.all([
         User.findOne({ granja_id: farm._id }).select('usuario correo plan ultimo_acceso activo'),
         Lote.countDocuments({ granja: farm._id }),
-        Venta.countDocuments({ granja: farm._id })
+        Pesaje.countDocuments({ granja: farm._id }),
+        Costo.countDocuments({ granja: farm._id }),
+        Venta.countDocuments({ granja: farm._id }),
+        Alert.countDocuments({ granja: farm._id }),
+        InventarioAlimento.countDocuments({ granja: farm._id })
       ]);
-      return { ...farm, owner, lotes, ventas };
+      return { ...farm, owner, lotes, pesajes, costos, ventas, alertas, inventario };
     }));
 
     res.json(conDatos);
@@ -80,62 +85,72 @@ exports.getFarmDetail = async (req, res) => {
 // resumen de las granjas que seleccione en el panel de Datos — mismos
 // conteos que ya muestra getFarmDetail, una fila por granja.
 // ═══════════════════════════════════════════════════════════════════════
+// Arma el mismo workbook que descarga/envía el reporte de granjas — factor
+// común entre descargarReporteGranjas (descarga directa) y
+// enviarReporteGranjasPorEmail (adjunto de correo), para no duplicar las
+// columnas ni los conteos entre las dos.
+async function construirWorkbookGranjas(ids) {
+  const filtro = ids.length > 0 ? { _id: { $in: ids } } : {};
+  const farms = await Farm.find(filtro).sort({ nombre: 1 }).lean();
+
+  const filas = await Promise.all(farms.map(async (farm) => {
+    const [owner, lotes, pesajes, costos, ventas, alertas, inventario] = await Promise.all([
+      User.findOne({ granja_id: farm._id }).select('usuario correo plan'),
+      Lote.countDocuments({ granja: farm._id }),
+      Pesaje.countDocuments({ granja: farm._id }),
+      Costo.countDocuments({ granja: farm._id }),
+      Venta.countDocuments({ granja: farm._id }),
+      Alert.countDocuments({ granja: farm._id }),
+      InventarioAlimento.countDocuments({ granja: farm._id })
+    ]);
+    return { farm, owner, lotes, pesajes, costos, ventas, alertas, inventario };
+  }));
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'COO Alianzas';
+  workbook.created = new Date();
+
+  const sheet = workbook.addWorksheet('Granjas');
+  sheet.columns = [
+    { header: 'Granja', key: 'nombre', width: 28 },
+    { header: 'Ubicación', key: 'ubicacion', width: 24 },
+    { header: 'Dueño', key: 'duenoUsuario', width: 20 },
+    { header: 'Correo', key: 'duenoCorreo', width: 28 },
+    { header: 'Plan', key: 'plan', width: 14 },
+    { header: 'Estado', key: 'estado', width: 12 },
+    { header: 'Lotes', key: 'lotes', width: 10 },
+    { header: 'Pesajes', key: 'pesajes', width: 10 },
+    { header: 'Costos', key: 'costos', width: 10 },
+    { header: 'Ventas', key: 'ventas', width: 10 },
+    { header: 'Alertas', key: 'alertas', width: 10 },
+    { header: 'Inventario', key: 'inventario', width: 12 }
+  ];
+  sheet.getRow(1).font = { bold: true };
+
+  for (const f of filas) {
+    sheet.addRow({
+      nombre: f.farm.nombre,
+      ubicacion: f.farm.ubicacion || '',
+      duenoUsuario: f.owner?.usuario || 'Sin usuario',
+      duenoCorreo: f.owner?.correo || '',
+      plan: f.owner?.plan || '',
+      estado: f.farm.activo ? 'Activa' : 'Desactivada',
+      lotes: f.lotes,
+      pesajes: f.pesajes,
+      costos: f.costos,
+      ventas: f.ventas,
+      alertas: f.alertas,
+      inventario: f.inventario
+    });
+  }
+
+  return { workbook, cantidadGranjas: filas.length };
+}
+
 exports.descargarReporteGranjas = async (req, res) => {
   try {
     const ids = String(req.query.ids || '').split(',').map(s => s.trim()).filter(Boolean);
-    const filtro = ids.length > 0 ? { _id: { $in: ids } } : {};
-    const farms = await Farm.find(filtro).sort({ nombre: 1 }).lean();
-
-    const filas = await Promise.all(farms.map(async (farm) => {
-      const [owner, lotes, pesajes, costos, ventas, alertas, inventario] = await Promise.all([
-        User.findOne({ granja_id: farm._id }).select('usuario correo plan'),
-        Lote.countDocuments({ granja: farm._id }),
-        Pesaje.countDocuments({ granja: farm._id }),
-        Costo.countDocuments({ granja: farm._id }),
-        Venta.countDocuments({ granja: farm._id }),
-        Alert.countDocuments({ granja: farm._id }),
-        InventarioAlimento.countDocuments({ granja: farm._id })
-      ]);
-      return { farm, owner, lotes, pesajes, costos, ventas, alertas, inventario };
-    }));
-
-    const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'COO Alianzas';
-    workbook.created = new Date();
-
-    const sheet = workbook.addWorksheet('Granjas');
-    sheet.columns = [
-      { header: 'Granja', key: 'nombre', width: 28 },
-      { header: 'Ubicación', key: 'ubicacion', width: 24 },
-      { header: 'Dueño', key: 'duenoUsuario', width: 20 },
-      { header: 'Correo', key: 'duenoCorreo', width: 28 },
-      { header: 'Plan', key: 'plan', width: 14 },
-      { header: 'Estado', key: 'estado', width: 12 },
-      { header: 'Lotes', key: 'lotes', width: 10 },
-      { header: 'Pesajes', key: 'pesajes', width: 10 },
-      { header: 'Costos', key: 'costos', width: 10 },
-      { header: 'Ventas', key: 'ventas', width: 10 },
-      { header: 'Alertas', key: 'alertas', width: 10 },
-      { header: 'Inventario', key: 'inventario', width: 12 }
-    ];
-    sheet.getRow(1).font = { bold: true };
-
-    for (const f of filas) {
-      sheet.addRow({
-        nombre: f.farm.nombre,
-        ubicacion: f.farm.ubicacion || '',
-        duenoUsuario: f.owner?.usuario || 'Sin usuario',
-        duenoCorreo: f.owner?.correo || '',
-        plan: f.owner?.plan || '',
-        estado: f.farm.activo ? 'Activa' : 'Desactivada',
-        lotes: f.lotes,
-        pesajes: f.pesajes,
-        costos: f.costos,
-        ventas: f.ventas,
-        alertas: f.alertas,
-        inventario: f.inventario
-      });
-    }
+    const { workbook } = await construirWorkbookGranjas(ids);
 
     const fecha = new Date().toISOString().split('T')[0];
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -145,6 +160,66 @@ exports.descargarReporteGranjas = async (req, res) => {
   } catch (error) {
     console.error('Error en descargarReporteGranjas:', error);
     res.status(500).json({ mensaje: error.message });
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// ENVIAR REPORTE DE GRANJAS POR CORREO (cuenta Corporativo)
+// POST /api/corporativo/reporte/email   Body: { correo, ids? }
+// ═══════════════════════════════════════════════════════════════════════
+exports.enviarReporteGranjasPorEmail = async (req, res) => {
+  try {
+    const { correo, ids } = req.body;
+    if (!correo || !correo.includes('@')) {
+      return res.status(400).json({ mensaje: 'Correo electrónico inválido' });
+    }
+    if (!process.env.BREVO_API_KEY && !process.env.RESEND_API_KEY) {
+      return res.status(500).json({ mensaje: 'No hay proveedor de email configurado en el servidor.' });
+    }
+
+    // Responder de inmediato — el envío puede tardar unos segundos y no
+    // debe bloquear al cliente (mismo patrón que reporteController).
+    res.json({ ok: true, mensaje: `Reporte siendo generado. Recibirás el correo en ${correo} en unos momentos.` });
+
+    const idsLimpios = Array.isArray(ids) ? ids : String(ids || '').split(',').map(s => s.trim()).filter(Boolean);
+    const { workbook, cantidadGranjas } = await construirWorkbookGranjas(idsLimpios);
+    const buffer = await workbook.xlsx.writeBuffer();
+
+    const fecha = new Date().toLocaleDateString('es-CO', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'America/Bogota' });
+    const fechaArchivo = new Date().toISOString().split('T')[0];
+    const alcance = idsLimpios.length > 0 ? `${cantidadGranjas} granja(s) seleccionada(s)` : 'todas las granjas de la plataforma';
+
+    await enviarEmail({
+      to: correo,
+      subject: `Reporte de granjas — ${fecha}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 620px; margin: 0 auto;">
+          <div style="background: #2D6A4F; color: white; padding: 28px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1 style="margin: 0; font-size: 22px;">COO ALIANZAS</h1>
+            <p style="margin: 6px 0 0; opacity: 0.85;">Datos de granjas — cuenta Corporativo</p>
+          </div>
+          <div style="padding: 28px; background: #f8fafc; border: 1px solid #e2e8f0;">
+            <h2 style="color: #2D6A4F; margin-top: 0;">Reporte de granjas adjunto</h2>
+            <p>Hola,</p>
+            <p>Se adjunta el reporte de ${alcance}, generado el <strong>${fecha}</strong>.</p>
+            <p style="margin-top: 20px; color: #94a3b8; font-size: 0.85em;">
+              Este correo fue enviado automáticamente desde el sistema COO Alianzas.
+            </p>
+          </div>
+          <div style="background: #2D6A4F; color: #d1fae5; padding: 12px; text-align: center; font-size: 0.8em; border-radius: 0 0 8px 8px;">
+            COO Alianzas © ${new Date().getFullYear()}
+          </div>
+        </div>
+      `,
+      attachments: [{
+        filename: `Reporte_Granjas_${fechaArchivo}.xlsx`,
+        content: buffer,
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      }]
+    });
+    console.log(`[CORPORATIVO] Reporte de granjas enviado a ${correo}`);
+  } catch (error) {
+    console.error('[CORPORATIVO] Error enviando reporte de granjas por email:', error.message);
   }
 };
 

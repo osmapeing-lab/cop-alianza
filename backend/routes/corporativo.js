@@ -11,7 +11,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { getAllFarms, getFarmDetail, descargarReporteGranjas } = require('../controllers/farmController');
+const { getAllFarms, getFarmDetail, descargarReporteGranjas, enviarReporteGranjasPorEmail } = require('../controllers/farmController');
 const { verificarToken } = require('../middleware/auth');
 
 function requireCorporativo(req, res, next) {
@@ -29,5 +29,6 @@ router.use(verificarToken, requireCorporativo);
 router.get('/granjas', getAllFarms);
 router.get('/granjas/:id', getFarmDetail);
 router.get('/reporte', descargarReporteGranjas);
+router.post('/reporte/email', enviarReporteGranjasPorEmail);
 
 module.exports = router;

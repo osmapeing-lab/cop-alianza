@@ -1637,6 +1637,9 @@ const [historicoPesos, setHistoricoPesos] = useState([])
   const [granjaDetalleCorporativo, setGranjaDetalleCorporativo] = useState(null)
   const [granjasSeleccionadasCorporativo, setGranjasSeleccionadasCorporativo] = useState([])
   const [descargandoReporteCorporativo, setDescargandoReporteCorporativo] = useState(false)
+  const [busquedaGranjaCorporativo, setBusquedaGranjaCorporativo] = useState('')
+  const [emailReporteCorporativo, setEmailReporteCorporativo] = useState('')
+  const [enviandoReporteCorporativo, setEnviandoReporteCorporativo] = useState(false)
   const [ejecutandoConsumoAutomatico, setEjecutandoConsumoAutomatico] = useState(false)
   const [nuevoMiembroGranja, setNuevoMiembroGranja] = useState({ usuario: '', correo: '', password: '', permisos: [] })
 
@@ -3255,6 +3258,31 @@ const eliminarBomba = async (id) => {
     }
   }
 
+  // Envía por correo el mismo reporte de granjas seleccionadas (o todas si
+  // no hay ninguna marcada) — POST /api/corporativo/reporte/email, mismo
+  // patrón que enviarReportePorEmail (Reportes de una granja normal).
+  const enviarReporteGranjasCorporativoPorEmail = async () => {
+    if (!emailReporteCorporativo || !emailReporteCorporativo.includes('@')) {
+      alert('Ingresa un correo electrónico válido')
+      return
+    }
+    setEnviandoReporteCorporativo(true)
+    try {
+      const ids = granjasSeleccionadasCorporativo.join(',')
+      const res = await axios.post(
+        `${API_URL}/api/corporativo/reporte/email`,
+        { correo: emailReporteCorporativo, ids },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      guardarEmailUsado(emailReporteCorporativo)
+      alert(`✅ ${res.data.mensaje}`)
+    } catch (error) {
+      alert('Error enviando reporte: ' + (error.response?.data?.mensaje || error.message))
+    } finally {
+      setEnviandoReporteCorporativo(false)
+    }
+  }
+
   const toggleGranja = async (id) => {
     try {
       await axios.put(`${API_URL}/api/admin/farms/${id}/toggle`, {}, {
@@ -4068,7 +4096,7 @@ const cargarHistoricoPesos = async () => {
         {/* Sidebar */}
         <aside className={`sidebar ${menuAbierto ? 'abierto' : 'colapsado'}`}>
           <nav>
-            {user.plan === 'corporativo' && (
+            {user.plan === 'corporativo' && (<>
               <button
                 className={`nav-item ${pagina === 'datos' ? 'activo' : ''}`}
                 onClick={() => { setPagina('datos'); setMenuAbierto(false); cargarGranjasCorporativo() }}
@@ -4076,7 +4104,14 @@ const cargarHistoricoPesos = async () => {
                 <BarChart3 size={20} />
                 <span>Datos</span>
               </button>
-            )}
+              <button
+                className={`nav-item ${pagina === 'reportes-corporativo' ? 'activo' : ''}`}
+                onClick={() => { setPagina('reportes-corporativo'); setMenuAbierto(false); cargarGranjasCorporativo() }}
+              >
+                <IconReporte />
+                <span>Reportes</span>
+              </button>
+            </>)}
 
             {user.plan !== 'corporativo' && (<>
             <button
@@ -8993,78 +9028,157 @@ const cargarHistoricoPesos = async () => {
           {/* PÁGINA: DATOS (cuenta Corporativo — comprador de datos, solo */}
           {/* lectura de todas las granjas de la plataforma) */}
           {/* ════════════════════════════════════════════════════════════════ */}
-          {pagina === 'datos' && (
+          {pagina === 'datos' && (() => {
+            const busqueda = busquedaGranjaCorporativo.trim().toLowerCase()
+            const granjasFiltradas = busqueda
+              ? granjasCorporativo.filter(g =>
+                  g.nombre?.toLowerCase().includes(busqueda) ||
+                  g.owner?.usuario?.toLowerCase().includes(busqueda) ||
+                  g.owner?.correo?.toLowerCase().includes(busqueda))
+              : granjasCorporativo
+            const granjasSeleccionadasData = granjasCorporativo.filter(g => granjasSeleccionadasCorporativo.includes(g._id))
+            const sumar = campo => granjasSeleccionadasData.reduce((t, g) => t + (g[campo] || 0), 0)
+
+            return (
             <div className="page-admin">
               <div className="page-header">
-                <h2><BarChart3 size={24} style={{verticalAlign:'middle', marginRight:8}} />Datos de todas las granjas</h2>
+                <h2><BarChart3 size={24} style={{verticalAlign:'middle', marginRight:8}} />Datos de granjas</h2>
                 <button
                   className="btn-primary"
                   onClick={descargarReporteGranjasCorporativo}
-                  disabled={descargandoReporteCorporativo}
-                  title={granjasSeleccionadasCorporativo.length === 0 ? 'Descarga el reporte de todas las granjas' : `Descarga el reporte de ${granjasSeleccionadasCorporativo.length} granja(s) seleccionada(s)`}
+                  disabled={descargandoReporteCorporativo || granjasSeleccionadasCorporativo.length === 0}
+                  title={granjasSeleccionadasCorporativo.length === 0 ? 'Selecciona al menos una granja para descargar su reporte' : `Descarga el reporte de ${granjasSeleccionadasCorporativo.length} granja(s) seleccionada(s)`}
                 >
                   {descargandoReporteCorporativo
                     ? 'Descargando...'
-                    : `Descargar reporte${granjasSeleccionadasCorporativo.length > 0 ? ` (${granjasSeleccionadasCorporativo.length})` : ' (todas)'}`}
+                    : `Descargar reporte${granjasSeleccionadasCorporativo.length > 0 ? ` (${granjasSeleccionadasCorporativo.length})` : ''}`}
                 </button>
               </div>
 
-              <div className="table-container">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>
+              <h3 className="section-subtitulo">Selecciona las granjas a analizar</h3>
+              <div className="analitica-lista-card" style={{marginBottom:24}}>
+                <div className="form-group" style={{marginBottom:12}}>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Buscar por granja o dueño..."
+                    value={busquedaGranjaCorporativo}
+                    onChange={e => setBusquedaGranjaCorporativo(e.target.value)}
+                  />
+                </div>
+                <div style={{display:'flex', gap:8, marginBottom:12, flexWrap:'wrap'}}>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-sm"
+                    onClick={() => setGranjasSeleccionadasCorporativo(prev => [...new Set([...prev, ...granjasFiltradas.map(g => g._id)])])}
+                    disabled={granjasFiltradas.length === 0}
+                  >
+                    Seleccionar {busqueda ? 'resultados' : 'todas'} ({granjasFiltradas.length})
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-secondary btn-sm"
+                    onClick={() => setGranjasSeleccionadasCorporativo([])}
+                    disabled={granjasSeleccionadasCorporativo.length === 0}
+                  >
+                    Limpiar selección
+                  </button>
+                </div>
+                <div style={{maxHeight:280, overflowY:'auto', border:'1px solid var(--gray-100)', borderRadius:'8px'}}>
+                  {granjasFiltradas.length === 0 ? (
+                    <div className="sin-datos" style={{padding:'24px'}}>
+                      {granjasCorporativo.length === 0 ? 'No hay granjas registradas todavía' : 'Ninguna granja coincide con la búsqueda'}
+                    </div>
+                  ) : (
+                    granjasFiltradas.map(g => (
+                      <label
+                        key={g._id}
+                        style={{display:'flex', alignItems:'center', gap:12, padding:'10px 14px', borderBottom:'1px solid var(--gray-50)', cursor:'pointer'}}
+                      >
                         <input
                           type="checkbox"
-                          checked={granjasCorporativo.length > 0 && granjasSeleccionadasCorporativo.length === granjasCorporativo.length}
-                          onChange={e => setGranjasSeleccionadasCorporativo(e.target.checked ? granjasCorporativo.map(g => g._id) : [])}
+                          checked={granjasSeleccionadasCorporativo.includes(g._id)}
+                          onChange={() => toggleSeleccionGranjaCorporativo(g._id)}
                         />
-                      </th>
-                      <th>Granja</th>
-                      <th>Dueño</th>
-                      <th>Plan</th>
-                      <th>Estado</th>
-                      <th>Lotes</th>
-                      <th>Ventas</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {granjasCorporativo.length === 0 ? (
-                      <tr>
-                        <td colSpan="8" className="sin-datos">No hay granjas registradas todavía</td>
-                      </tr>
-                    ) : (
-                      granjasCorporativo.map(g => (
-                        <tr key={g._id}>
-                          <td>
-                            <input
-                              type="checkbox"
-                              checked={granjasSeleccionadasCorporativo.includes(g._id)}
-                              onChange={() => toggleSeleccionGranjaCorporativo(g._id)}
-                            />
-                          </td>
-                          <td><strong>{g.nombre}</strong></td>
-                          <td>{g.owner ? `${g.owner.usuario} (${g.owner.correo})` : 'Sin usuario'}</td>
-                          <td style={{textTransform:'capitalize'}}>{g.owner?.plan || '—'}</td>
-                          <td>
-                            <span className={`estado-badge ${g.activo ? 'activo' : 'inactivo'}`}>
-                              {g.activo ? 'Activa' : 'Desactivada'}
-                            </span>
-                          </td>
-                          <td>{g.lotes}</td>
-                          <td>{g.ventas}</td>
-                          <td>
-                            <button className="btn-icon" onClick={() => verDetalleGranjaCorporativo(g._id)} title="Ver detalle">
-                              <Eye size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                        <span style={{flex:1, minWidth:0}}>
+                          <strong>{g.nombre}</strong>
+                          <span style={{color:'var(--gray-500)', fontSize:'13px', marginLeft:8}}>
+                            {g.owner ? `${g.owner.usuario} · ${g.owner.correo}` : 'Sin usuario'}
+                          </span>
+                        </span>
+                        <span className={`estado-badge ${g.activo ? 'activo' : 'inactivo'}`}>
+                          {g.activo ? 'Activa' : 'Desactivada'}
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
               </div>
+
+              {granjasSeleccionadasCorporativo.length === 0 ? (
+                <div className="table-container">
+                  <div className="sin-datos" style={{padding:'60px 24px'}}>
+                    Selecciona una o más granjas arriba para ver sus datos aquí.
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h3 className="section-subtitulo">Resumen de la selección</h3>
+                  <div className="stats-grid">
+                    <div className="stat-card"><span>Granjas</span><strong>{granjasSeleccionadasData.length}</strong></div>
+                    <div className="stat-card"><span>Lotes</span><strong>{sumar('lotes')}</strong></div>
+                    <div className="stat-card"><span>Pesajes</span><strong>{sumar('pesajes')}</strong></div>
+                    <div className="stat-card"><span>Ventas</span><strong>{sumar('ventas')}</strong></div>
+                    <div className="stat-card"><span>Costos</span><strong>{sumar('costos')}</strong></div>
+                    <div className="stat-card"><span>Alertas</span><strong>{sumar('alertas')}</strong></div>
+                  </div>
+
+                  <div className="table-container">
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Granja</th>
+                          <th>Dueño</th>
+                          <th>Plan</th>
+                          <th>Estado</th>
+                          <th>Lotes</th>
+                          <th>Pesajes</th>
+                          <th>Costos</th>
+                          <th>Ventas</th>
+                          <th>Alertas</th>
+                          <th>Inventario</th>
+                          <th>Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {granjasSeleccionadasData.map(g => (
+                          <tr key={g._id}>
+                            <td><strong>{g.nombre}</strong></td>
+                            <td>{g.owner ? `${g.owner.usuario} (${g.owner.correo})` : 'Sin usuario'}</td>
+                            <td style={{textTransform:'capitalize'}}>{g.owner?.plan || '—'}</td>
+                            <td>
+                              <span className={`estado-badge ${g.activo ? 'activo' : 'inactivo'}`}>
+                                {g.activo ? 'Activa' : 'Desactivada'}
+                              </span>
+                            </td>
+                            <td>{g.lotes}</td>
+                            <td>{g.pesajes ?? 0}</td>
+                            <td>{g.costos ?? 0}</td>
+                            <td>{g.ventas}</td>
+                            <td>{g.alertas ?? 0}</td>
+                            <td>{g.inventario ?? 0}</td>
+                            <td>
+                              <button className="btn-icon" onClick={() => verDetalleGranjaCorporativo(g._id)} title="Ver detalle">
+                                <Eye size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
 
               {granjaDetalleCorporativo && (
                 <div className="modal-overlay" onClick={() => setGranjaDetalleCorporativo(null)}>
@@ -9095,6 +9209,98 @@ const cargarHistoricoPesos = async () => {
                   </div>
                 </div>
               )}
+            </div>
+            )
+          })()}
+
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {/* PÁGINA: REPORTES (cuenta Corporativo) — descarga/envío por correo */}
+          {/* del reporte de granjas, sobre la misma selección que Datos. */}
+          {/* ════════════════════════════════════════════════════════════════ */}
+          {pagina === 'reportes-corporativo' && (
+            <div className="page-reportes">
+              <div className="page-header">
+                <h2><span style={{display:'inline-flex', verticalAlign:'middle', marginRight:8}}><IconReporte /></span>Reportes</h2>
+              </div>
+
+              <div className="reportes-grid">
+                <div className="reporte-card" style={{ gridColumn: 'span 2' }}>
+                  <div className="reporte-icon">
+                    <IconReporte />
+                  </div>
+                  <h3>Reporte de granjas (Excel)</h3>
+
+                  <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '16px', marginBottom: '16px' }}>
+                    <div style={{ fontWeight: '700', fontSize: '15px', color: '#166534', marginBottom: '4px' }}>
+                      {granjasSeleccionadasCorporativo.length === 0
+                        ? 'Ninguna granja seleccionada'
+                        : `${granjasSeleccionadasCorporativo.length} granja(s) seleccionada(s)`}
+                    </div>
+                    <p style={{ fontSize: '13px', color: '#4b5563', marginBottom: '10px' }}>
+                      Granja, dueño, plan, estado y conteos (lotes, pesajes, costos, ventas, alertas, inventario) de
+                      cada granja elegida en <strong>Datos</strong>. Si no eliges ninguna, el reporte incluye todas
+                      las granjas de la plataforma.
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <button
+                        className="btn-primary"
+                        onClick={descargarReporteGranjasCorporativo}
+                        disabled={descargandoReporteCorporativo}
+                        style={{ background: '#16a34a' }}
+                      >
+                        {descargandoReporteCorporativo ? 'Descargando...' : 'Descargar Excel'}
+                      </button>
+                      <button
+                        className="btn-secondary"
+                        onClick={() => { setPagina('datos'); cargarGranjasCorporativo() }}
+                      >
+                        {granjasSeleccionadasCorporativo.length === 0 ? 'Elegir granjas' : 'Cambiar selección'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Envío por correo */}
+                  <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '14px' }}>
+                    <p style={{ fontWeight: 600, marginBottom: '8px', color: '#374151' }}>
+                      Enviar por correo electrónico
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: '200px' }}>
+                        <input
+                          type="email"
+                          list="sugerencias-email-corporativo"
+                          value={emailReporteCorporativo}
+                          onChange={e => setEmailReporteCorporativo(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && enviarReporteGranjasCorporativoPorEmail()}
+                          placeholder="correo@ejemplo.com"
+                          style={{
+                            width: '100%', padding: '8px 12px', borderRadius: '6px',
+                            border: '1px solid #d1d5db', fontSize: '14px', boxSizing: 'border-box'
+                          }}
+                        />
+                        <datalist id="sugerencias-email-corporativo">
+                          {getSugerenciasEmail().map(email => (
+                            <option key={email} value={email} />
+                          ))}
+                        </datalist>
+                      </div>
+                      <button
+                        className="btn-primary"
+                        onClick={enviarReporteGranjasCorporativoPorEmail}
+                        disabled={enviandoReporteCorporativo}
+                        style={{ whiteSpace: 'nowrap' }}
+                      >
+                        {enviandoReporteCorporativo ? 'Enviando...' : 'Enviar'}
+                      </button>
+                    </div>
+                    {getSugerenciasEmail().length > 0 && (
+                      <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '6px' }}>
+                        Últimos usados: {getSugerenciasEmail().join(' · ')}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
