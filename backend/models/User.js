@@ -3,6 +3,9 @@ const mongoose = require('mongoose');
 const userSchema = new mongoose.Schema({
   usuario: { type: String, required: true, unique: true },
   correo: { type: String, required: true, unique: true },
+  // Opcional — para WhatsApp y como vía de recuperación de cuenta alterna
+  // al correo. No se pide cédula/documento de identidad.
+  telefono: { type: String, default: '' },
   password: { type: String, required: true },
   rol: { type: String, default: 'cliente', enum: ['superadmin', 'jefa' , 'cliente'] },
   // Plan de suscripción de la app móvil: 'corral' (básico: temperatura +

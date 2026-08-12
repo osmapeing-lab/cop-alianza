@@ -22,7 +22,7 @@ const PLANES_VALIDOS = ['corral', 'granja', 'alianza', 'empresas', 'corporativo'
 // ═══════════════════════════════════════════════════════════════════════
 exports.register = async (req, res) => {
   try {
-    const { usuario, correo, password } = req.body;
+    const { usuario, correo, telefono, password } = req.body;
 
     // Verificar si ya existe
     const existe = await User.findOne({ $or: [{ usuario }, { correo }] });
@@ -49,6 +49,7 @@ exports.register = async (req, res) => {
     const user = new User({
       usuario,
       correo,
+      telefono: telefono || '',
       password: hashedPassword,
       rol: 'cliente',
       granja_id: farm._id,

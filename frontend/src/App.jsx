@@ -1471,6 +1471,7 @@ const PantallaMantenimiento = () => (
   const [modoAuth, setModoAuth] = useState('login') // 'login' | 'registro'
   const [regUsuario, setRegUsuario] = useState('')
   const [regCorreo, setRegCorreo] = useState('')
+  const [regTelefono, setRegTelefono] = useState('')
   const [regPassword, setRegPassword] = useState('')
   const [regConfirmar, setRegConfirmar] = useState('')
   const [regAceptaTerminos, setRegAceptaTerminos] = useState(false)
@@ -1992,12 +1993,14 @@ const [configUsuarioForm, setConfigUsuarioForm] = useState({ usuario: '', correo
       await axios.post(`${API_URL}/api/users/register`, {
         usuario: regUsuario.trim(),
         correo: regCorreo.trim(),
+        telefono: regTelefono.trim(),
         password: regPassword
       })
       setModoAuth('login')
       setUsuario(regUsuario.trim())
       setRegUsuario('')
       setRegCorreo('')
+      setRegTelefono('')
       setRegPassword('')
       setRegConfirmar('')
       setRegAceptaTerminos(false)
@@ -3730,6 +3733,16 @@ const cargarHistoricoPesos = async () => {
                 onChange={(e) => setRegCorreo(e.target.value)}
                 placeholder="tu@correo.com"
                 required
+              />
+            </div>
+
+            <div className="input-group">
+              <label>Teléfono (opcional)</label>
+              <input
+                type="tel"
+                value={regTelefono}
+                onChange={(e) => setRegTelefono(e.target.value)}
+                placeholder="Para WhatsApp y recuperar tu cuenta"
               />
             </div>
 
