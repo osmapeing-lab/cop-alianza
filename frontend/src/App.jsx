@@ -288,6 +288,19 @@ const costoAlimentoEstimado = ({ hastaDia, cantidadCerdos, precioPorEtapa, preci
   return total
 }
 
+// Peso esperado según la tabla de referencia, para calcular el valor de
+// venta estimado — a diferencia de getEtapaAlimentacion (que devuelve null
+// pasada la semana 22, día 153), esto usa el peso de la última fila como
+// meseta para lotes más viejos que la tabla, en vez de caer a 0 kg (lo que
+// antes hacía que "Ganancia Estimada" se viera muy negativa para cualquier
+// lote de más de ~5 meses, aunque el costo de alimento sí seguía sumando).
+const pesoEsperadoParaEdad = (edadDias) => {
+  const etapa = getEtapaAlimentacion(edadDias)
+  if (etapa) return etapa.peso_esperado_kg
+  const ultima = PLAN_ALIMENTACION_COMPLEMENTARIO[PLAN_ALIMENTACION_COMPLEMENTARIO.length - 1]
+  return edadDias > ultima.dia_fin ? ultima.peso_esperado_kg : 0
+}
+
 // Determina la edad de entrada efectiva de un lote.
 // Solo lotes con edad_dias_manual explícito (comprados) usan ese valor.
 // Todos los demás (nacidos en granja) empiezan desde Sem 1 / Día 0.
@@ -4921,19 +4934,29 @@ const cargarHistoricoPesos = async () => {
             )
           })()}
           {(() => {
-            const edadDias = loteDetalle.edad_dias || 0
-            const cantidadCerdos = loteDetalle.cantidad_cerdos || 1
-            const etapaActual = getEtapaAlimentacion(edadDias)
-            const pesoEsperadoKg = etapaActual?.peso_esperado_kg || 0
-            const valorVentaEstimado = cantidadCerdos * pesoEsperadoKg * (config.precio_venta_kg || 0)
-            const costoAlimento = costoAlimentoEstimado({
-              hastaDia: edadDias,
-              cantidadCerdos,
-              precioPorEtapa: Object.fromEntries((config.precios_alimento_por_etapa || []).map(f => [f.etapa, f.precio_por_kg])),
-              precioFallback: config.precio_alimento_kg || 0
-            })
-            const otrosCostos = loteDetalle.total_gastos || 0
-            const ganancia = valorVentaEstimado - costoAlimento - otrosCostos
+            const ventasDelLote = ventas.filter(v => v.lote?._id === loteDetalle._id)
+            const tieneVentaReal = ventasDelLote.length > 0
+            let ganancia, etiqueta
+            if (tieneVentaReal) {
+              const totalVentas = ventasDelLote.reduce((s, v) => s + (v.total || 0), 0)
+              const costosReales = (loteDetalle.costo_alimento_total || 0) + (loteDetalle.total_gastos || 0)
+              ganancia = totalVentas - costosReales
+              etiqueta = 'Ganancia Real'
+            } else {
+              const edadDias = loteDetalle.edad_dias || 0
+              const cantidadCerdos = loteDetalle.cantidad_cerdos || 1
+              const pesoEsperadoKg = pesoEsperadoParaEdad(edadDias)
+              const valorVentaEstimado = cantidadCerdos * pesoEsperadoKg * (config.precio_venta_kg || 0)
+              const costoAlimento = costoAlimentoEstimado({
+                hastaDia: edadDias,
+                cantidadCerdos,
+                precioPorEtapa: Object.fromEntries((config.precios_alimento_por_etapa || []).map(f => [f.etapa, f.precio_por_kg])),
+                precioFallback: config.precio_alimento_kg || 0
+              })
+              const otrosCostos = loteDetalle.total_gastos || 0
+              ganancia = valorVentaEstimado - costoAlimento - otrosCostos
+              etiqueta = 'Ganancia Estimada'
+            }
             return (
               <div className="lote-stat-card destacado">
                 <DollarSign size={24} />
@@ -4941,7 +4964,7 @@ const cargarHistoricoPesos = async () => {
                   <span className="stat-valor" style={{color: ganancia >= 0 ? '#16a34a' : '#ef4444'}}>
                     ${Math.round(ganancia).toLocaleString('es-CO')}
                   </span>
-                  <span className="stat-label">Ganancia Estimada</span>
+                  <span className="stat-label">{etiqueta}</span>
                 </div>
               </div>
             )
@@ -5929,21 +5952,31 @@ const cargarHistoricoPesos = async () => {
                   <strong style={{color:'#dc2626', fontSize:'15px'}}>{formatearDinero((lote.total_gastos || 0) + (lote.costo_alimento_total || 0))}</strong>
                 </div>
                 {(() => {
-                  const edadDias = lote.edad_dias || 0
-                  const cantidadCerdos = lote.cantidad_cerdos || 0
-                  const etapaActual = getEtapaAlimentacion(edadDias)
-                  const pesoEsperadoKg = etapaActual?.peso_esperado_kg || 0
-                  const valorVentaEstimado = cantidadCerdos * pesoEsperadoKg * (config.precio_venta_kg || 0)
-                  const costoAlimento = costoAlimentoEstimado({
-                    hastaDia: edadDias,
-                    cantidadCerdos,
-                    precioPorEtapa: Object.fromEntries((config.precios_alimento_por_etapa || []).map(f => [f.etapa, f.precio_por_kg])),
-                    precioFallback: config.precio_alimento_kg || 0
-                  })
-                  const ganancia = valorVentaEstimado - costoAlimento - (lote.total_gastos || 0)
+                  const ventasDelLote = ventas.filter(v => v.lote?._id === lote._id)
+                  const tieneVentaReal = ventasDelLote.length > 0
+                  let ganancia, etiqueta
+                  if (tieneVentaReal) {
+                    const totalVentas = ventasDelLote.reduce((s, v) => s + (v.total || 0), 0)
+                    const costosReales = (lote.costo_alimento_total || 0) + (lote.total_gastos || 0)
+                    ganancia = totalVentas - costosReales
+                    etiqueta = 'Ganancia Real'
+                  } else {
+                    const edadDias = lote.edad_dias || 0
+                    const cantidadCerdos = lote.cantidad_cerdos || 0
+                    const pesoEsperadoKg = pesoEsperadoParaEdad(edadDias)
+                    const valorVentaEstimado = cantidadCerdos * pesoEsperadoKg * (config.precio_venta_kg || 0)
+                    const costoAlimento = costoAlimentoEstimado({
+                      hastaDia: edadDias,
+                      cantidadCerdos,
+                      precioPorEtapa: Object.fromEntries((config.precios_alimento_por_etapa || []).map(f => [f.etapa, f.precio_por_kg])),
+                      precioFallback: config.precio_alimento_kg || 0
+                    })
+                    ganancia = valorVentaEstimado - costoAlimento - (lote.total_gastos || 0)
+                    etiqueta = 'Ganancia Estimada'
+                  }
                   return (
                     <div className="lote-dato" style={{gridColumn:'1 / -1', background: ganancia >= 0 ? '#f0fdf4' : '#fef2f2', borderRadius:'8px', padding:'6px 10px'}}>
-                      <span>Ganancia Estimada</span>
+                      <span>{etiqueta}</span>
                       <strong style={{color: ganancia >= 0 ? '#16a34a' : '#dc2626', fontSize:'15px'}}>{formatearDinero(ganancia)}</strong>
                     </div>
                   )
