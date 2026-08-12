@@ -4092,7 +4092,7 @@ const cargarHistoricoPesos = async () => {
             }}>🔔 Enviar notificación de prueba</button>
           </div>
           <div className="user-panel-section">
-            <a href="mailto:soporte@samtr.app?subject=Solicitud de Soporte" className="btn-sm btn-outline">Solicitar Soporte</a>
+            <a href="mailto:cooalianzassoporte@gmail.com?subject=Solicitud de Soporte" className="btn-sm btn-outline">Solicitar Soporte</a>
           </div>
           <button className="btn-logout-full" onClick={handleLogout}>
             <LogOut size={16} /> Cerrar Sesión
@@ -9364,7 +9364,7 @@ const cargarHistoricoPesos = async () => {
                   <a
                     className="btn-primary"
                     style={{display:'inline-block', textDecoration:'none', marginBottom:'16px'}}
-                    href={`mailto:ventas@coalianzas.com?subject=${encodeURIComponent('Datos agregados (Corporativo) - COO Alianzas')}`}
+                    href={`mailto:cooalianzassoporte@gmail.com?subject=${encodeURIComponent('Datos agregados (Corporativo) - COO Alianzas')}`}
                   >
                     Contactar ventas
                   </a>

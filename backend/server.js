@@ -1,6 +1,7 @@
   const express = require('express');
   const cors = require('cors');
   const http = require('http');
+  const path = require('path');
   const { Server } = require('socket.io');
   require('dotenv').config();
 
@@ -88,6 +89,11 @@ const adminAnalyticsRoutes = require('./routes/adminAnalytics');
   app.use(cors());
   app.use(express.json({ limit: '10mb' })); // ← Aumentado para imágenes base64
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+  // Páginas públicas legales (política de privacidad, eliminación de cuenta)
+  // exigidas por Google Play — servidas aquí mismo mientras la web principal
+  // no tenga dominio propio en producción.
+  app.use(express.static(path.join(__dirname, 'public')));
 
   // Pasar io (WebSocket) a todas las rutas
   app.use((req, res, next) => {
