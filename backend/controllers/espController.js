@@ -54,7 +54,7 @@ const Config = require('../models/Config');
 const Dispositivo = require('../models/Dispositivo');
 const { evaluarTemperatura, notificarBomba } = require('../utils/notificationManager');
 const { enviarWhatsApp } = require('../utils/whatsappService');
-const { enviarPushATodos } = require('../utils/pushService');
+const { enviarPushAGranja } = require('../utils/pushService');
 
 // ═══════════════════════════════════════════════════════════════════════
 // A QUÉ GRANJA PERTENECE CADA ESP32
@@ -250,7 +250,7 @@ async function activarCicloBomba(granja) {
     mensaje: `Bomba de riego activada automáticamente por temperatura crítica (45s) a las ${hora}`
   });
   await alerta.save();
-  enviarPushATodos({ title: '🚿 Bomba de riego activada', body: `Temperatura crítica — riego automático a las ${hora}`, tag: 'bomba_auto' }).catch(() => {});
+  enviarPushAGranja(granja, { title: '🚿 Bomba de riego activada', body: `Temperatura crítica — riego automático a las ${hora}`, tag: 'bomba_auto' }).catch(() => {});
 
   enviarWhatsApp(
     `🚿 *BOMBA RIEGO AUTOMÁTICA*\nActivada por temperatura crítica en chiquero (45s)\nHora: ${hora}`
@@ -334,7 +334,7 @@ exports.recibirRiego = async (req, res) => {
             valor: temperatura
           });
           await alerta.save();
-          enviarPushATodos({ title: '🔴 CRÍTICO — Temperatura', body: `${temperatura}°C - Riesgo de estrés térmico`, tag: 'temp_critico' }).catch(() => {});
+          enviarPushAGranja(granja, { title: '🔴 CRÍTICO — Temperatura', body: `${temperatura}°C - Riesgo de estrés térmico`, tag: 'temp_critico' }).catch(() => {});
         }
         if (config.bomba_automatica) {
           await activarCicloBomba(granja);
@@ -350,11 +350,11 @@ exports.recibirRiego = async (req, res) => {
             valor: temperatura
           });
           await alerta.save();
-          enviarPushATodos({ title: '🌡️ Temperatura Alta — SAMTR', body: `${temperatura}°C supera el umbral permitido`, tag: 'temp_alta' }).catch(() => {});
+          enviarPushAGranja(granja, { title: '🌡️ Temperatura Alta — SAMTR', body: `${temperatura}°C supera el umbral permitido`, tag: 'temp_alta' }).catch(() => {});
         }
       }
 
-      evaluarTemperatura(temperatura, humedad).catch(e =>
+      evaluarTemperatura(temperatura, humedad, granja).catch(e =>
         console.error('[NOTIF] Error WhatsApp temp:', e.message)
       );
     }
@@ -672,7 +672,7 @@ exports.recibirFlujo = async (req, res) => {
             mensaje: `Bomba 1 apagada automáticamente: límite diario de ${limiteAgua}L alcanzado (${volumenRealEnBD.toFixed(1)}L)`
           });
           await alertaBomba.save();
-          enviarPushATodos({ title: '💧 Límite de agua alcanzado', body: `Bomba 1 apagada — ${volumenRealEnBD.toFixed(1)}L / ${limiteAgua}L`, tag: 'agua_limite' }).catch(() => {});
+          enviarPushAGranja(granja, { title: '💧 Límite de agua alcanzado', body: `Bomba 1 apagada — ${volumenRealEnBD.toFixed(1)}L / ${limiteAgua}L`, tag: 'agua_limite' }).catch(() => {});
 
           emitirAGranja(req, granja, 'bomba_actualizada', {
             bomba_id:  mb001._id,
@@ -704,7 +704,7 @@ exports.recibirFlujo = async (req, res) => {
             mensaje: `⚠️ Consumo de agua alto: ${volumenRealEnBD.toFixed(1)}L hoy (límite configurado: ${limiteAgua}L)`
           });
           await alertaAlta.save();
-          enviarPushATodos({ title: '⚠️ Consumo de agua alto', body: `${volumenRealEnBD.toFixed(1)}L hoy (límite: ${limiteAgua}L)`, tag: 'agua_alto' }).catch(() => {});
+          enviarPushAGranja(granja, { title: '⚠️ Consumo de agua alto', body: `${volumenRealEnBD.toFixed(1)}L hoy (límite: ${limiteAgua}L)`, tag: 'agua_alto' }).catch(() => {});
           emitirAGranja(req, granja, 'nueva_alerta', alertaAlta);
           console.log(`[AGUA] Alerta consumo alto: ${volumenRealEnBD.toFixed(1)}L`);
         }

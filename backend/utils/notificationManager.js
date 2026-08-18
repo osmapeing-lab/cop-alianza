@@ -14,8 +14,8 @@
  */
 
 const { enviarWhatsApp } = require('./whatsappService');
-const { enviarNotificacion: enviarFCM, enviarNotificacionAUsuarios } = require('./fcmService');
-const { enviarPushATodos } = require('./pushService');
+const { enviarNotificacionAUsuarios } = require('./fcmService');
+const { enviarPushAGranja } = require('./pushService');
 const { enviarEmail } = require('./emailService');
 const Lote = require('../models/lote');
 const WaterConsumption = require('../models/WaterConsumption');
@@ -24,6 +24,27 @@ const Config = require('../models/Config');
 const NotificationState = require('../models/NotificationState');
 const Pesaje = require('../models/pesaje');
 const User = require('../models/User');
+
+// Todo el hardware ESP32/motobombas instalado hasta hoy es de Granja
+// Porcina COO-Alianzas — mismo valor que espController.GRANJA_PRINCIPAL_ID
+// y alimentacionAutomatica.GRANJA_PRINCIPAL_ID. Se usa aquí como respaldo
+// para las tareas de cron que no reciben la granja de un request (resumen
+// diario de agua) — el resto de funciones reciben o derivan su propia
+// granja y no dependen de esta constante.
+const GRANJA_PRINCIPAL_ID = '696413ec1dff9fe7d6baea75';
+
+// Usuarios de una granja a los que sí les corresponde recibir alertas de
+// hardware/sensores: el dueño (sin `permisos` restringidos) o una cuenta
+// restringida con permiso 'alertas' explícito. Mismo criterio que ya usaba
+// verificarPesajeSemanal (con 'pesajes') — factorizado aquí para reusarlo
+// en el resto de notificaciones.
+async function resolverDestinatariosGranja(granjaId, permiso = 'alertas') {
+  if (!granjaId) return [];
+  const usuarios = await User.find({ granja_id: granjaId, activo: true }).select('_id permisos');
+  return usuarios
+    .filter(u => !u.permisos || u.permisos.length === 0 || u.permisos.includes(permiso))
+    .map(u => u._id);
+}
 
 // WhatsApp solo si está configurado
 const wsp = async (msg) => {
@@ -124,7 +145,7 @@ async function getUmbralTemperatura() {
  * Evalúa si debe enviar alerta de calor en el chiquero.
  * Cooldown de 60 min persistido en BD.
  */
-async function evaluarTemperatura(temperatura, humedad) {
+async function evaluarTemperatura(temperatura, humedad, granja = GRANJA_PRINCIPAL_ID) {
   const { umbral, etapa } = await getUmbralTemperatura();
 
   if (temperatura <= umbral) return;
@@ -146,15 +167,16 @@ async function evaluarTemperatura(temperatura, humedad) {
     msg += `⚠️ Lote en ENGORDE - Mayor riesgo de estrés térmico`;
   }
 
+  const destinatarios = await resolverDestinatariosGranja(granja);
   await Promise.all([
     wsp(msg),
-    enviarFCM({
+    enviarNotificacionAUsuarios(destinatarios, {
       titulo: `🌡️ Alerta Calor — ${temperatura}°C`,
       cuerpo: `Temperatura sobre umbral (${umbral}°C). Humedad: ${humedad}%. ${etapa !== 'desconocida' ? `Etapa: ${etapa}` : ''}`.trim(),
       tipo: 'alerta',
       datos: { pantalla: 'dashboard', temperatura: String(temperatura), umbral: String(umbral) }
     }).catch(e => console.error('[FCM] Error temperatura:', e.message)),
-    enviarPushATodos({
+    enviarPushAGranja(granja, {
       title: `🌡️ Alerta Calor — ${temperatura}°C`,
       body: `Temperatura sobre umbral (${umbral}°C). Humedad: ${humedad}%.`,
       data: { url: '/' }
@@ -202,6 +224,7 @@ function getMensajeBombaApagada(nombreBomba, duracion) {
 async function notificarBomba(bomba) {
   const codigo = bomba.codigo_bomba;
   const nombre = bomba.nombre;
+  const granja = bomba.granja;
   // Recordar: estado false = encendida (relé invertido)
   const encendida = !bomba.estado;
 
@@ -210,15 +233,16 @@ async function notificarBomba(bomba) {
     await setEstado(`bomba_encendida_${codigo}`, new Date().toISOString());
 
     const msg = getMensajeBombaEncendida(nombre);
+    const destinatarios = await resolverDestinatariosGranja(granja);
     await Promise.all([
       wsp(msg),
-      enviarFCM({
+      enviarNotificacionAUsuarios(destinatarios, {
         titulo: `Bomba Encendida`,
         cuerpo: `${nombre} ha sido encendida`,
         tipo: 'info',
         datos: { pantalla: 'bombas', codigo }
       }).catch(e => console.error('[FCM] Error bomba encendida:', e.message)),
-      enviarPushATodos({
+      enviarPushAGranja(granja, {
         title: `Bomba Encendida`,
         body: `${nombre} ha sido encendida`,
         data: { url: '/' }
@@ -259,15 +283,16 @@ async function notificarBomba(bomba) {
     }
 
     const msg = getMensajeBombaApagada(nombre, duracion);
+    const destinatarios = await resolverDestinatariosGranja(granja);
     await Promise.all([
       wsp(msg),
-      enviarFCM({
+      enviarNotificacionAUsuarios(destinatarios, {
         titulo: `Bomba Apagada`,
         cuerpo: `${nombre} apagada${duracion}`,
         tipo: 'info',
         datos: { pantalla: 'bombas', codigo }
       }).catch(e => console.error('[FCM] Error bomba apagada:', e.message)),
-      enviarPushATodos({
+      enviarPushAGranja(granja, {
         title: `Bomba Apagada`,
         body: `${nombre} apagada${duracion}`,
         data: { url: '/' }
@@ -285,7 +310,7 @@ async function notificarBomba(bomba) {
  * Evalúa si debe notificar cambio de nivel de agua.
  * Solo envía en umbrales críticos: tanque lleno (100%), bajo (20%), crítico (10%).
  */
-async function evaluarNivelAgua(porcentaje) {
+async function evaluarNivelAgua(porcentaje, granja = GRANJA_PRINCIPAL_ID) {
   let umbral = null;
   let mensaje = '';
 
@@ -311,15 +336,16 @@ async function evaluarNivelAgua(porcentaje) {
     await setEstado(`alerta_nivel_${umbral}`, new Date().toISOString());
     const esCritico = umbral === '10';
     const tituloAgua = esCritico ? 'Nivel Crítico de Agua' : umbral === '100' ? 'Tanque Lleno' : 'Nivel de Agua Bajo';
+    const destinatarios = await resolverDestinatariosGranja(granja);
     await Promise.all([
       wsp(mensaje),
-      enviarFCM({
+      enviarNotificacionAUsuarios(destinatarios, {
         titulo: tituloAgua,
         cuerpo: `Nivel del tanque: ${porcentaje}%`,
         tipo: esCritico ? 'critico' : 'info',
         datos: { pantalla: 'dashboard', nivel: String(porcentaje) }
       }).catch(e => console.error('[FCM] Error nivel agua:', e.message)),
-      enviarPushATodos({
+      enviarPushAGranja(granja, {
         title: tituloAgua,
         body: `Nivel del tanque: ${porcentaje}%`,
         data: { url: '/' }
@@ -347,46 +373,50 @@ const CALENDARIO_SALUD = [
 ];
 
 /**
- * Revisa el lote activo y envía notificaciones de salud/etapa si corresponde.
+ * Revisa TODOS los lotes activos (de cualquier granja) y envía
+ * notificaciones de salud/etapa a la granja de cada lote — antes solo
+ * miraba un lote arbitrario (el más reciente de toda la plataforma) y
+ * transmitía su tarea a todos los usuarios, sin importar su granja.
  */
 async function revisarTareasDiarias() {
   try {
-    const lote = await Lote.findOne({ activo: true }).sort({ createdAt: -1 });
-    if (!lote) return;
+    const lotes = await Lote.find({ activo: true });
+    for (const lote of lotes) {
+      const edadDias = lote.edad_dias;
 
-    const edadDias = lote.edad_dias;
-    console.log(`[TAREAS] Revisando lote "${lote.nombre}" - Edad: ${edadDias} días`);
-
-    for (const item of CALENDARIO_SALUD) {
-      if (edadDias >= item.dia && edadDias <= item.dia + 1) {
-        const msg = `📋 *TAREA DEL DÍA - ${lote.nombre}*\n` +
-          `Edad del lote: ${edadDias} días\n\n` +
-          item.tarea;
-        const tareaTexto = item.tarea.replace(/\*|_|`/g, '').slice(0, 100);
-        // Email si está configurado
-        const cfg = await Config.findOne().sort({ createdAt: -1 });
-        if (cfg?.email_reporte) {
-          enviarEmail({
-            to: cfg.email_reporte,
-            subject: `📋 Tarea del día — ${lote.nombre} (Día ${edadDias})`,
-            html: `<h2>Tarea del día — ${lote.nombre}</h2><p><b>Edad del lote:</b> ${edadDias} días</p><pre style="font-family:sans-serif">${item.tarea.replace(/\*/g,'')}</pre>`
-          }).catch(e => console.warn('[EMAIL] Error tarea diaria:', e.message));
+      for (const item of CALENDARIO_SALUD) {
+        if (edadDias >= item.dia && edadDias <= item.dia + 1) {
+          console.log(`[TAREAS] Lote "${lote.nombre}" (granja ${lote.granja}) - Edad: ${edadDias} días`);
+          const msg = `📋 *TAREA DEL DÍA - ${lote.nombre}*\n` +
+            `Edad del lote: ${edadDias} días\n\n` +
+            item.tarea;
+          const tareaTexto = item.tarea.replace(/\*|_|`/g, '').slice(0, 100);
+          // Email si está configurado para esta granja
+          const cfg = await Config.findOne({ granja_id: lote.granja });
+          if (cfg?.email_reporte) {
+            enviarEmail({
+              to: cfg.email_reporte,
+              subject: `📋 Tarea del día — ${lote.nombre} (Día ${edadDias})`,
+              html: `<h2>Tarea del día — ${lote.nombre}</h2><p><b>Edad del lote:</b> ${edadDias} días</p><pre style="font-family:sans-serif">${item.tarea.replace(/\*/g,'')}</pre>`
+            }).catch(e => console.warn('[EMAIL] Error tarea diaria:', e.message));
+          }
+          const destinatarios = await resolverDestinatariosGranja(lote.granja);
+          await Promise.all([
+            wsp(msg),
+            enviarNotificacionAUsuarios(destinatarios, {
+              titulo: `Tarea del día — ${lote.nombre}`,
+              cuerpo: tareaTexto,
+              tipo: 'info',
+              datos: { pantalla: 'lotes' }
+            }).catch(e => console.error('[FCM] Error tarea diaria:', e.message)),
+            enviarPushAGranja(lote.granja, {
+              title: `Tarea del día — ${lote.nombre}`,
+              body: tareaTexto,
+              data: { url: '/' }
+            }).catch(e => console.error('[PUSH] Error tarea diaria:', e.message))
+          ]);
+          break;
         }
-        await Promise.all([
-          wsp(msg),
-          enviarFCM({
-            titulo: `Tarea del día — ${lote.nombre}`,
-            cuerpo: tareaTexto,
-            tipo: 'info',
-            datos: { pantalla: 'lotes' }
-          }).catch(e => console.error('[FCM] Error tarea diaria:', e.message)),
-          enviarPushATodos({
-            title: `Tarea del día — ${lote.nombre}`,
-            body: tareaTexto,
-            data: { url: '/' }
-          }).catch(e => console.error('[PUSH] Error tarea diaria:', e.message))
-        ]);
-        break;
       }
     }
   } catch (error) {
@@ -398,60 +428,92 @@ async function revisarTareasDiarias() {
 // RESUMEN DIARIO DE AGUA (se envía a las 7PM Colombia)
 // ═══════════════════════════════════════════════════════════════════════
 
+/**
+ * Envía el resumen diario de agua de UNA granja — factorizado para poder
+ * recorrer todas las granjas con consumo registrado hoy (ver
+ * enviarResumenDiarioAgua) en vez de tomar un registro suelto de
+ * cualquier granja y transmitirlo a todos los usuarios de la plataforma.
+ */
+async function enviarResumenDiarioAguaDeGranja(granjaId, hoy, ayer) {
+  const consumoHoy = await WaterConsumption.findOne({
+    fecha: { $gte: hoy },
+    tipo: 'diario',
+    granja_id: granjaId
+  });
+  const litros = consumoHoy ? consumoHoy.litros : 0;
+
+  const consumoAyer = await WaterConsumption.findOne({
+    fecha: { $gte: ayer, $lt: hoy },
+    tipo: 'diario',
+    granja_id: granjaId
+  });
+  const litrosAyer = consumoAyer ? consumoAyer.litros : 0;
+
+  const diferencia = litrosAyer > 0 ? Math.round(((litros - litrosAyer) / litrosAyer) * 100) : 0;
+  const tendencia = diferencia > 0 ? `📈 +${diferencia}%` : diferencia < 0 ? `📉 ${diferencia}%` : '➡️ igual';
+
+  const msg = `📊 *RESUMEN DIARIO DE AGUA*\n` +
+    `Consumo hoy: ${litros.toFixed(1)} litros\n` +
+    `Consumo ayer: ${litrosAyer.toFixed(1)} litros\n` +
+    `Tendencia: ${tendencia} vs ayer`;
+
+  // Email si está configurado para esta granja
+  const cfg = await Config.findOne({ granja_id: granjaId });
+  if (cfg?.email_reporte) {
+    enviarEmail({
+      to: cfg.email_reporte,
+      subject: `📊 Resumen Diario de Agua — ${new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })}`,
+      html: `<h2>Resumen Diario de Agua</h2>
+             <p><b>Consumo hoy:</b> ${litros.toFixed(1)} L</p>
+             <p><b>Consumo ayer:</b> ${litrosAyer.toFixed(1)} L</p>
+             <p><b>Tendencia:</b> ${tendencia.replace(/[📈📉➡️]/g, '')} vs ayer</p>`
+    }).catch(e => console.warn('[EMAIL] Error resumen agua:', e.message));
+  }
+
+  const destinatarios = await resolverDestinatariosGranja(granjaId);
+  await Promise.all([
+    wsp(msg),
+    enviarNotificacionAUsuarios(destinatarios, {
+      titulo: 'Resumen Diario de Agua',
+      cuerpo: `Consumo hoy: ${litros.toFixed(1)}L | Ayer: ${litrosAyer.toFixed(1)}L`,
+      tipo: 'info',
+      datos: { pantalla: 'dashboard' }
+    }).catch(e => console.error('[FCM] Error resumen agua:', e.message)),
+    enviarPushAGranja(granjaId, {
+      title: 'Resumen Diario de Agua',
+      body: `Consumo hoy: ${litros.toFixed(1)}L | Ayer: ${litrosAyer.toFixed(1)}L`,
+      data: { url: '/' }
+    }).catch(e => console.error('[PUSH] Error resumen agua:', e.message))
+  ]);
+}
+
+/**
+ * Recorre todas las granjas con consumo de agua registrado hoy y les
+ * manda su propio resumen — antes tomaba UN registro cualquiera (de
+ * cualquier granja) y lo transmitía por FCM/push a TODOS los usuarios de
+ * la plataforma, sin importar si el dato les correspondía.
+ */
 async function enviarResumenDiarioAgua() {
   try {
     const ahoraColombia = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
     const hoy = new Date(Date.UTC(ahoraColombia.getFullYear(), ahoraColombia.getMonth(), ahoraColombia.getDate()));
+    const ayer = new Date(hoy.getTime() - 24 * 60 * 60 * 1000);
 
-    const consumoHoy = await WaterConsumption.findOne({
+    const granjasConDatosHoy = await WaterConsumption.distinct('granja_id', {
       fecha: { $gte: hoy },
       tipo: 'diario'
     });
 
-    const litros = consumoHoy ? consumoHoy.litros : 0;
+    // Respaldo: si por lo que sea ninguna granja tiene dato de hoy (ej. el
+    // ESP no reportó nada aún), igual manda el resumen (en 0L) a la granja
+    // principal, para no dejar de avisar que el sensor no reportó.
+    const granjas = granjasConDatosHoy.length > 0 ? granjasConDatosHoy : [GRANJA_PRINCIPAL_ID];
 
-    const ayer = new Date(hoy.getTime() - 24 * 60 * 60 * 1000);
-    const consumoAyer = await WaterConsumption.findOne({
-      fecha: { $gte: ayer, $lt: hoy },
-      tipo: 'diario'
-    });
-
-    const litrosAyer = consumoAyer ? consumoAyer.litros : 0;
-    const diferencia = litrosAyer > 0 ? Math.round(((litros - litrosAyer) / litrosAyer) * 100) : 0;
-    const tendencia = diferencia > 0 ? `📈 +${diferencia}%` : diferencia < 0 ? `📉 ${diferencia}%` : '➡️ igual';
-
-    const msg = `📊 *RESUMEN DIARIO DE AGUA*\n` +
-      `Consumo hoy: ${litros.toFixed(1)} litros\n` +
-      `Consumo ayer: ${litrosAyer.toFixed(1)} litros\n` +
-      `Tendencia: ${tendencia} vs ayer`;
-
-    // Email si está configurado
-    const cfg = await Config.findOne().sort({ createdAt: -1 });
-    if (cfg?.email_reporte) {
-      enviarEmail({
-        to: cfg.email_reporte,
-        subject: `📊 Resumen Diario de Agua — ${new Date().toLocaleDateString('es-CO', { timeZone: 'America/Bogota' })}`,
-        html: `<h2>Resumen Diario de Agua</h2>
-               <p><b>Consumo hoy:</b> ${litros.toFixed(1)} L</p>
-               <p><b>Consumo ayer:</b> ${litrosAyer.toFixed(1)} L</p>
-               <p><b>Tendencia:</b> ${tendencia.replace(/[📈📉➡️]/g, '')} vs ayer</p>`
-      }).catch(e => console.warn('[EMAIL] Error resumen agua:', e.message));
+    for (const granjaId of granjas) {
+      await enviarResumenDiarioAguaDeGranja(granjaId, hoy, ayer).catch(e =>
+        console.error(`[RESUMEN] Error enviando resumen agua de granja ${granjaId}:`, e.message)
+      );
     }
-
-    await Promise.all([
-      wsp(msg),
-      enviarFCM({
-        titulo: 'Resumen Diario de Agua',
-        cuerpo: `Consumo hoy: ${litros.toFixed(1)}L | Ayer: ${litrosAyer.toFixed(1)}L`,
-        tipo: 'info',
-        datos: { pantalla: 'dashboard' }
-      }).catch(e => console.error('[FCM] Error resumen agua:', e.message)),
-      enviarPushATodos({
-        title: 'Resumen Diario de Agua',
-        body: `Consumo hoy: ${litros.toFixed(1)}L | Ayer: ${litrosAyer.toFixed(1)}L`,
-        data: { url: '/' }
-      }).catch(e => console.error('[PUSH] Error resumen agua:', e.message))
-    ]);
   } catch (error) {
     console.error('[RESUMEN] Error enviando resumen agua:', error.message);
   }
@@ -486,15 +548,16 @@ async function verificarStockCriticoAlimento(inventario) {
       `Restante: *${kg_restantes.toFixed(1)} kg* (${desglose})\n` +
       `⚠️ Reabastecer urgente para no dejar a los cerdos sin alimento.`;
 
+    const destinatarios = await resolverDestinatariosGranja(inventario.granja);
     await Promise.all([
       wsp(msg),
-      enviarFCM({
+      enviarNotificacionAUsuarios(destinatarios, {
         titulo: `🚨 Stock Crítico: ${inventario.nombre}`,
         cuerpo: `Solo quedan ${kg_restantes.toFixed(1)} kg. Reabastecer urgente.`,
         tipo: 'critico',
         datos: { pantalla: 'inventario', inventario_id: String(inventario._id) }
       }).catch(e => console.error('[FCM] Error stock alimento:', e.message)),
-      enviarPushATodos({
+      enviarPushAGranja(inventario.granja, {
         title: `🚨 Stock Crítico: ${inventario.nombre}`,
         body: `Solo quedan ${kg_restantes.toFixed(1)} kg. Reabastecer urgente.`,
         data: { url: '/' }
